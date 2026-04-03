@@ -1,0 +1,240 @@
+{
+  "name": "launch-composer",
+  "displayName": "Launch Composer",
+  "description": "Compose VSCode launch.json from templates and configs.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "build:test": "node test/build-tests.mjs",
+    "test": "npm run build && npm run build:test && node --test .test-dist/*.test.js",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "@launch-composer/core": "0.1.0",
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.99.0",
+    "esbuild": "^0.25.11"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "launchComposer",
+          "title": "Launch Composer",
+          "icon": "resources/launch-composer.svg"
+        }
+      ]
+    },
+    "views": {
+      "launchComposer": [
+        {
+          "id": "launchComposer.templates",
+          "name": "TEMPLATES"
+        },
+        {
+          "id": "launchComposer.configs",
+          "name": "CONFIGS"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "launch-composer.generate",
+        "title": "Generate launch.json",
+        "category": "Launch Composer",
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(play)"
+      },
+      {
+        "command": "launch-composer.init",
+        "title": "Initialize",
+        "category": "Launch Composer",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.addTemplate",
+        "title": "Add Template",
+        "category": "Launch Composer",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.addTemplateFile",
+        "title": "Add Template File",
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(add)"
+      },
+      {
+        "command": "launch-composer.deleteTemplateFile",
+        "title": "Delete File",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.addTemplateEntry",
+        "title": "Add Template",
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(add)"
+      },
+      {
+        "command": "launch-composer.addConfigFile",
+        "title": "Add Config File",
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(add)"
+      },
+      {
+        "command": "launch-composer.deleteConfigFile",
+        "title": "Delete File",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.addConfigEntry",
+        "title": "Add Config",
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(add)"
+      },
+      {
+        "command": "launch-composer.editItem",
+        "title": "Edit",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.deleteItem",
+        "title": "Delete",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.toggleEnabled",
+        "title": "Toggle Enabled",
+        "enablement": "workspaceFolderCount == 1"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "launch-composer.addTemplateFile",
+          "when": "view == launchComposer.templates",
+          "group": "navigation"
+        },
+        {
+          "command": "launch-composer.addConfigFile",
+          "when": "view == launchComposer.configs",
+          "group": "navigation"
+        },
+        {
+          "command": "launch-composer.generate",
+          "when": "view == launchComposer.configs",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "launch-composer.deleteTemplateFile",
+          "when": "view == launchComposer.templates && viewItem == templateFile",
+          "group": "inline"
+        },
+        {
+          "command": "launch-composer.deleteConfigFile",
+          "when": "view == launchComposer.configs && viewItem == configFile",
+          "group": "inline"
+        },
+        {
+          "command": "launch-composer.deleteItem",
+          "when": "viewItem == templateEntry || viewItem == configEntry",
+          "group": "inline"
+        }
+      ],
+      "view/item/inline": [
+        {
+          "command": "launch-composer.addTemplateEntry",
+          "when": "view == launchComposer.templates && viewItem == templateFile",
+          "group": "inline"
+        },
+        {
+          "command": "launch-composer.addConfigEntry",
+          "when": "view == launchComposer.configs && viewItem == configFile",
+          "group": "inline"
+        },
+        {
+          "command": "launch-composer.toggleEnabled",
+          "when": "viewItem == configEntry",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "launch-composer.addTemplateFile",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.deleteTemplateFile",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.addTemplateEntry",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.addConfigFile",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.deleteConfigFile",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.addConfigEntry",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.editItem",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.deleteItem",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.toggleEnabled",
+          "when": "false"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "launchComposer.templates",
+        "contents": "No template files found. [Create Template File](command:launch-composer.addTemplateFile)"
+      },
+      {
+        "view": "launchComposer.configs",
+        "contents": "No config files found. [Create Config File](command:launch-composer.addConfigFile)"
+      }
+    ],
+    "configuration": {
+      "title": "Launch Composer",
+      "properties": {
+        "launch-composer.confirmOverwrite": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a confirmation dialog before overwriting launch.json."
+        },
+        "launch-composer.autoSaveDelay": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 0,
+          "description": "Debounce delay in milliseconds before saving text field edits from the webview."
+        }
+      }
+    }
+  }
+}

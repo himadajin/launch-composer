@@ -3,6 +3,7 @@ node_modules/
 # Build output
 dist/
 packages/*/dist/
+packages/*/.test-dist/
 build/
 coverage/
 *.tsbuildinfo
@@ -32,3 +33,4 @@ CLAUDE.md
 
 # Developer-local workspace
 local/
+sample-workspace/

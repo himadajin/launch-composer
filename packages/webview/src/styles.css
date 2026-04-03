@@ -1,0 +1,99 @@
+:root {
+  color-scheme: light dark;
+  font-family: var(--vscode-font-family, 'Segoe UI Variable', 'Segoe UI', sans-serif);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: transparent;
+}
+
+body,
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 0 24px 32px;
+}
+
+.editor-root {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0 12px;
+}
+
+.editor-header h1 {
+  margin: 2px 0 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.editor-kind {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.editor-form {
+  padding-top: 10px;
+}
+
+.editor-checkbox-row {
+  padding: 12px 14px 18px;
+}
+
+.input-action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  color: var(--vscode-descriptionForeground);
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 0 12px 24px;
+  }
+
+  .editor-header {
+    align-items: stretch;
+  }
+
+  .input-action-row {
+    grid-template-columns: 1fr;
+  }
+}

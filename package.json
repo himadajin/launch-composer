@@ -5,15 +5,36 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w @launch-composer/core",
+    "build:core": "npm run build -w @launch-composer/core",
+    "build:webview": "npm run build -w @launch-composer/webview",
+    "build:extension": "npm run build -w launch-composer",
+    "build": "npm run build:core && npm run build:webview && npm run build:extension",
+    "lint": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/extension/src packages/extension/test packages/extension/esbuild.mjs",
+    "lint:fix": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/extension/src packages/extension/test packages/extension/esbuild.mjs --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "npm run typecheck -w @launch-composer/core",
-    "test": "npm run test -w @launch-composer/core"
+    "typecheck": "npm run typecheck -w @launch-composer/core && npm run typecheck -w @launch-composer/webview && npm run typecheck -w launch-composer",
+    "test": "npm run test -w @launch-composer/core && npm run test -w launch-composer"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^24.0.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@types/vscode": "^1.99.0",
+    "@vitejs/plugin-react": "^5.1.0",
+    "esbuild": "^0.25.11",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^16.5.0",
     "prettier": "^3.8.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.58.0",
+    "vite": "^7.1.12"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   }
 }
