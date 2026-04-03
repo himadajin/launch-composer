@@ -1,0 +1,97 @@
+export interface TemplateData {
+  name: string;
+  args?: string[];
+  [key: string]: unknown;
+}
+
+export interface ConfigData {
+  name: string;
+  extends?: string;
+  enabled?: boolean;
+  argsFile?: string;
+  args?: string[];
+  [key: string]: unknown;
+}
+
+export interface TemplateFileData {
+  file: string;
+  templates: TemplateData[];
+}
+
+export interface ConfigFileData {
+  file: string;
+  configs: ConfigData[];
+}
+
+export interface ArgsFileData {
+  args: string[];
+  [key: string]: unknown;
+}
+
+export interface ValidationError {
+  file: string;
+  configName?: string;
+  field?: string;
+  message: string;
+}
+
+export interface LaunchConfig {
+  name: string;
+  args?: string[];
+  [key: string]: unknown;
+}
+
+export interface LaunchJson {
+  version: '0.2.0';
+  configurations: LaunchConfig[];
+}
+
+export type MaybePromise<T> = T | Promise<T>;
+
+export type ArgsFileLoadResult =
+  | { kind: 'success'; data: unknown }
+  | { kind: 'not-found' }
+  | { kind: 'error'; message?: string };
+
+export type ArgsFileReader = (
+  resolvedPath: string,
+) => MaybePromise<ArgsFileLoadResult>;
+
+export interface GenerateInput {
+  templates: TemplateFileData[];
+  configs: ConfigFileData[];
+  variables?: Record<string, string>;
+  readArgsFile?: ArgsFileReader;
+}
+
+export interface GenerateSuccess {
+  success: true;
+  launchJson: LaunchJson;
+}
+
+export interface GenerateFailure {
+  success: false;
+  errors: ValidationError[];
+}
+
+export type GenerateResult = GenerateSuccess | GenerateFailure;
+
+export interface TemplateRef {
+  file: string;
+  index: number;
+  data: TemplateData;
+}
+
+export interface ConfigRef {
+  file: string;
+  index: number;
+  data: ConfigData;
+}
+
+export interface ValidationState {
+  errors: ValidationError[];
+  templateRefs: TemplateRef[];
+  configRefs: ConfigRef[];
+  templateMap: Map<string, TemplateRef>;
+  argsFileCache: Map<string, ArgsFileData>;
+}

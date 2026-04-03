@@ -1,0 +1,19 @@
+{
+  "name": "launch-composer",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @launch-composer/core",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "npm run typecheck -w @launch-composer/core",
+    "test": "npm run test -w @launch-composer/core"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.8.3"
+  }
+}
