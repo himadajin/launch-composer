@@ -114,6 +114,7 @@ export const ConfigurationTarget = {
 const registeredCommands = new Map<string, CommandCallback>();
 const createdDirectories = new Set<string>();
 const files = new Map<string, Uint8Array>();
+const ghostFiles = new Set<string>();
 const errorMessages: string[] = [];
 const infoMessages: string[] = [];
 const warningMessages: string[] = [];
@@ -164,6 +165,15 @@ function directChildren(targetPath: string): [string, FileType][] {
   }
 
   for (const filePath of files.keys()) {
+    const parent = path.dirname(filePath);
+    if (parent !== normalizedTarget) {
+      continue;
+    }
+
+    entries.set(path.basename(filePath), FileType.File);
+  }
+
+  for (const filePath of ghostFiles) {
     const parent = path.dirname(filePath);
     if (parent !== normalizedTarget) {
       continue;
@@ -228,7 +238,7 @@ export const workspace = {
   fs: {
     async stat(uri: Uri): Promise<{ type: FileType }> {
       const filePath = normalize(uri.fsPath);
-      if (files.has(filePath)) {
+      if (files.has(filePath) || ghostFiles.has(filePath)) {
         return { type: FileType.File };
       }
 
@@ -245,7 +255,9 @@ export const workspace = {
 
     async writeFile(uri: Uri, content: Uint8Array): Promise<void> {
       ensureDirectory(path.dirname(uri.fsPath));
-      files.set(normalize(uri.fsPath), content);
+      const filePath = normalize(uri.fsPath);
+      ghostFiles.delete(filePath);
+      files.set(filePath, content);
     },
 
     async readFile(uri: Uri): Promise<Uint8Array> {
@@ -269,6 +281,7 @@ export const workspace = {
     async delete(uri: Uri): Promise<void> {
       const targetPath = normalize(uri.fsPath);
       files.delete(targetPath);
+      ghostFiles.delete(targetPath);
       createdDirectories.delete(targetPath);
     },
   },
@@ -386,6 +399,7 @@ export const __testing = {
     registeredCommands.clear();
     createdDirectories.clear();
     files.clear();
+    ghostFiles.clear();
     errorMessages.length = 0;
     infoMessages.length = 0;
     warningMessages.length = 0;
@@ -411,11 +425,16 @@ export const __testing = {
     }));
   },
 
-    setMissingPathErrorStyle(
+  setMissingPathErrorStyle(
       style: 'vscode' | 'enoent' | 'vscode-enoent',
     ): void {
       missingPathErrorStyle = style;
     },
+
+  createGhostFile(filePath: string): void {
+    ensureDirectory(path.dirname(filePath));
+    ghostFiles.add(normalize(filePath));
+  },
 
   setQuickPickResponses(responses: unknown[]): void {
     quickPickResponses.length = 0;

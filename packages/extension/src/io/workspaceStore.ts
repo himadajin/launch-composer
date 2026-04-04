@@ -276,12 +276,12 @@ export class WorkspaceStore {
 
   private async readTemplateFiles(): Promise<TemplateFileData[]> {
     const entries = await this.listFiles('template');
-    return Promise.all(entries.map((file) => this.readTemplateFile(file)));
+    return this.readExistingFiles(entries, (file) => this.readTemplateFile(file));
   }
 
   private async readConfigFiles(): Promise<ConfigFileData[]> {
     const entries = await this.listFiles('config');
-    return Promise.all(entries.map((file) => this.readConfigFile(file)));
+    return this.readExistingFiles(entries, (file) => this.readConfigFile(file));
   }
 
   private async readTemplateFile(file: string): Promise<TemplateFileData> {
@@ -355,6 +355,27 @@ export class WorkspaceStore {
 
       throw error;
     }
+  }
+
+  private async readExistingFiles<T>(
+    files: string[],
+    readFile: (file: string) => Promise<T>,
+  ): Promise<T[]> {
+    const results: T[] = [];
+
+    for (const file of files) {
+      try {
+        results.push(await readFile(file));
+      } catch (error) {
+        if (isMissingFileSystemError(error)) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    return results;
   }
 
   private async exists(uri: vscode.Uri): Promise<boolean> {

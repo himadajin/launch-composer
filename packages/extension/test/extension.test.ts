@@ -14,6 +14,7 @@ const testVscode = vscode as typeof vscode & {
     setMissingPathErrorStyle(
       style: 'vscode' | 'enoent' | 'vscode-enoent',
     ): void;
+    createGhostFile(filePath: string): void;
     setQuickPickResponses(responses: unknown[]): void;
     setInputBoxResponses(responses: unknown[]): void;
     getRegisteredCommands(): string[];
@@ -133,6 +134,24 @@ test('readAll tolerates ENOENT-style missing directories', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/enoent-empty-project'),
   );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data, {
+    templates: [],
+    configs: [],
+  });
+});
+
+test('readAll skips files that disappear before they can be read', async () => {
+  testVscode.__testing.setMissingPathErrorStyle('vscode-enoent');
+  testVscode.__testing.createGhostFile(
+    '/workspace/racy-project/.vscode/launch-composer/templates/racy.json',
+  );
+  testVscode.__testing.createGhostFile(
+    '/workspace/racy-project/.vscode/launch-composer/configs/racy.json',
+  );
+  const store = new WorkspaceStore(vscode.Uri.file('/workspace/racy-project'));
 
   const data = await store.readAll();
 
