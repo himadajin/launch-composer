@@ -6,6 +6,15 @@ import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from '../src/commands.js';
 import { WorkspaceStore } from '../src/io/workspaceStore.js';
 import * as vscode from 'vscode';
 
+const DEFAULT_TEMPLATE_TEXT =
+  '// Add template entries to this array.\n' +
+  '// Each template should have a unique "name".\n' +
+  '[]\n';
+const DEFAULT_CONFIG_TEXT =
+  '// Add config entries to this array.\n' +
+  '// Use "extends" to reference a template when needed.\n' +
+  '[]\n';
+
 const testVscode = vscode as typeof vscode & {
   __testing: {
     reset(): void;
@@ -20,7 +29,9 @@ const testVscode = vscode as typeof vscode & {
     getRegisteredCommands(): string[];
     getErrorMessages(): string[];
     getInfoMessages(): string[];
+    getWarningMessages(): string[];
     getCreatedDirectories(): string[];
+    getClipboardText(): string;
   };
 };
 
@@ -64,8 +75,24 @@ test('initialize creates the Launch Composer workspace directories', async () =>
     '/workspace/project/.vscode/launch-composer/templates',
   ]);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
   ]);
+
+  const [templateBytes, configBytes] = await Promise.all([
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/project/.vscode/launch-composer/templates/template.json',
+      ),
+    ),
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/project/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  ]);
+
+  assert.equal(new TextDecoder().decode(templateBytes), DEFAULT_TEMPLATE_TEXT);
+  assert.equal(new TextDecoder().decode(configBytes), DEFAULT_CONFIG_TEXT);
 });
 
 test('initialize tolerates ENOENT-style missing-path errors from the filesystem', async () => {
@@ -79,24 +106,41 @@ test('initialize tolerates ENOENT-style missing-path errors from the filesystem'
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
   ]);
 });
 
-test('initialize is idempotent when directories already exist', async () => {
+test('initialize is idempotent when directories and default files already exist', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders(['/workspace/existing-project']);
 
   activate(context);
   await vscode.commands.executeCommand(COMMANDS.init);
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/existing-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode('[\n  {\n    "name": "existing"\n  }\n]\n'),
+  );
   await vscode.commands.executeCommand(COMMANDS.init);
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
   ]);
+
+  const templateBytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/existing-project/.vscode/launch-composer/templates/template.json',
+    ),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(templateBytes),
+    '[\n  {\n    "name": "existing"\n  }\n]\n',
+  );
 });
 
 test('initialize creates missing child directories when composer directory exists', async () => {
@@ -114,8 +158,58 @@ test('initialize creates missing child directories when composer directory exist
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
   ]);
+});
+
+test('initialize creates only the missing default file when one already exists', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspaceUri = vscode.Uri.file('/workspace/partial-default-project');
+  testVscode.__testing.setWorkspaceFolders([workspaceUri.fsPath]);
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.joinPath(workspaceUri, '.vscode', 'launch-composer', 'configs'),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(
+      workspaceUri,
+      '.vscode',
+      'launch-composer',
+      'configs',
+      'config.json',
+    ),
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "keep-me",\n    "enabled": false\n  }\n]\n',
+    ),
+  );
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.init);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json).',
+  ]);
+
+  const [templateBytes, configBytes] = await Promise.all([
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/partial-default-project/.vscode/launch-composer/templates/template.json',
+      ),
+    ),
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/partial-default-project/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  ]);
+
+  assert.equal(new TextDecoder().decode(templateBytes), DEFAULT_TEMPLATE_TEXT);
+  assert.equal(
+    new TextDecoder().decode(configBytes),
+    '[\n  {\n    "name": "keep-me",\n    "enabled": false\n  }\n]\n',
+  );
 });
 
 test('readAll returns empty data when Launch Composer directories do not exist', async () => {
@@ -126,6 +220,7 @@ test('readAll returns empty data when Launch Composer directories do not exist',
   assert.deepEqual(data, {
     templates: [],
     configs: [],
+    issues: [],
   });
 });
 
@@ -140,6 +235,7 @@ test('readAll tolerates ENOENT-style missing directories', async () => {
   assert.deepEqual(data, {
     templates: [],
     configs: [],
+    issues: [],
   });
 });
 
@@ -158,6 +254,80 @@ test('readAll skips files that disappear before they can be read', async () => {
   assert.deepEqual(data, {
     templates: [],
     configs: [],
+    issues: [],
+  });
+});
+
+test('readAll keeps valid files and reports invalid files as issues', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/invalid-project'),
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/invalid-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/invalid-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode(''),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/invalid-project/.vscode/launch-composer/templates/valid.json',
+    ),
+    new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
+  );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data.templates, [
+    {
+      file: 'valid.json',
+      templates: [{ name: 'cpp' }],
+    },
+  ]);
+  assert.deepEqual(data.configs, []);
+  assert.deepEqual(data.issues, [
+    {
+      kind: 'template',
+      file: 'template.json',
+      code: 'empty',
+      message: 'template.json is empty. Expected a JSON array such as [].',
+    },
+  ]);
+});
+
+test('generateLaunchJson returns validation-style errors for invalid files', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/generate-invalid-project'),
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/generate-invalid-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/generate-invalid-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode('{'),
+  );
+
+  const result = await store.generateLaunchJson();
+
+  assert.deepEqual(result, {
+    success: false,
+    errors: [
+      {
+        file: 'template.json',
+        message:
+          'Invalid JSON in template.json. Open the file and fix the syntax.',
+      },
+    ],
   });
 });
 
@@ -182,7 +352,7 @@ test('addTemplateEntry creates its backing file when it does not exist', async (
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": ""\n  }\n]',
   );
 });
 
@@ -211,7 +381,35 @@ test('addConfigEntry creates its backing file when it does not exist', async () 
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "Basic Test",\n    "enabled": false,\n    "extends": "cpp"\n  }\n]',
+    '[\n  {\n    "name": "Basic Test",\n    "enabled": true,\n    "extends": "cpp"\n  }\n]',
+  );
+});
+
+test('addConfig command creates enabled configs by default', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/add-config-project']);
+  testVscode.__testing.setQuickPickResponses(['(none)']);
+  testVscode.__testing.setInputBoxResponses(['Launch']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.addConfigEntry, {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/add-config-project/.vscode/launch-composer/configs/config.json',
+    ),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(bytes).trim(),
+    '[\n  {\n    "name": "Launch",\n    "enabled": true,\n    "type": "",\n    "request": ""\n  }\n]',
   );
 });
 
@@ -243,6 +441,145 @@ test('deleteDataFile tolerates a file that has already been removed', async () =
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
 });
 
+test('renameDataFile moves the JSON file without changing its contents', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/rename-file-project'),
+  );
+  const sourceUri = vscode.Uri.file(
+    '/workspace/rename-file-project/.vscode/launch-composer/templates/template.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/rename-file-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    sourceUri,
+    new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
+  );
+
+  const renamed = await store.renameDataFile(
+    'template',
+    'template.json',
+    'renamed-template.json',
+  );
+
+  assert.equal(renamed, 'renamed-template.json');
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/rename-file-project/.vscode/launch-composer/templates/renamed-template.json',
+    ),
+  );
+  await assert.rejects(async () => vscode.workspace.fs.readFile(sourceUri));
+
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '[\n  {\n    "name": "cpp"\n  }\n]\n',
+  );
+});
+
+test('renameEntry updates template references in configs', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/rename-entry-project'),
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/configs/config.json',
+    ),
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "Launch",\n    "enabled": false,\n    "extends": "cpp"\n  }\n]\n',
+    ),
+  );
+
+  await store.renameEntry(
+    {
+      kind: 'template',
+      file: 'template.json',
+      index: 0,
+    },
+    'cpp-renamed',
+  );
+
+  const [templateBytes, configBytes] = await Promise.all([
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/rename-entry-project/.vscode/launch-composer/templates/template.json',
+      ),
+    ),
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/rename-entry-project/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  ]);
+
+  assert.equal(
+    new TextDecoder().decode(templateBytes),
+    '[\n  {\n    "name": "cpp-renamed"\n  }\n]\n',
+  );
+  assert.equal(
+    new TextDecoder().decode(configBytes),
+    '[\n  {\n    "name": "Launch",\n    "enabled": false,\n    "extends": "cpp-renamed"\n  }\n]\n',
+  );
+});
+
+test('copyTemplateFilePath writes the backing JSON path to the clipboard', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/copy-path-project']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.copyTemplateFilePath, {
+    type: 'file',
+    kind: 'template',
+    file: 'template.json',
+  });
+
+  assert.equal(
+    testVscode.__testing.getClipboardText(),
+    '/workspace/copy-path-project/.vscode/launch-composer/templates/template.json',
+  );
+});
+
+test('copyTemplateFileRelativePath writes the workspace-relative JSON path to the clipboard', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/copy-relative-path-project',
+  ]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.copyTemplateFileRelativePath, {
+    type: 'file',
+    kind: 'template',
+    file: 'template.json',
+  });
+
+  assert.equal(
+    testVscode.__testing.getClipboardText(),
+    '.vscode/launch-composer/templates/template.json',
+  );
+});
+
 test('addTemplate initializes directories before listing files', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
@@ -265,8 +602,35 @@ test('addTemplate initializes directories before listing files', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": ""\n  }\n]',
   );
+});
+
+test('sync commands only warn once per invalid file until it is fixed', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/warn-once-project']);
+  testVscode.__testing.setInputBoxResponses(['extra', 'extra-two']);
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/warn-once-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/warn-once-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode(''),
+  );
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.addTemplateFile);
+  await vscode.commands.executeCommand(COMMANDS.addTemplateFile);
+
+  assert.deepEqual(testVscode.__testing.getWarningMessages(), [
+    'template.json is empty. Expected a JSON array such as [].',
+  ]);
 });
 
 test('generate writes an empty launch.json when no templates or configs exist', async () => {

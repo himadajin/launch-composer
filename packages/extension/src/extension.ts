@@ -2,7 +2,11 @@ import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
 import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from './commands.js';
-import { WorkspaceStore } from './io/workspaceStore.js';
+import {
+  WorkspaceStore,
+  type ComposerDataIssue,
+  type WorkspaceDataSnapshot,
+} from './io/workspaceStore.js';
 import type { EditorTarget } from './messages.js';
 import {
   LaunchComposerTreeProvider,
@@ -40,14 +44,45 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
-  const refreshViews = (): void => {
-    templateProvider.refresh();
-    configProvider.refresh();
+  const activeIssues = new Map<string, string>();
+
+  const applySnapshot = (snapshot: WorkspaceDataSnapshot): void => {
+    templateProvider.refresh(snapshot);
+    configProvider.refresh(snapshot);
+  };
+
+  const reportIssues = (issues: ComposerDataIssue[]): void => {
+    const nextIssues = new Map(
+      issues.map((issue) => [getIssueKey(issue), getIssueFingerprint(issue)]),
+    );
+
+    for (const issue of issues) {
+      const key = getIssueKey(issue);
+      const fingerprint = getIssueFingerprint(issue);
+      if (activeIssues.get(key) === fingerprint) {
+        continue;
+      }
+
+      activeIssues.set(key, fingerprint);
+      void vscode.window.showWarningMessage(issue.message);
+    }
+
+    for (const key of [...activeIssues.keys()]) {
+      if (!nextIssues.has(key)) {
+        activeIssues.delete(key);
+      }
+    }
   };
 
   const syncUiWithWorkspace = async (): Promise<void> => {
-    refreshViews();
-    await editorPanel.syncWithWorkspace();
+    const snapshot = await store.readAll();
+    reportIssues(snapshot.issues);
+    applySnapshot(snapshot);
+    await editorPanel.syncWithWorkspaceData(snapshot);
+  };
+
+  const refreshViews = (): void => {
+    void syncUiWithWorkspace().catch(showError);
   };
 
   const revealTarget = async (target: EditorTarget): Promise<void> => {
@@ -82,8 +117,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const handleInitialize = async (): Promise<void> => {
     const result = await store.ensureInitialized();
     await syncUiWithWorkspace();
+    const fileSuffix =
+      result.ensuredFiles.length === 0
+        ? ''
+        : ` Default files are ready (${result.ensuredFiles.join(', ')}).`;
     void vscode.window.showInformationMessage(
-      `Launch Composer storage directories are ready (${result.ensured.join(', ')}).`,
+      `Launch Composer storage is ready (${result.ensuredDirectories.join(', ')}).${fileSuffix}`,
     );
   };
 
@@ -108,13 +147,13 @@ export function activate(context: vscode.ExtensionContext): void {
     store.getRelativeComposerPattern(),
   );
   watcher.onDidCreate(() => {
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
   watcher.onDidChange(() => {
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
   watcher.onDidDelete(() => {
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
 
   const deleteSubscription = vscode.workspace.onDidDeleteFiles((event) => {
@@ -122,7 +161,7 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
 
   context.subscriptions.push(
@@ -165,39 +204,97 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.deleteTemplateFile, async (node?: TreeNode) => {
-      if (
-        node === undefined ||
-        node.type !== 'file' ||
-        node.kind !== 'template'
-      ) {
+    registerCommand(COMMANDS.openTemplateFileJson, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'template');
+      if (fileNode === undefined) {
         return;
       }
 
       try {
-        if (!(await confirmDelete(`Delete ${node.file}?`))) {
+        await store.openDataFileAsJson('template', fileNode.file);
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(COMMANDS.copyTemplateFilePath, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'template');
+      if (fileNode === undefined) {
+        return;
+      }
+
+      try {
+        await vscode.env.clipboard.writeText(
+          store.getDataFilePath('template', fileNode.file),
+        );
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(
+      COMMANDS.copyTemplateFileRelativePath,
+      async (node?: TreeNode) => {
+        const fileNode = getFileNode(node, 'template');
+        if (fileNode === undefined) {
           return;
         }
 
-        await store.deleteDataFile('template', node.file);
+        try {
+          await vscode.env.clipboard.writeText(
+            store.getDataFileRelativePath('template', fileNode.file),
+          );
+        } catch (error) {
+          showError(error);
+        }
+      },
+    ),
+    registerCommand(COMMANDS.renameTemplateFile, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'template');
+      if (fileNode === undefined) {
+        return;
+      }
+
+      try {
+        const nextFile = await promptForFileName(
+          'Template file name',
+          fileNode.file,
+        );
+        if (nextFile === undefined) {
+          return;
+        }
+
+        await store.renameDataFile('template', fileNode.file, nextFile);
+        await syncUiWithWorkspace();
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(COMMANDS.deleteTemplateFile, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'template');
+      if (fileNode === undefined) {
+        return;
+      }
+
+      try {
+        if (!(await confirmDelete(`Delete ${fileNode.file}?`))) {
+          return;
+        }
+
+        await store.deleteDataFile('template', fileNode.file);
         await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
     }),
     registerCommand(COMMANDS.addTemplateEntry, async (node?: TreeNode) => {
-      if (
-        node === undefined ||
-        node.type !== 'file' ||
-        node.kind !== 'template'
-      ) {
+      const fileNode = getFileNode(node, 'template');
+      if (fileNode === undefined) {
         return;
       }
 
       try {
         await addTemplateEntry(
           store,
-          node.file,
+          fileNode.file,
           editorPanel,
           syncUiWithWorkspace,
         );
@@ -219,32 +316,90 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.deleteConfigFile, async (node?: TreeNode) => {
-      if (
-        node === undefined ||
-        node.type !== 'file' ||
-        node.kind !== 'config'
-      ) {
+    registerCommand(COMMANDS.openConfigFileJson, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'config');
+      if (fileNode === undefined) {
         return;
       }
 
       try {
-        if (!(await confirmDelete(`Delete ${node.file}?`))) {
+        await store.openDataFileAsJson('config', fileNode.file);
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(COMMANDS.copyConfigFilePath, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'config');
+      if (fileNode === undefined) {
+        return;
+      }
+
+      try {
+        await vscode.env.clipboard.writeText(
+          store.getDataFilePath('config', fileNode.file),
+        );
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(
+      COMMANDS.copyConfigFileRelativePath,
+      async (node?: TreeNode) => {
+        const fileNode = getFileNode(node, 'config');
+        if (fileNode === undefined) {
           return;
         }
 
-        await store.deleteDataFile('config', node.file);
+        try {
+          await vscode.env.clipboard.writeText(
+            store.getDataFileRelativePath('config', fileNode.file),
+          );
+        } catch (error) {
+          showError(error);
+        }
+      },
+    ),
+    registerCommand(COMMANDS.renameConfigFile, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'config');
+      if (fileNode === undefined) {
+        return;
+      }
+
+      try {
+        const nextFile = await promptForFileName(
+          'Config file name',
+          fileNode.file,
+        );
+        if (nextFile === undefined) {
+          return;
+        }
+
+        await store.renameDataFile('config', fileNode.file, nextFile);
+        await syncUiWithWorkspace();
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(COMMANDS.deleteConfigFile, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'config');
+      if (fileNode === undefined) {
+        return;
+      }
+
+      try {
+        if (!(await confirmDelete(`Delete ${fileNode.file}?`))) {
+          return;
+        }
+
+        await store.deleteDataFile('config', fileNode.file);
         await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
     }),
     registerCommand(COMMANDS.addConfigEntry, async (node?: TreeNode) => {
-      if (
-        node === undefined ||
-        node.type !== 'file' ||
-        node.kind !== 'config'
-      ) {
+      const fileNode = getFileNode(node, 'config');
+      if (fileNode === undefined) {
         return;
       }
 
@@ -260,7 +415,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         const target = await store.addConfigEntry(
-          node.file,
+          fileNode.file,
           name,
           extendsName === '(none)' ? undefined : extendsName,
         );
@@ -281,21 +436,94 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.deleteItem, async (node?: TreeNode) => {
-      if (node === undefined || node.type !== 'entry') {
+    registerCommand(COMMANDS.openItemJson, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined) {
         return;
       }
 
       try {
-        if (!(await confirmDelete(`Delete ${node.label}?`))) {
+        await store.openEntryAsJson(entryNode.target);
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(COMMANDS.copyItemFilePath, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined) {
+        return;
+      }
+
+      try {
+        await vscode.env.clipboard.writeText(
+          store.getEntryFilePath(entryNode.target),
+        );
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(
+      COMMANDS.copyItemFileRelativePath,
+      async (node?: TreeNode) => {
+        const entryNode = getEntryNode(node);
+        if (entryNode === undefined) {
           return;
         }
 
-        await store.deleteEntry(node.target);
+        try {
+          await vscode.env.clipboard.writeText(
+            store.getEntryFileRelativePath(entryNode.target),
+          );
+        } catch (error) {
+          showError(error);
+        }
+      },
+    ),
+    registerCommand(COMMANDS.renameItem, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined) {
+        return;
+      }
+
+      try {
+        const nextName = await promptForRequiredValue(
+          entryNode.target.kind === 'template'
+            ? 'Template name'
+            : 'Config name',
+          entryNode.label,
+        );
+        if (nextName === undefined) {
+          return;
+        }
+
+        await store.renameEntry(entryNode.target, nextName);
         await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
+    }),
+    registerCommand(COMMANDS.deleteItem, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined) {
+        return;
+      }
+
+      try {
+        if (!(await confirmDelete(`Delete ${entryNode.label}?`))) {
+          return;
+        }
+
+        await store.deleteEntry(entryNode.target);
+        await syncUiWithWorkspace();
+      } catch (error) {
+        showError(error);
+      }
+    }),
+    registerCommand(COMMANDS.enableConfig, async (node?: TreeNode) => {
+      await setConfigEnabled(node, true, store, syncUiWithWorkspace);
+    }),
+    registerCommand(COMMANDS.disableConfig, async (node?: TreeNode) => {
+      await setConfigEnabled(node, false, store, syncUiWithWorkspace);
     }),
     registerCommand(COMMANDS.toggleEnabled, async (node?: TreeNode) => {
       if (
@@ -402,24 +630,36 @@ async function promptForTemplateSelection(
 
 async function promptForFileName(
   placeHolder: string,
+  value?: string,
 ): Promise<string | undefined> {
-  return vscode.window.showInputBox({
+  const options: vscode.InputBoxOptions = {
     placeHolder,
     validateInput(value) {
       return value.trim() === '' ? 'A file name is required.' : undefined;
     },
-  });
+  };
+  if (value !== undefined) {
+    options.value = value;
+  }
+
+  return vscode.window.showInputBox(options);
 }
 
 async function promptForRequiredValue(
   placeHolder: string,
+  value?: string,
 ): Promise<string | undefined> {
-  return vscode.window.showInputBox({
+  const options: vscode.InputBoxOptions = {
     placeHolder,
     validateInput(value) {
       return value.trim() === '' ? 'A value is required.' : undefined;
     },
-  });
+  };
+  if (value !== undefined) {
+    options.value = value;
+  }
+
+  return vscode.window.showInputBox(options);
 }
 
 async function confirmDelete(message: string): Promise<boolean> {
@@ -489,6 +729,63 @@ function showWorkspaceRequiredError(): void {
   void vscode.window.showErrorMessage(
     'Launch Composer requires exactly one workspace folder.',
   );
+}
+
+function getIssueKey(issue: ComposerDataIssue): string {
+  return `${issue.kind}:${issue.file}`;
+}
+
+function getIssueFingerprint(issue: ComposerDataIssue): string {
+  return `${issue.code}:${issue.message}:${issue.details ?? ''}`;
+}
+
+function getFileNode(
+  node: TreeNode | undefined,
+  kind: 'template' | 'config',
+):
+  | Extract<TreeNode, { type: 'file'; kind: 'template' | 'config' }>
+  | undefined {
+  if (node === undefined || node.type !== 'file' || node.kind !== kind) {
+    return undefined;
+  }
+
+  return node;
+}
+
+function getEntryNode(
+  node: TreeNode | undefined,
+): Extract<TreeNode, { type: 'entry' }> | undefined {
+  if (node === undefined || node.type !== 'entry') {
+    return undefined;
+  }
+
+  return node;
+}
+
+async function setConfigEnabled(
+  node: TreeNode | undefined,
+  enabled: boolean,
+  store: WorkspaceStore,
+  refresh: () => Promise<void>,
+): Promise<void> {
+  const entryNode = getEntryNode(node);
+  if (entryNode === undefined || entryNode.target.kind !== 'config') {
+    return;
+  }
+
+  if (entryNode.enabled === enabled) {
+    return;
+  }
+
+  try {
+    await store.toggleConfigEnabled(
+      entryNode.target.file,
+      entryNode.target.index,
+    );
+    await refresh();
+  } catch (error) {
+    showError(error);
+  }
 }
 
 export function deactivate(): void {}

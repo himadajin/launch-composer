@@ -7,12 +7,17 @@ import type {
 import * as vscode from 'vscode';
 
 import type { EditorTarget } from '../messages.js';
-import type { WorkspaceStore } from '../io/workspaceStore.js';
+import type {
+  ComposerDataIssue,
+  WorkspaceDataSnapshot,
+  WorkspaceStore,
+} from '../io/workspaceStore.js';
 
 type FileNode = {
   type: 'file';
   kind: 'template' | 'config';
   file: string;
+  issue?: ComposerDataIssue;
   templates?: TemplateData[];
   configs?: ConfigData[];
 };
@@ -34,13 +39,15 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
   private fileNodes = new Map<string, FileNode>();
   private entryNodes = new Map<string, EntryNode>();
+  private snapshot: WorkspaceDataSnapshot | undefined;
 
   constructor(
     private readonly kind: 'template' | 'config',
     private readonly store: WorkspaceStore,
   ) {}
 
-  refresh(): void {
+  refresh(snapshot?: WorkspaceDataSnapshot): void {
+    this.snapshot = snapshot;
     this.fileNodes.clear();
     this.entryNodes.clear();
     this.didChangeTreeDataEmitter.fire(undefined);
@@ -51,7 +58,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       return this.loadRootNodes();
     }
 
-    if (element.type === 'entry') {
+    if (element.type === 'entry' || element.issue !== undefined) {
       return [];
     }
 
@@ -92,11 +99,38 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     if (element.type === 'file') {
       const item = new vscode.TreeItem(
         element.file,
-        vscode.TreeItemCollapsibleState.Expanded,
+        element.issue === undefined
+          ? vscode.TreeItemCollapsibleState.Expanded
+          : vscode.TreeItemCollapsibleState.None,
       );
       item.contextValue =
-        element.kind === 'template' ? 'templateFile' : 'configFile';
-      item.iconPath = new vscode.ThemeIcon('file-code');
+        element.issue === undefined
+          ? element.kind === 'template'
+            ? 'templateFile'
+            : 'configFile'
+          : element.kind === 'template'
+            ? 'templateFileInvalid'
+            : 'configFileInvalid';
+      item.resourceUri = this.store.getDataFileUriForTreeItem(
+        element.kind,
+        element.file,
+      );
+      if (element.issue !== undefined) {
+        item.command = {
+          command:
+            element.kind === 'template'
+              ? 'launch-composer.openTemplateFileJson'
+              : 'launch-composer.openConfigFileJson',
+          title: 'Open JSON',
+          arguments: [element],
+        };
+        item.iconPath = new vscode.ThemeIcon(
+          'warning',
+          new vscode.ThemeColor('list.warningForeground'),
+        );
+        item.description = getIssueDescription(element.issue);
+      }
+
       return item;
     }
 
@@ -105,7 +139,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       vscode.TreeItemCollapsibleState.None,
     );
     item.contextValue =
-      element.target.kind === 'template' ? 'templateEntry' : 'configEntry';
+      element.target.kind === 'template'
+        ? 'templateEntry'
+        : element.enabled
+          ? 'configEntryEnabled'
+          : 'configEntryDisabled';
     item.command = {
       command: 'launch-composer.editItem',
       title: 'Edit',
@@ -152,29 +190,43 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
   }
 
   private async loadRootNodes(): Promise<TreeNode[]> {
-    const data = await this.store.readAll();
-    const files = this.kind === 'template' ? data.templates : data.configs;
+    const data = this.snapshot ?? (await this.store.readAll());
+    const [files, fileNames] =
+      this.kind === 'template'
+        ? [data.templates, await this.store.listFiles('template')]
+        : [data.configs, await this.store.listFiles('config')];
 
     this.fileNodes.clear();
     this.entryNodes.clear();
 
-    return files.map((fileData) => {
-      const node: FileNode =
-        this.kind === 'template'
+    return fileNames.map((file) => {
+      const issue = data.issues.find(
+        (candidate) => candidate.kind === this.kind && candidate.file === file,
+      );
+      const fileData = files.find((candidate) => candidate.file === file);
+      const node: FileNode = issue
+        ? {
+            type: 'file',
+            kind: this.kind,
+            file,
+            issue,
+          }
+        : this.kind === 'template'
           ? {
               type: 'file',
               kind: 'template',
-              file: fileData.file,
-              templates: (fileData as TemplateFileData).templates,
+              file,
+              templates:
+                (fileData as TemplateFileData | undefined)?.templates ?? [],
             }
           : {
               type: 'file',
               kind: 'config',
-              file: fileData.file,
-              configs: (fileData as ConfigFileData).configs,
+              file,
+              configs: (fileData as ConfigFileData | undefined)?.configs ?? [],
             };
 
-      this.fileNodes.set(fileData.file, node);
+      this.fileNodes.set(file, node);
       return node;
     });
   }
@@ -182,4 +234,15 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
 function getEntryKey(target: EditorTarget): string {
   return `${target.kind}:${target.file}:${target.index}`;
+}
+
+function getIssueDescription(issue: ComposerDataIssue): string {
+  switch (issue.code) {
+    case 'empty':
+      return 'empty file';
+    case 'not-array':
+      return 'must be array';
+    case 'invalid-json':
+      return 'invalid JSON';
+  }
 }

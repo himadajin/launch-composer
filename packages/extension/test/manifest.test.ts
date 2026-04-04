@@ -31,6 +31,18 @@ test('package.json command contributions stay aligned with the extension impleme
         command: string;
         enablement?: string;
       }>;
+      menus?: {
+        'view/item/context'?: Array<{
+          command: string;
+          when?: string;
+          group?: string;
+        }>;
+        'view/item/inline'?: Array<{
+          command: string;
+          when?: string;
+          group?: string;
+        }>;
+      };
     };
   };
 
@@ -58,6 +70,34 @@ test('package.json command contributions stay aligned with the extension impleme
     },
   ]);
   assert.equal(packageJson.contributes.views.explorer, undefined);
+
+  const itemContextMenu = packageJson.contributes.menus?.['view/item/context'];
+  assert.ok(itemContextMenu);
+  assert.equal(
+    itemContextMenu.some((item) => item.group === 'inline'),
+    false,
+  );
+  assert.ok(
+    itemContextMenu.some(
+      (item) =>
+        item.command === 'launch-composer.enableConfig' &&
+        item.group === '0_state@1',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.some(
+      (item) =>
+        item.command === 'launch-composer.disableConfig' &&
+        item.group === '0_state@1',
+    ),
+  );
+
+  const inlineMenu = packageJson.contributes.menus?.['view/item/inline'] ?? [];
+  assert.deepEqual(inlineMenu.map((item) => item.command).sort(), [
+    'launch-composer.addConfigEntry',
+    'launch-composer.addTemplateEntry',
+    'launch-composer.toggleEnabled',
+  ]);
 
   for (const command of packageJson.contributes.commands) {
     assert.equal(command.enablement, SINGLE_WORKSPACE_ENABLEMENT);

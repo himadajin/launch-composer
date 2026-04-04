@@ -25,6 +25,9 @@ export function buildLaunchConfig(
     merged.args = args;
   }
 
+  merged.type = ensureRequiredLaunchField(merged.type);
+  merged.request = ensureRequiredLaunchField(merged.request);
+
   return merged;
 }
 
@@ -68,4 +71,8 @@ function omitKeys(
   }
 
   return result;
+}
+
+function ensureRequiredLaunchField(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }

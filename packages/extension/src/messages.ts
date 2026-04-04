@@ -5,6 +5,7 @@ import type {
   TemplateFileData,
   ValidationError,
 } from '@launch-composer/core';
+import type { ComposerDataIssue } from './io/workspaceStore.js';
 
 export interface EditorTarget {
   kind: 'template' | 'config';
@@ -15,6 +16,7 @@ export interface EditorTarget {
 export interface InitialDataPayload {
   templates: TemplateFileData[];
   configs: ConfigFileData[];
+  issues: ComposerDataIssue[];
   editor: EditorTarget;
   autoSaveDelay: number;
 }
@@ -41,7 +43,11 @@ export type WebviewMessage =
   | { type: 'request-initial-data'; requestId: string }
   | { type: 'generate'; requestId: string }
   | { type: 'browse-file'; requestId: string }
-  | { type: 'open-json'; payload: EditorTarget };
+  | { type: 'open-json'; payload: EditorTarget }
+  | {
+      type: 'open-file-json';
+      payload: { kind: 'template' | 'config'; file: string };
+    };
 
 export type HostMessage =
   | {

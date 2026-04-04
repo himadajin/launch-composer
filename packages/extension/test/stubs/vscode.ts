@@ -131,6 +131,7 @@ export const TreeItemCollapsibleState = {
 export class TreeItem {
   contextValue?: string;
   iconPath?: unknown;
+  resourceUri?: Uri;
   command?: unknown;
   description?: string;
 
@@ -151,6 +152,7 @@ const ghostFiles = new Set<string>();
 const errorMessages: string[] = [];
 const infoMessages: string[] = [];
 const warningMessages: string[] = [];
+let clipboardText = '';
 const configuration = new Map<string, unknown>();
 const quickPickResponses: unknown[] = [];
 const inputBoxResponses: unknown[] = [];
@@ -160,6 +162,7 @@ let lastCreatedWebviewPanel:
   | {
       disposed: boolean;
       title: string;
+      postedMessages: unknown[];
       webview: {
         html: string;
         onDidReceiveMessage(listener: (message: unknown) => void): {
@@ -460,12 +463,14 @@ export const window = {
     const panel = {
       disposed: false,
       title: '',
+      postedMessages: [] as unknown[],
       webview: {
         html: '',
         onDidReceiveMessage() {
           return { dispose() {} };
         },
-        async postMessage() {
+        async postMessage(message: unknown) {
+          panel.postedMessages.push(message);
           return true;
         },
         asWebviewUri(uri: Uri) {
@@ -498,6 +503,14 @@ export const window = {
   },
 };
 
+export const env = {
+  clipboard: {
+    async writeText(value: string): Promise<void> {
+      clipboardText = value;
+    },
+  },
+};
+
 export const __testing = {
   reset(): void {
     registeredCommands.clear();
@@ -507,6 +520,7 @@ export const __testing = {
     errorMessages.length = 0;
     infoMessages.length = 0;
     warningMessages.length = 0;
+    clipboardText = '';
     configuration.clear();
     quickPickResponses.length = 0;
     inputBoxResponses.length = 0;
@@ -562,8 +576,16 @@ export const __testing = {
     return [...infoMessages];
   },
 
+  getWarningMessages(): string[] {
+    return [...warningMessages];
+  },
+
   getCreatedDirectories(): string[] {
     return [...createdDirectories].sort();
+  },
+
+  getClipboardText(): string {
+    return clipboardText;
   },
 
   getLastCreatedWebviewPanel() {

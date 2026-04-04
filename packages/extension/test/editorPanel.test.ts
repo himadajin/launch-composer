@@ -10,7 +10,9 @@ const testVscode = vscode as typeof vscode & {
   __testing: {
     reset(): void;
     createExtensionContext(): unknown;
-    getLastCreatedWebviewPanel(): { disposed: boolean } | undefined;
+    getLastCreatedWebviewPanel():
+      | { disposed: boolean; postedMessages: unknown[] }
+      | undefined;
   };
 };
 
@@ -25,6 +27,7 @@ test('syncWithWorkspace closes the editor panel when the current target no longe
       return {
         templates: [],
         configs: [],
+        issues: [],
       };
     },
     async hasEntry() {
@@ -57,4 +60,76 @@ test('syncWithWorkspace closes the editor panel when the current target no longe
   await controller.syncWithWorkspace();
 
   assert.equal(panel.disposed, true);
+});
+
+test('syncWithWorkspaceData keeps the panel open when the current file is invalid', async () => {
+  const store = {
+    async readAll() {
+      return {
+        templates: [
+          {
+            file: 'abc.json',
+            templates: [{ name: 'cpp' }],
+          },
+        ],
+        configs: [],
+        issues: [],
+      };
+    },
+    async hasEntry() {
+      return true;
+    },
+  } as Pick<WorkspaceStore, 'readAll' | 'hasEntry'> as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'template',
+    file: 'abc.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+
+  await controller.syncWithWorkspaceData({
+    templates: [],
+    configs: [],
+    issues: [
+      {
+        kind: 'template',
+        file: 'abc.json',
+        code: 'invalid-json',
+        message: 'Invalid JSON in abc.json. Open the file and fix the syntax.',
+      },
+    ],
+  });
+
+  assert.equal(panel.disposed, false);
+  const lastMessage = panel.postedMessages.at(-1) as
+    | {
+        type: 'initial-data';
+        payload: {
+          issues: Array<{ file: string; code: string }>;
+        };
+      }
+    | undefined;
+  assert.equal(lastMessage?.type, 'initial-data');
+  assert.deepEqual(lastMessage?.payload.issues, [
+    {
+      file: 'abc.json',
+      kind: 'template',
+      code: 'invalid-json',
+      message: 'Invalid JSON in abc.json. Open the file and fix the syntax.',
+    },
+  ]);
 });

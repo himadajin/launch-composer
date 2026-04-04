@@ -10,7 +10,10 @@ import type {
   InitialDataPayload,
   WebviewMessage,
 } from '../messages.js';
-import type { WorkspaceStore } from '../io/workspaceStore.js';
+import type {
+  WorkspaceDataSnapshot,
+  WorkspaceStore,
+} from '../io/workspaceStore.js';
 
 interface EditorPanelOptions {
   context: vscode.ExtensionContext;
@@ -31,6 +34,11 @@ export class EditorPanelController {
 
   async open(target: EditorTarget): Promise<void> {
     this.currentTarget = target;
+    const webviewRoot = vscode.Uri.joinPath(
+      this.options.context.extensionUri,
+      'dist',
+      'webview',
+    );
 
     if (this.panel === undefined) {
       this.panel = vscode.window.createWebviewPanel(
@@ -40,6 +48,7 @@ export class EditorPanelController {
         {
           enableScripts: true,
           retainContextWhenHidden: true,
+          localResourceRoots: [webviewRoot],
         },
       );
 
@@ -54,7 +63,7 @@ export class EditorPanelController {
 
       this.panel.webview.html = await getWebviewHtml(
         this.panel.webview,
-        this.options.context.extensionUri,
+        webviewRoot,
       );
     } else {
       this.panel.reveal(vscode.ViewColumn.Active);
@@ -66,7 +75,17 @@ export class EditorPanelController {
   }
 
   async syncWithWorkspace(): Promise<void> {
+    await this.syncWithWorkspaceData();
+  }
+
+  async syncWithWorkspaceData(data?: WorkspaceDataSnapshot): Promise<void> {
     if (this.panel === undefined || this.currentTarget === undefined) {
+      return;
+    }
+
+    const snapshot = data ?? (await this.options.store.readAll());
+    if (hasInvalidFile(snapshot, this.currentTarget)) {
+      await this.postInitialData('local', snapshot);
       return;
     }
 
@@ -76,7 +95,7 @@ export class EditorPanelController {
       return;
     }
 
-    await this.postInitialData('local');
+    await this.postInitialData('local', snapshot);
   }
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
@@ -112,6 +131,12 @@ export class EditorPanelController {
           return;
         case 'open-json':
           await this.options.store.openEntryAsJson(message.payload);
+          return;
+        case 'open-file-json':
+          await this.options.store.openDataFileAsJson(
+            message.payload.kind,
+            message.payload.file,
+          );
           return;
         case 'delete-template':
           await this.deleteEntry(message.requestId, {
@@ -168,14 +193,17 @@ export class EditorPanelController {
     }
   }
 
-  private async postInitialData(requestId: string): Promise<void> {
+  private async postInitialData(
+    requestId: string,
+    data?: WorkspaceDataSnapshot,
+  ): Promise<void> {
     if (this.panel === undefined || this.currentTarget === undefined) {
       return;
     }
 
-    const data = await this.options.store.readAll();
+    const snapshot = data ?? (await this.options.store.readAll());
     const payload: InitialDataPayload = {
-      ...data,
+      ...snapshot,
       editor: this.currentTarget,
       autoSaveDelay: getAutoSaveDelay(),
     };
@@ -201,10 +229,9 @@ export class EditorPanelController {
 
 async function getWebviewHtml(
   webview: vscode.Webview,
-  extensionUri: vscode.Uri,
+  webviewRoot: vscode.Uri,
 ): Promise<string> {
-  const buildDir = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
-  const indexPath = path.join(buildDir.fsPath, 'index.html');
+  const indexPath = path.join(webviewRoot.fsPath, 'index.html');
   let html: string;
 
   try {
@@ -221,7 +248,9 @@ async function getWebviewHtml(
   const replacedScripts = html.replace(
     /<script type="module" crossorigin src="([^"]+)"><\/script>/g,
     (_match, src: string) => {
-      const assetUri = webview.asWebviewUri(vscode.Uri.joinPath(buildDir, src));
+      const assetUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(webviewRoot, src),
+      );
       return `<script type="module" src="${assetUri.toString()}"></script>`;
     },
   );
@@ -230,7 +259,7 @@ async function getWebviewHtml(
     /<link rel="stylesheet" crossorigin href="([^"]+)">/g,
     (_match, href: string) => {
       const assetUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(buildDir, href),
+        vscode.Uri.joinPath(webviewRoot, href),
       );
       return `<link rel="stylesheet" href="${assetUri.toString()}">`;
     },
@@ -255,4 +284,13 @@ function getAutoSaveDelay(): number {
 
 function getTitle(target: EditorTarget): string {
   return target.kind === 'template' ? 'Edit Template' : 'Edit Config';
+}
+
+function hasInvalidFile(
+  data: WorkspaceDataSnapshot,
+  target: EditorTarget,
+): boolean {
+  return data.issues.some(
+    (issue) => issue.kind === target.kind && issue.file === target.file,
+  );
 }

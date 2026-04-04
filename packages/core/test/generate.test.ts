@@ -183,6 +183,74 @@ test('validateGenerateInput reports spec violations together', async () => {
   );
 });
 
+test('generate fills missing type and request with empty strings', async () => {
+  const result = await generate({
+    templates: [
+      {
+        file: 'template.json',
+        templates: [
+          {
+            name: 'cpp',
+            type: '',
+            request: '',
+          },
+        ],
+      },
+    ],
+    configs: [
+      {
+        file: 'config.json',
+        configs: [
+          {
+            name: 'Test',
+            extends: 'cpp',
+            enabled: true,
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    throw new Error('Expected success');
+  }
+
+  assert.deepEqual(result.launchJson.configurations, [
+    {
+      name: 'Test',
+      type: '',
+      request: '',
+    },
+  ]);
+});
+
+test('generate ignores missing type and request on disabled configs', async () => {
+  const result = await generate({
+    templates: [],
+    configs: [
+      {
+        file: 'config.json',
+        configs: [
+          {
+            name: 'Draft',
+            enabled: false,
+            type: '',
+            request: '',
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    throw new Error('Expected success');
+  }
+
+  assert.deepEqual(result.launchJson.configurations, []);
+});
+
 test('generate fails when template args and config argsFile are combined', async () => {
   const result = await generate({
     templates: [

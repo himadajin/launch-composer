@@ -1,8 +1,10 @@
 declare module '@himadajin/vscode-components' {
   import * as React from 'react';
 
-  export interface ButtonProps
-    extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'> {
+  export interface ButtonProps extends Omit<
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
+    'onClick'
+  > {
     children: React.ReactNode;
     variant?: 'primary' | 'secondary';
     disabled?: boolean;
@@ -16,8 +18,10 @@ declare module '@himadajin/vscode-components' {
     ButtonProps & React.RefAttributes<HTMLButtonElement>
   >;
 
-  export interface CheckboxProps
-    extends Omit<React.HTMLAttributes<HTMLElement>, 'onChange'> {
+  export interface CheckboxProps extends Omit<
+    React.HTMLAttributes<HTMLElement>,
+    'onChange'
+  > {
     checked?: boolean;
     defaultChecked?: boolean;
     disabled?: boolean;
@@ -39,11 +43,27 @@ declare module '@himadajin/vscode-components' {
     DividerProps & React.RefAttributes<HTMLElement>
   >;
 
+  export interface IconProps extends Omit<
+    React.HTMLAttributes<HTMLElement>,
+    'onClick'
+  > {
+    name?: string;
+    icon?: string;
+    size?: number;
+    spin?: boolean;
+    actionIcon?: boolean;
+    disabled?: boolean;
+    label?: string;
+    onClick?: () => void;
+  }
+
+  export const Icon: React.ForwardRefExoticComponent<
+    IconProps & React.RefAttributes<HTMLElement>
+  >;
+
   export type FormContainerProps = React.HTMLAttributes<HTMLDivElement>;
 
-  export function FormContainer(
-    props: FormContainerProps,
-  ): React.JSX.Element;
+  export function FormContainer(props: FormContainerProps): React.JSX.Element;
 
   export interface FormGroupProps extends React.HTMLAttributes<HTMLElement> {
     label: React.ReactNode;
@@ -58,6 +78,13 @@ declare module '@himadajin/vscode-components' {
 
   export function FormGroup(props: FormGroupProps): React.JSX.Element;
 
+  export interface FormHelperProps extends React.HTMLAttributes<HTMLDivElement> {
+    tone?: 'default' | 'info' | 'warning' | 'error';
+    id?: string;
+  }
+
+  export function FormHelper(props: FormHelperProps): React.JSX.Element;
+
   export interface ListEditorProps<T = string> {
     value: T[];
     itemSchema?: unknown;
@@ -71,8 +98,10 @@ declare module '@himadajin/vscode-components' {
     props: ListEditorProps<T>,
   ): React.JSX.Element;
 
-  export interface SelectProps
-    extends Omit<React.HTMLAttributes<HTMLElement>, 'defaultValue' | 'onChange'> {
+  export interface SelectProps extends Omit<
+    React.HTMLAttributes<HTMLElement>,
+    'defaultValue' | 'onChange'
+  > {
     value?: string;
     defaultValue?: string;
     enum: string[];
@@ -86,11 +115,10 @@ declare module '@himadajin/vscode-components' {
     SelectProps & React.RefAttributes<HTMLElement>
   >;
 
-  export interface TextInputProps
-    extends Omit<
-      React.InputHTMLAttributes<HTMLInputElement>,
-      'defaultValue' | 'onChange'
-    > {
+  export interface TextInputProps extends Omit<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    'defaultValue' | 'onChange'
+  > {
     value?: string | number;
     defaultValue?: string | number;
     placeholder?: string;

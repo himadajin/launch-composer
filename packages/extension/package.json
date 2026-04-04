@@ -76,8 +76,28 @@
         "icon": "$(add)"
       },
       {
+        "command": "launch-composer.openTemplateFileJson",
+        "title": "Open",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.copyTemplateFilePath",
+        "title": "Copy Path",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.copyTemplateFileRelativePath",
+        "title": "Copy Relative Path",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.renameTemplateFile",
+        "title": "Rename",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
         "command": "launch-composer.deleteTemplateFile",
-        "title": "Delete File",
+        "title": "Delete",
         "enablement": "workspaceFolderCount == 1"
       },
       {
@@ -93,8 +113,28 @@
         "icon": "$(add)"
       },
       {
+        "command": "launch-composer.openConfigFileJson",
+        "title": "Open",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.copyConfigFilePath",
+        "title": "Copy Path",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.copyConfigFileRelativePath",
+        "title": "Copy Relative Path",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.renameConfigFile",
+        "title": "Rename",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
         "command": "launch-composer.deleteConfigFile",
-        "title": "Delete File",
+        "title": "Delete",
         "enablement": "workspaceFolderCount == 1"
       },
       {
@@ -109,8 +149,38 @@
         "enablement": "workspaceFolderCount == 1"
       },
       {
+        "command": "launch-composer.openItemJson",
+        "title": "Open",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.copyItemFilePath",
+        "title": "Copy Path",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.copyItemFileRelativePath",
+        "title": "Copy Relative Path",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.renameItem",
+        "title": "Rename",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
         "command": "launch-composer.deleteItem",
         "title": "Delete",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.enableConfig",
+        "title": "Enable",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.disableConfig",
+        "title": "Disable",
         "enablement": "workspaceFolderCount == 1"
       },
       {
@@ -139,19 +209,99 @@
       ],
       "view/item/context": [
         {
-          "command": "launch-composer.deleteTemplateFile",
+          "command": "launch-composer.addTemplateEntry",
           "when": "view == launchComposer.templates && viewItem == templateFile",
-          "group": "inline"
+          "group": "1_new@1"
+        },
+        {
+          "command": "launch-composer.addConfigEntry",
+          "when": "view == launchComposer.configs && viewItem == configFile",
+          "group": "1_new@1"
+        },
+        {
+          "command": "launch-composer.openTemplateFileJson",
+          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "group": "2_open@1"
+        },
+        {
+          "command": "launch-composer.copyTemplateFilePath",
+          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "launch-composer.copyTemplateFileRelativePath",
+          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "group": "3_copy@2"
+        },
+        {
+          "command": "launch-composer.renameTemplateFile",
+          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "group": "4_modify@1"
+        },
+        {
+          "command": "launch-composer.deleteTemplateFile",
+          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "group": "5_delete@1"
+        },
+        {
+          "command": "launch-composer.openConfigFileJson",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "group": "2_open@1"
+        },
+        {
+          "command": "launch-composer.copyConfigFilePath",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "launch-composer.copyConfigFileRelativePath",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "group": "3_copy@2"
+        },
+        {
+          "command": "launch-composer.renameConfigFile",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "group": "4_modify@1"
+        },
+        {
+          "command": "launch-composer.enableConfig",
+          "when": "viewItem == configEntryDisabled",
+          "group": "0_state@1"
+        },
+        {
+          "command": "launch-composer.disableConfig",
+          "when": "viewItem == configEntryEnabled",
+          "group": "0_state@1"
         },
         {
           "command": "launch-composer.deleteConfigFile",
-          "when": "view == launchComposer.configs && viewItem == configFile",
-          "group": "inline"
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "group": "5_delete@1"
+        },
+        {
+          "command": "launch-composer.openItemJson",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "group": "2_open@1"
+        },
+        {
+          "command": "launch-composer.copyItemFilePath",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "launch-composer.copyItemFileRelativePath",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "group": "3_copy@2"
+        },
+        {
+          "command": "launch-composer.renameItem",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "group": "4_modify@1"
         },
         {
           "command": "launch-composer.deleteItem",
-          "when": "viewItem == templateEntry || viewItem == configEntry",
-          "group": "inline"
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "group": "5_delete@1"
         }
       ],
       "view/item/inline": [
@@ -167,13 +317,29 @@
         },
         {
           "command": "launch-composer.toggleEnabled",
-          "when": "viewItem == configEntry",
+          "when": "viewItem == configEntryEnabled || viewItem == configEntryDisabled",
           "group": "inline"
         }
       ],
       "commandPalette": [
         {
           "command": "launch-composer.addTemplateFile",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.openTemplateFileJson",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.copyTemplateFilePath",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.copyTemplateFileRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.renameTemplateFile",
           "when": "false"
         },
         {
@@ -189,6 +355,22 @@
           "when": "false"
         },
         {
+          "command": "launch-composer.openConfigFileJson",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.copyConfigFilePath",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.copyConfigFileRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.renameConfigFile",
+          "when": "false"
+        },
+        {
           "command": "launch-composer.deleteConfigFile",
           "when": "false"
         },
@@ -201,7 +383,31 @@
           "when": "false"
         },
         {
+          "command": "launch-composer.openItemJson",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.copyItemFilePath",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.copyItemFileRelativePath",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.renameItem",
+          "when": "false"
+        },
+        {
           "command": "launch-composer.deleteItem",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.enableConfig",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.disableConfig",
           "when": "false"
         },
         {
