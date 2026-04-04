@@ -4,6 +4,7 @@ import {
   Divider,
   FormContainer,
   FormGroup,
+  Icon,
   ListEditor,
   Select,
   TextInput,
@@ -121,13 +122,11 @@ export function ConfigEditor({
           <p className="editor-kind">Config</p>
           <h1>{data.name}</h1>
         </div>
-        <Button
-          icon="settings-gear"
-          type="button"
-          variant="secondary"
-          onClick={onOpenJson}
-        >
-          Edit as JSON
+        <Button type="button" variant="secondary" onClick={onOpenJson}>
+          <span className="button-inline-content">
+            <Icon name="settings-gear" size={16} />
+            <span>Edit as JSON</span>
+          </span>
         </Button>
       </header>
 

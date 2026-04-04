@@ -43,6 +43,24 @@ declare module '@himadajin/vscode-components' {
     DividerProps & React.RefAttributes<HTMLElement>
   >;
 
+  export interface IconProps extends Omit<
+    React.HTMLAttributes<HTMLElement>,
+    'onClick'
+  > {
+    name?: string;
+    icon?: string;
+    size?: number;
+    spin?: boolean;
+    actionIcon?: boolean;
+    disabled?: boolean;
+    label?: string;
+    onClick?: () => void;
+  }
+
+  export const Icon: React.ForwardRefExoticComponent<
+    IconProps & React.RefAttributes<HTMLElement>
+  >;
+
   export type FormContainerProps = React.HTMLAttributes<HTMLDivElement>;
 
   export function FormContainer(props: FormContainerProps): React.JSX.Element;

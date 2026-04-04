@@ -34,6 +34,11 @@ export class EditorPanelController {
 
   async open(target: EditorTarget): Promise<void> {
     this.currentTarget = target;
+    const webviewRoot = vscode.Uri.joinPath(
+      this.options.context.extensionUri,
+      'dist',
+      'webview',
+    );
 
     if (this.panel === undefined) {
       this.panel = vscode.window.createWebviewPanel(
@@ -43,6 +48,7 @@ export class EditorPanelController {
         {
           enableScripts: true,
           retainContextWhenHidden: true,
+          localResourceRoots: [webviewRoot],
         },
       );
 
@@ -57,7 +63,7 @@ export class EditorPanelController {
 
       this.panel.webview.html = await getWebviewHtml(
         this.panel.webview,
-        this.options.context.extensionUri,
+        webviewRoot,
       );
     } else {
       this.panel.reveal(vscode.ViewColumn.Active);
@@ -223,10 +229,9 @@ export class EditorPanelController {
 
 async function getWebviewHtml(
   webview: vscode.Webview,
-  extensionUri: vscode.Uri,
+  webviewRoot: vscode.Uri,
 ): Promise<string> {
-  const buildDir = vscode.Uri.joinPath(extensionUri, 'dist', 'webview');
-  const indexPath = path.join(buildDir.fsPath, 'index.html');
+  const indexPath = path.join(webviewRoot.fsPath, 'index.html');
   let html: string;
 
   try {
@@ -243,7 +248,9 @@ async function getWebviewHtml(
   const replacedScripts = html.replace(
     /<script type="module" crossorigin src="([^"]+)"><\/script>/g,
     (_match, src: string) => {
-      const assetUri = webview.asWebviewUri(vscode.Uri.joinPath(buildDir, src));
+      const assetUri = webview.asWebviewUri(
+        vscode.Uri.joinPath(webviewRoot, src),
+      );
       return `<script type="module" src="${assetUri.toString()}"></script>`;
     },
   );
@@ -252,7 +259,7 @@ async function getWebviewHtml(
     /<link rel="stylesheet" crossorigin href="([^"]+)">/g,
     (_match, href: string) => {
       const assetUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(buildDir, href),
+        vscode.Uri.joinPath(webviewRoot, href),
       );
       return `<link rel="stylesheet" href="${assetUri.toString()}">`;
     },
