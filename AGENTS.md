@@ -38,7 +38,7 @@ Start from these official URLs:
 - VS Code source repository: `https://github.com/microsoft/vscode`
 - VS Code source code organization: `https://github.com/microsoft/vscode/wiki/source-code-organization`
 
-Run `npm run format`, `npm run lint`, `npm run typecheck`, and `npm run test` before opening a PR.
+After each completed task or implementation change, run `npm run format`, `npm run lint`, `npm run typecheck`, and `npm run test` before considering the work done.
 
 ## Testing Guidelines
 Tests use Node's built-in runner via `node --test`. Name test files `*.test.ts` in package-level `test/` directories. The `core` package runs tests from built output in `dist/test`, and the extension package compiles tests into `.test-dist` before execution. Keep new tests close to the package they verify, and cover both success and failure paths for generation, manifest wiring, editor panel behavior, and extension commands.
