@@ -106,7 +106,16 @@ export class WorkspaceStore {
     file: string,
   ): Promise<void> {
     const uri = this.getDataFileUri(kind, file);
-    await vscode.workspace.fs.delete(uri);
+    const edit = new vscode.WorkspaceEdit();
+    edit.deleteFile(uri, {
+      ignoreIfNotExists: true,
+      recursive: false,
+    });
+
+    const applied = await vscode.workspace.applyEdit(edit);
+    if (!applied) {
+      throw new Error(`Failed to delete ${normalizeFileName(file)}.`);
+    }
   }
 
   async addTemplateEntry(file: string, name: string): Promise<EditorTarget> {
@@ -221,6 +230,32 @@ export class WorkspaceStore {
     editor.selection = new vscode.Selection(position, position);
   }
 
+  async hasEntry(target: EditorTarget): Promise<boolean> {
+    try {
+      if (target.kind === 'template') {
+        const fileData = await this.readTemplateFile(target.file);
+        return target.index >= 0 && target.index < fileData.templates.length;
+      }
+
+      const fileData = await this.readConfigFile(target.file);
+      return target.index >= 0 && target.index < fileData.configs.length;
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
+  isComposerDataFile(uri: vscode.Uri): boolean {
+    const relativePath = vscode.workspace.asRelativePath(uri, false);
+    return (
+      relativePath.startsWith(`${TEMPLATES_DIR}/`) ||
+      relativePath.startsWith(`${CONFIGS_DIR}/`)
+    );
+  }
+
   async generateLaunchJson(): Promise<GenerateResult> {
     const { templates, configs } = await this.readAll();
 
@@ -276,7 +311,9 @@ export class WorkspaceStore {
 
   private async readTemplateFiles(): Promise<TemplateFileData[]> {
     const entries = await this.listFiles('template');
-    return this.readExistingFiles(entries, (file) => this.readTemplateFile(file));
+    return this.readExistingFiles(entries, (file) =>
+      this.readTemplateFile(file),
+    );
   }
 
   private async readConfigFiles(): Promise<ConfigFileData[]> {

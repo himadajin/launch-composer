@@ -233,6 +233,16 @@ test('createDataFile supports unicode file names without stat-ing the target pat
   assert.equal(new TextDecoder().decode(bytes), '[]\n');
 });
 
+test('deleteDataFile tolerates a file that has already been removed', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/delete-project'),
+  );
+
+  await store.deleteDataFile('config', 'missing.json');
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+});
+
 test('addTemplate initializes directories before listing files', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
@@ -262,7 +272,9 @@ test('addTemplate initializes directories before listing files', async () => {
 test('generate writes an empty launch.json when no templates or configs exist', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
-  testVscode.__testing.setWorkspaceFolders(['/workspace/generate-empty-project']);
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/generate-empty-project',
+  ]);
 
   activate(context);
   await vscode.commands.executeCommand(COMMANDS.generate);

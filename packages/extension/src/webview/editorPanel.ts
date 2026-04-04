@@ -65,6 +65,20 @@ export class EditorPanelController {
     await this.postInitialData('local');
   }
 
+  async syncWithWorkspace(): Promise<void> {
+    if (this.panel === undefined || this.currentTarget === undefined) {
+      return;
+    }
+
+    if (!(await this.options.store.hasEntry(this.currentTarget))) {
+      this.currentTarget = undefined;
+      this.panel.dispose();
+      return;
+    }
+
+    await this.postInitialData('local');
+  }
+
   private async handleMessage(message: WebviewMessage): Promise<void> {
     try {
       switch (message.type) {
@@ -135,6 +149,7 @@ export class EditorPanelController {
     try {
       await this.options.store.deleteEntry(target);
       this.options.onDidMutate();
+      await this.syncWithWorkspace();
       await this.respond(requestId, {
         type: 'delete-result',
         requestId,
