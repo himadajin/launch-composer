@@ -304,7 +304,35 @@ test('addConfigEntry creates its backing file when it does not exist', async () 
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "Basic Test",\n    "enabled": false,\n    "extends": "cpp"\n  }\n]',
+    '[\n  {\n    "name": "Basic Test",\n    "enabled": true,\n    "extends": "cpp"\n  }\n]',
+  );
+});
+
+test('addConfig command creates enabled configs by default', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/add-config-project']);
+  testVscode.__testing.setQuickPickResponses(['(none)']);
+  testVscode.__testing.setInputBoxResponses(['Launch']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.addConfigEntry, {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/add-config-project/.vscode/launch-composer/configs/config.json',
+    ),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(bytes).trim(),
+    '[\n  {\n    "name": "Launch",\n    "enabled": true\n  }\n]',
   );
 });
 

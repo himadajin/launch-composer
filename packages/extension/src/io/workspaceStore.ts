@@ -218,7 +218,7 @@ export class WorkspaceStore {
     const fileData = await this.readConfigFile(file);
     const data: ConfigData = {
       name,
-      enabled: false,
+      enabled: true,
     };
 
     if (extendsName !== undefined) {
