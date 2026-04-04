@@ -46,6 +46,17 @@ export function updateOptionalArray<T extends Record<string, unknown>>(
   return next as T;
 }
 
+export function updateRequiredString<T extends Record<string, unknown>>(
+  data: T,
+  key: string,
+  value: string,
+): T {
+  return {
+    ...data,
+    [key]: value,
+  };
+}
+
 export function stringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }

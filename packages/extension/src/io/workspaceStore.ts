@@ -199,7 +199,11 @@ export class WorkspaceStore {
   async addTemplateEntry(file: string, name: string): Promise<EditorTarget> {
     await this.ensureArrayDataFile('template', file);
     const fileData = await this.readTemplateFile(file);
-    fileData.templates.push({ name });
+    fileData.templates.push({
+      name,
+      type: '',
+      request: '',
+    });
     await this.writeTemplateFile(fileData);
 
     return {
@@ -223,6 +227,9 @@ export class WorkspaceStore {
 
     if (extendsName !== undefined) {
       data.extends = extendsName;
+    } else {
+      data.type = '';
+      data.request = '';
     }
 
     fileData.configs.push(data);

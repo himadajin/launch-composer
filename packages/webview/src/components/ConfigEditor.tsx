@@ -14,6 +14,7 @@ import type { ConfigData, TemplateData } from '../types.js';
 import {
   stringOrEmpty,
   updateOptionalArray,
+  updateRequiredString,
   updateOptionalString,
   useDebouncedCommit,
 } from './editorUtils.js';
@@ -35,8 +36,18 @@ export function ConfigEditor({
   onChange,
   onOpenJson,
 }: ConfigEditorProps) {
+  const [type, setType] = useState(stringOrEmpty(data.type));
+  const [request, setRequest] = useState(stringOrEmpty(data.request));
   const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
   const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
+
+  useEffect(() => {
+    setType(stringOrEmpty(data.type));
+  }, [data.type]);
+
+  useEffect(() => {
+    setRequest(stringOrEmpty(data.request));
+  }, [data.request]);
 
   useEffect(() => {
     setCwd(stringOrEmpty(data.cwd));
@@ -45,14 +56,6 @@ export function ConfigEditor({
   useEffect(() => {
     setArgsFile(stringOrEmpty(data.argsFile));
   }, [data.argsFile]);
-
-  useDebouncedCommit(cwd, autoSaveDelay, (value) => {
-    onChange(updateOptionalString(data, 'cwd', value));
-  });
-
-  useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
-    onChange(updateOptionalString(data, 'argsFile', value));
-  });
 
   const currentTemplate = templates.find(
     (template) => template.name === data.extends,
@@ -66,6 +69,37 @@ export function ConfigEditor({
       ? data.extends
       : (data.extends ?? '(none)');
   const argsFileDisabled = currentTemplate?.args !== undefined;
+  const launchFieldsInherited = data.extends !== undefined;
+  const effectiveType = launchFieldsInherited
+    ? stringOrEmpty(currentTemplate?.type)
+    : type;
+  const effectiveRequest = launchFieldsInherited
+    ? stringOrEmpty(currentTemplate?.request)
+    : request;
+
+  useDebouncedCommit(cwd, autoSaveDelay, (value) => {
+    onChange(updateOptionalString(data, 'cwd', value));
+  });
+
+  useDebouncedCommit(type, autoSaveDelay, (value) => {
+    if (launchFieldsInherited) {
+      return;
+    }
+
+    onChange(updateRequiredString(data, 'type', value));
+  });
+
+  useDebouncedCommit(request, autoSaveDelay, (value) => {
+    if (launchFieldsInherited) {
+      return;
+    }
+
+    onChange(updateRequiredString(data, 'request', value));
+  });
+
+  useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
+    onChange(updateOptionalString(data, 'argsFile', value));
+  });
 
   return (
     <div className="editor-root">
@@ -102,8 +136,12 @@ export function ConfigEditor({
               const next = { ...data };
               if (value === '(none)') {
                 delete next.extends;
+                next.type = stringOrEmpty(next.type);
+                next.request = stringOrEmpty(next.request);
               } else {
                 next.extends = value;
+                delete next.type;
+                delete next.request;
               }
               onChange(next);
             }}
@@ -122,6 +160,36 @@ export function ConfigEditor({
             }}
           />
         </div>
+
+        <FormGroup
+          label="Type"
+          helper={
+            launchFieldsInherited
+              ? 'Inherited from the selected template.'
+              : undefined
+          }
+        >
+          <TextInput
+            disabled={launchFieldsInherited}
+            value={effectiveType}
+            onChange={setType}
+          />
+        </FormGroup>
+
+        <FormGroup
+          label="Request"
+          helper={
+            launchFieldsInherited
+              ? 'Inherited from the selected template.'
+              : undefined
+          }
+        >
+          <TextInput
+            disabled={launchFieldsInherited}
+            value={effectiveRequest}
+            onChange={setRequest}
+          />
+        </FormGroup>
 
         <FormGroup label="Working Directory">
           <TextInput value={cwd} onChange={setCwd} />

@@ -275,7 +275,7 @@ test('addTemplateEntry creates its backing file when it does not exist', async (
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": ""\n  }\n]',
   );
 });
 
@@ -332,7 +332,7 @@ test('addConfig command creates enabled configs by default', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "Launch",\n    "enabled": true\n  }\n]',
+    '[\n  {\n    "name": "Launch",\n    "enabled": true,\n    "type": "",\n    "request": ""\n  }\n]',
   );
 });
 
@@ -525,7 +525,7 @@ test('addTemplate initializes directories before listing files', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": ""\n  }\n]',
   );
 });
 
