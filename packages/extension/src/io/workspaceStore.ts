@@ -451,16 +451,14 @@ function encodeText(text: string): Uint8Array {
 }
 
 function isMissingFileSystemError(error: unknown): boolean {
-  if (error instanceof vscode.FileSystemError) {
-    return /FileNotFound/i.test(error.message);
-  }
-
   if (!(error instanceof Error)) {
     return false;
   }
 
   const errorWithCode = error as Error & { code?: unknown; name?: unknown };
   return (
+    (error instanceof vscode.FileSystemError &&
+      /ENOENT|FileNotFound/i.test(error.message)) ||
     errorWithCode.code === 'ENOENT' ||
     (typeof errorWithCode.name === 'string' &&
       /FileNotFound/i.test(errorWithCode.name)) ||

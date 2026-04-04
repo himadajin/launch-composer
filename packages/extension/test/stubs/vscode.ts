@@ -120,7 +120,7 @@ const warningMessages: string[] = [];
 const configuration = new Map<string, unknown>();
 const quickPickResponses: unknown[] = [];
 const inputBoxResponses: unknown[] = [];
-let missingPathErrorStyle: 'vscode' | 'enoent' = 'vscode';
+let missingPathErrorStyle: 'vscode' | 'enoent' | 'vscode-enoent' = 'vscode';
 
 type WorkspaceFolder = {
   index: number;
@@ -184,6 +184,12 @@ function createMissingPathError(targetPath: string, action: string): Error {
       {
         code: 'ENOENT',
       },
+    );
+  }
+
+  if (missingPathErrorStyle === 'vscode-enoent') {
+    return new FileSystemError(
+      `ENOENT: no such file or directory, ${action} '${targetPath}'`,
     );
   }
 
@@ -405,9 +411,11 @@ export const __testing = {
     }));
   },
 
-  setMissingPathErrorStyle(style: 'vscode' | 'enoent'): void {
-    missingPathErrorStyle = style;
-  },
+    setMissingPathErrorStyle(
+      style: 'vscode' | 'enoent' | 'vscode-enoent',
+    ): void {
+      missingPathErrorStyle = style;
+    },
 
   setQuickPickResponses(responses: unknown[]): void {
     quickPickResponses.length = 0;
