@@ -68,8 +68,11 @@ export function App() {
       : payload.configs.find(
           (fileData) => fileData.file === payload.editor.file,
         )?.configs[payload.editor.index];
-
-  if (current === undefined) {
+  const currentIssue = payload.issues.find(
+    (issue) =>
+      issue.kind === payload.editor.kind && issue.file === payload.editor.file,
+  );
+  if (current === undefined && currentIssue === undefined) {
     return (
       <main className="empty-state">
         The selected item no longer exists. Reopen it from the sidebar.
@@ -85,8 +88,17 @@ export function App() {
     <main className="app-shell">
       {payload.editor.kind === 'template' ? (
         <TemplateEditor
-          data={current as TemplateData}
+          data={
+            (current as TemplateData | undefined) ??
+            createPlaceholderTemplate(payload.editor.file)
+          }
+          sourceFile={payload.editor.file}
           autoSaveDelay={payload.autoSaveDelay}
+          {...(currentIssue === undefined
+            ? {}
+            : {
+                readOnlyIssue: currentIssue,
+              })}
           onChange={(nextData) => {
             updatePayload(payload, setPayload, payload.editor, nextData);
             rpc.post({
@@ -99,17 +111,36 @@ export function App() {
             });
           }}
           onOpenJson={() => {
-            rpc.post({
-              type: 'open-json',
-              payload: payload.editor,
-            });
+            rpc.post(
+              currentIssue === undefined
+                ? {
+                    type: 'open-json',
+                    payload: payload.editor,
+                  }
+                : {
+                    type: 'open-file-json',
+                    payload: {
+                      kind: payload.editor.kind,
+                      file: payload.editor.file,
+                    },
+                  },
+            );
           }}
         />
       ) : (
         <ConfigEditor
-          data={current as ConfigData}
+          data={
+            (current as ConfigData | undefined) ??
+            createPlaceholderConfig(payload.editor.file)
+          }
+          sourceFile={payload.editor.file}
           templates={templateCatalog}
           autoSaveDelay={payload.autoSaveDelay}
+          {...(currentIssue === undefined
+            ? {}
+            : {
+                readOnlyIssue: currentIssue,
+              })}
           onBrowseFile={async () => {
             const result = await rpc.sendRequest({ type: 'browse-file' });
             return isFileSelected(result) ? result.path : null;
@@ -126,10 +157,20 @@ export function App() {
             });
           }}
           onOpenJson={() => {
-            rpc.post({
-              type: 'open-json',
-              payload: payload.editor,
-            });
+            rpc.post(
+              currentIssue === undefined
+                ? {
+                    type: 'open-json',
+                    payload: payload.editor,
+                  }
+                : {
+                    type: 'open-file-json',
+                    payload: {
+                      kind: payload.editor.kind,
+                      file: payload.editor.file,
+                    },
+                  },
+            );
           }}
         />
       )}
@@ -184,4 +225,21 @@ function isInitialDataPayload(value: unknown): value is InitialDataPayload {
 
 function isFileSelected(value: unknown): value is { path: string | null } {
   return typeof value === 'object' && value !== null && 'path' in value;
+}
+
+function createPlaceholderTemplate(file: string): TemplateData {
+  return {
+    name: file,
+    type: '',
+    request: '',
+  };
+}
+
+function createPlaceholderConfig(file: string): ConfigData {
+  return {
+    name: file,
+    enabled: true,
+    type: '',
+    request: '',
+  };
 }

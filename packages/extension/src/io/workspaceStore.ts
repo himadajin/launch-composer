@@ -9,7 +9,13 @@ import {
 import * as vscode from 'vscode';
 
 import type { EditorTarget } from '../messages.js';
-import { findArrayEntryOffset, parseJsonc, stringifyJsonFile } from './json.js';
+import {
+  findArrayEntryOffset,
+  parseJsonc,
+  parseJsoncDocument,
+  type JsonParseIssue,
+  stringifyJsonFile,
+} from './json.js';
 
 const COMPOSER_DIR = '.vscode/launch-composer';
 const TEMPLATES_DIR = `${COMPOSER_DIR}/templates`;
@@ -26,6 +32,25 @@ const DEFAULT_CONFIG_CONTENT =
   '// Use "extends" to reference a template when needed.\n' +
   '[]\n';
 
+export interface ComposerDataIssue {
+  kind: 'template' | 'config';
+  file: string;
+  code: 'empty' | 'invalid-json' | 'not-array';
+  message: string;
+  details?: string;
+}
+
+export interface WorkspaceDataSnapshot {
+  templates: TemplateFileData[];
+  configs: ConfigFileData[];
+  issues: ComposerDataIssue[];
+}
+
+type ArrayFileReadResult<T> =
+  | { status: 'ok'; data: T[] }
+  | { status: 'missing' }
+  | { status: 'invalid'; issue: ComposerDataIssue };
+
 export class WorkspaceStore {
   constructor(private readonly workspaceRoot: vscode.Uri) {}
 
@@ -40,21 +65,22 @@ export class WorkspaceStore {
     );
   }
 
-  async readAll(): Promise<{
-    templates: TemplateFileData[];
-    configs: ConfigFileData[];
-  }> {
-    const [templates, configs] = await Promise.all([
+  async readAll(): Promise<WorkspaceDataSnapshot> {
+    const [templatesResult, configsResult] = await Promise.all([
       this.readTemplateFiles(),
       this.readConfigFiles(),
     ]);
 
-    return { templates, configs };
+    return {
+      templates: templatesResult.data,
+      configs: configsResult.data,
+      issues: [...templatesResult.issues, ...configsResult.issues],
+    };
   }
 
   async listTemplateNames(): Promise<string[]> {
     const data = await this.readTemplateFiles();
-    return data.flatMap((fileData) =>
+    return data.data.flatMap((fileData) =>
       fileData.templates.map((template) => template.name),
     );
   }
@@ -369,21 +395,21 @@ export class WorkspaceStore {
   }
 
   async hasEntry(target: EditorTarget): Promise<boolean> {
-    try {
-      if (target.kind === 'template') {
-        const fileData = await this.readTemplateFile(target.file);
-        return target.index >= 0 && target.index < fileData.templates.length;
-      }
-
-      const fileData = await this.readConfigFile(target.file);
-      return target.index >= 0 && target.index < fileData.configs.length;
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
+    if (target.kind === 'template') {
+      const result = await this.readTemplateFileResult(target.file);
+      if (result.status !== 'ok') {
         return false;
       }
 
-      throw error;
+      return target.index >= 0 && target.index < result.data.templates.length;
     }
+
+    const result = await this.readConfigFileResult(target.file);
+    if (result.status !== 'ok') {
+      return false;
+    }
+
+    return target.index >= 0 && target.index < result.data.configs.length;
   }
 
   isComposerDataFile(uri: vscode.Uri): boolean {
@@ -395,7 +421,16 @@ export class WorkspaceStore {
   }
 
   async generateLaunchJson(): Promise<GenerateResult> {
-    const { templates, configs } = await this.readAll();
+    const { templates, configs, issues } = await this.readAll();
+    if (issues.length > 0) {
+      return {
+        success: false,
+        errors: issues.map((issue) => ({
+          file: issue.file,
+          message: issue.message,
+        })),
+      };
+    }
 
     return generate({
       templates,
@@ -447,42 +482,127 @@ export class WorkspaceStore {
     return this.exists(this.getLaunchJsonUri());
   }
 
-  private async readTemplateFiles(): Promise<TemplateFileData[]> {
+  private async readTemplateFiles(): Promise<{
+    data: TemplateFileData[];
+    issues: ComposerDataIssue[];
+  }> {
     const entries = await this.listFiles('template');
     return this.readExistingFiles(entries, (file) =>
-      this.readTemplateFile(file),
+      this.readTemplateFileResult(file),
     );
   }
 
-  private async readConfigFiles(): Promise<ConfigFileData[]> {
+  private async readConfigFiles(): Promise<{
+    data: ConfigFileData[];
+    issues: ComposerDataIssue[];
+  }> {
     const entries = await this.listFiles('config');
-    return this.readExistingFiles(entries, (file) => this.readConfigFile(file));
+    return this.readExistingFiles(entries, (file) =>
+      this.readConfigFileResult(file),
+    );
   }
 
   private async readTemplateFile(file: string): Promise<TemplateFileData> {
-    const data = await this.readArrayFile<TemplateData>(
-      this.getDataFileUri('template', file),
-      file,
+    const result = await this.readTemplateFileResult(file);
+    if (result.status === 'ok') {
+      return result.data;
+    }
+
+    throw new Error(
+      result.status === 'missing'
+        ? `File not found: ${file}`
+        : result.issue.message,
     );
-    return { file, templates: data };
   }
 
   private async readConfigFile(file: string): Promise<ConfigFileData> {
-    const data = await this.readArrayFile<ConfigData>(
-      this.getDataFileUri('config', file),
-      file,
-    );
-    return { file, configs: data };
-  }
-
-  private async readArrayFile<T>(uri: vscode.Uri, label: string): Promise<T[]> {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    const value = parseJsonc<unknown>(decodeText(bytes), label);
-    if (!Array.isArray(value)) {
-      throw new Error(`${label} must contain a JSON array.`);
+    const result = await this.readConfigFileResult(file);
+    if (result.status === 'ok') {
+      return result.data;
     }
 
-    return value as T[];
+    throw new Error(
+      result.status === 'missing'
+        ? `File not found: ${file}`
+        : result.issue.message,
+    );
+  }
+
+  private async readTemplateFileResult(
+    file: string,
+  ): Promise<
+    | { status: 'ok'; data: TemplateFileData }
+    | { status: 'missing' }
+    | { status: 'invalid'; issue: ComposerDataIssue }
+  > {
+    const result = await this.readArrayFile<TemplateData>('template', file);
+    if (result.status !== 'ok') {
+      return result;
+    }
+
+    return {
+      status: 'ok',
+      data: { file, templates: result.data },
+    };
+  }
+
+  private async readConfigFileResult(
+    file: string,
+  ): Promise<
+    | { status: 'ok'; data: ConfigFileData }
+    | { status: 'missing' }
+    | { status: 'invalid'; issue: ComposerDataIssue }
+  > {
+    const result = await this.readArrayFile<ConfigData>('config', file);
+    if (result.status !== 'ok') {
+      return result;
+    }
+
+    return {
+      status: 'ok',
+      data: { file, configs: result.data },
+    };
+  }
+
+  private async readArrayFile<T>(
+    kind: 'template' | 'config',
+    file: string,
+  ): Promise<ArrayFileReadResult<T>> {
+    const uri = this.getDataFileUri(kind, file);
+    let bytes: Uint8Array;
+
+    try {
+      bytes = await vscode.workspace.fs.readFile(uri);
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return { status: 'missing' };
+      }
+
+      throw error;
+    }
+
+    const text = decodeText(bytes);
+    const parsed = parseJsoncDocument<unknown>(text);
+    if (parsed.issues.length > 0) {
+      return {
+        status: 'invalid',
+        issue: this.createParseIssue(kind, file, text, parsed.issues),
+      };
+    }
+
+    if (!Array.isArray(parsed.value)) {
+      return {
+        status: 'invalid',
+        issue: {
+          kind,
+          file,
+          code: 'not-array',
+          message: `${file} must contain a JSON array.`,
+        },
+      };
+    }
+
+    return { status: 'ok', data: parsed.value as T[] };
   }
 
   private async writeTemplateFile(fileData: TemplateFileData): Promise<void> {
@@ -507,7 +627,7 @@ export class WorkspaceStore {
     const configFiles = await this.readConfigFiles();
     const references: string[] = [];
 
-    for (const fileData of configFiles) {
+    for (const fileData of configFiles.data) {
       fileData.configs.forEach((config) => {
         if (config.extends === templateName) {
           references.push(`${fileData.file}:${config.name}`);
@@ -534,23 +654,30 @@ export class WorkspaceStore {
 
   private async readExistingFiles<T>(
     files: string[],
-    readFile: (file: string) => Promise<T>,
-  ): Promise<T[]> {
+    readFile: (
+      file: string,
+    ) => Promise<
+      | { status: 'ok'; data: T }
+      | { status: 'missing' }
+      | { status: 'invalid'; issue: ComposerDataIssue }
+    >,
+  ): Promise<{ data: T[]; issues: ComposerDataIssue[] }> {
     const results: T[] = [];
+    const issues: ComposerDataIssue[] = [];
 
     for (const file of files) {
-      try {
-        results.push(await readFile(file));
-      } catch (error) {
-        if (isMissingFileSystemError(error)) {
-          continue;
-        }
+      const result = await readFile(file);
+      if (result.status === 'ok') {
+        results.push(result.data);
+        continue;
+      }
 
-        throw error;
+      if (result.status === 'invalid') {
+        issues.push(result.issue);
       }
     }
 
-    return results;
+    return { data: results, issues };
   }
 
   private async assertUniqueEntryName(
@@ -603,7 +730,7 @@ export class WorkspaceStore {
     const configFiles = await this.readConfigFiles();
 
     await Promise.all(
-      configFiles.map(async (fileData) => {
+      configFiles.data.map(async (fileData) => {
         let changed = false;
         const nextConfigs = fileData.configs.map((config) => {
           if (config.extends !== currentName) {
@@ -722,6 +849,32 @@ export class WorkspaceStore {
     await vscode.workspace.fs.createDirectory(
       kind === 'template' ? this.getTemplatesDirUri() : this.getConfigsDirUri(),
     );
+  }
+
+  private createParseIssue(
+    kind: 'template' | 'config',
+    file: string,
+    text: string,
+    issues: JsonParseIssue[],
+  ): ComposerDataIssue {
+    if (text.trim() === '') {
+      return {
+        kind,
+        file,
+        code: 'empty',
+        message: `${file} is empty. Expected a JSON array such as [].`,
+      };
+    }
+
+    return {
+      kind,
+      file,
+      code: 'invalid-json',
+      message: `Invalid JSON in ${file}. Open the file and fix the syntax.`,
+      details: issues
+        .map((issue) => `${issue.code} at ${issue.offset}`)
+        .join(', '),
+    };
   }
 }
 

@@ -14,6 +14,7 @@ VSCode 拡張機能は Extension Host（Node.js プロセス）と Webview（ブ
 
 - 編集パネルを開くと、Extension Host が初期データ（テンプレート・config の全ファイル内容）を Webview に送信する
 - ユーザーがフォームを編集すると、Webview が変更内容を Extension Host に送信し、Extension Host がファイルに書き込む
+- 読み込み対象ファイルが一時的に不正な JSON の場合、Extension Host はそのファイルを `issues` として通知し、Webview は通常フォームを read-only 状態で表示する
 - argsFile のブラウズダイアログや Generate などの操作は、Webview からリクエストを送り Extension Host がレスポンスを返す（`requestId` で対応付け）
 
 ---
@@ -88,7 +89,13 @@ type WebviewMessage =
   // 生成
   | { type: 'generate'; requestId: string }
   // ファイル選択ダイアログ
-  | { type: 'browse-file'; requestId: string };
+  | { type: 'browse-file'; requestId: string }
+  // JSON を開く
+  | { type: 'open-json'; payload: EditorTarget }
+  | {
+      type: 'open-file-json';
+      payload: { kind: 'template' | 'config'; file: string };
+    };
 
 // ============================================
 // Extension Host → Webview
@@ -98,7 +105,13 @@ type HostMessage =
   | {
       type: 'initial-data';
       requestId: string;
-      payload: { templates: TemplateFileData[]; configs: ConfigFileData[] };
+      payload: {
+        templates: TemplateFileData[];
+        configs: ConfigFileData[];
+        issues: ComposerDataIssue[];
+        editor: EditorTarget;
+        autoSaveDelay: number;
+      };
     }
   // 削除結果
   | {
@@ -165,5 +178,19 @@ interface ValidationError {
   configName?: string;
   field?: string;
   message: string;
+}
+
+interface EditorTarget {
+  kind: 'template' | 'config';
+  file: string;
+  index: number;
+}
+
+interface ComposerDataIssue {
+  kind: 'template' | 'config';
+  file: string;
+  code: 'empty' | 'invalid-json' | 'not-array';
+  message: string;
+  details?: string;
 }
 ```

@@ -1,15 +1,15 @@
 import {
   Button,
+  Checkbox,
   Divider,
   FormContainer,
   FormGroup,
   ListEditor,
   TextInput,
-  Checkbox,
 } from '@himadajin/vscode-components';
 import { useEffect, useState } from 'react';
 
-import type { TemplateData } from '../types.js';
+import type { ComposerDataIssue, TemplateData } from '../types.js';
 import {
   stringOrEmpty,
   updateOptionalArray,
@@ -20,17 +20,22 @@ import {
 
 interface TemplateEditorProps {
   data: TemplateData;
+  sourceFile: string;
   autoSaveDelay: number;
   onChange: (data: TemplateData) => void;
   onOpenJson: () => void;
+  readOnlyIssue?: ComposerDataIssue;
 }
 
 export function TemplateEditor({
   data,
+  sourceFile,
   autoSaveDelay,
   onChange,
   onOpenJson,
+  readOnlyIssue,
 }: TemplateEditorProps) {
+  const readOnly = readOnlyIssue !== undefined;
   const [type, setType] = useState(stringOrEmpty(data.type));
   const [request, setRequest] = useState(stringOrEmpty(data.request));
   const [program, setProgram] = useState(stringOrEmpty(data.program));
@@ -53,18 +58,34 @@ export function TemplateEditor({
   }, [data.cwd]);
 
   useDebouncedCommit(program, autoSaveDelay, (value) => {
+    if (readOnly) {
+      return;
+    }
+
     onChange(updateOptionalString(data, 'program', value));
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
+    if (readOnly) {
+      return;
+    }
+
     onChange(updateRequiredString(data, 'type', value));
   });
 
   useDebouncedCommit(request, autoSaveDelay, (value) => {
+    if (readOnly) {
+      return;
+    }
+
     onChange(updateRequiredString(data, 'request', value));
   });
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
+    if (readOnly) {
+      return;
+    }
+
     onChange(updateOptionalString(data, 'cwd', value));
   });
 
@@ -88,6 +109,19 @@ export function TemplateEditor({
       <Divider />
 
       <FormContainer className="editor-form">
+        {readOnlyIssue !== undefined ? (
+          <FormGroup
+            label="JSON Status"
+            description={readOnlyIssue.message}
+            helper={
+              readOnlyIssue.details ??
+              'Fix the JSON file to resume form editing.'
+            }
+          >
+            <TextInput readOnly value={sourceFile} />
+          </FormGroup>
+        ) : null}
+
         <FormGroup
           label="Name"
           description="Template identifier. This value is fixed after creation."
@@ -99,29 +133,42 @@ export function TemplateEditor({
           label="Type"
           description="Required in generated launch.json."
         >
-          <TextInput value={type} onChange={setType} />
+          <TextInput disabled={readOnly} value={type} onChange={setType} />
         </FormGroup>
 
         <FormGroup
           label="Request"
           description="Required in generated launch.json."
         >
-          <TextInput value={request} onChange={setRequest} />
+          <TextInput
+            disabled={readOnly}
+            value={request}
+            onChange={setRequest}
+          />
         </FormGroup>
 
         <FormGroup label="Program">
-          <TextInput value={program} onChange={setProgram} />
+          <TextInput
+            disabled={readOnly}
+            value={program}
+            onChange={setProgram}
+          />
         </FormGroup>
 
         <FormGroup label="Working Directory">
-          <TextInput value={cwd} onChange={setCwd} />
+          <TextInput disabled={readOnly} value={cwd} onChange={setCwd} />
         </FormGroup>
 
         <div className="editor-checkbox-row">
           <Checkbox
             checked={data.stopAtEntry === true}
+            disabled={readOnly}
             label="Stop At Entry"
             onChange={(checked) => {
+              if (readOnly) {
+                return;
+              }
+
               onChange({
                 ...data,
                 stopAtEntry: checked,
@@ -131,14 +178,18 @@ export function TemplateEditor({
         </div>
 
         <FormGroup label="Args">
-          <ListEditor
-            reorderable
-            addPlaceholder="Add argument"
-            value={data.args ?? []}
-            onChange={(args) => {
-              onChange(updateOptionalArray(data, 'args', args));
-            }}
-          />
+          {readOnly ? (
+            <TextInput readOnly value={(data.args ?? []).join(', ')} />
+          ) : (
+            <ListEditor
+              reorderable
+              addPlaceholder="Add argument"
+              value={data.args ?? []}
+              onChange={(args) => {
+                onChange(updateOptionalArray(data, 'args', args));
+              }}
+            />
+          )}
         </FormGroup>
       </FormContainer>
     </div>

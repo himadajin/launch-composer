@@ -2,7 +2,11 @@ import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
 import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from './commands.js';
-import { WorkspaceStore } from './io/workspaceStore.js';
+import {
+  WorkspaceStore,
+  type ComposerDataIssue,
+  type WorkspaceDataSnapshot,
+} from './io/workspaceStore.js';
 import type { EditorTarget } from './messages.js';
 import {
   LaunchComposerTreeProvider,
@@ -40,14 +44,45 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
-  const refreshViews = (): void => {
-    templateProvider.refresh();
-    configProvider.refresh();
+  const activeIssues = new Map<string, string>();
+
+  const applySnapshot = (snapshot: WorkspaceDataSnapshot): void => {
+    templateProvider.refresh(snapshot);
+    configProvider.refresh(snapshot);
+  };
+
+  const reportIssues = (issues: ComposerDataIssue[]): void => {
+    const nextIssues = new Map(
+      issues.map((issue) => [getIssueKey(issue), getIssueFingerprint(issue)]),
+    );
+
+    for (const issue of issues) {
+      const key = getIssueKey(issue);
+      const fingerprint = getIssueFingerprint(issue);
+      if (activeIssues.get(key) === fingerprint) {
+        continue;
+      }
+
+      activeIssues.set(key, fingerprint);
+      void vscode.window.showWarningMessage(issue.message);
+    }
+
+    for (const key of [...activeIssues.keys()]) {
+      if (!nextIssues.has(key)) {
+        activeIssues.delete(key);
+      }
+    }
   };
 
   const syncUiWithWorkspace = async (): Promise<void> => {
-    refreshViews();
-    await editorPanel.syncWithWorkspace();
+    const snapshot = await store.readAll();
+    reportIssues(snapshot.issues);
+    applySnapshot(snapshot);
+    await editorPanel.syncWithWorkspaceData(snapshot);
+  };
+
+  const refreshViews = (): void => {
+    void syncUiWithWorkspace().catch(showError);
   };
 
   const revealTarget = async (target: EditorTarget): Promise<void> => {
@@ -112,13 +147,13 @@ export function activate(context: vscode.ExtensionContext): void {
     store.getRelativeComposerPattern(),
   );
   watcher.onDidCreate(() => {
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
   watcher.onDidChange(() => {
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
   watcher.onDidDelete(() => {
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
 
   const deleteSubscription = vscode.workspace.onDidDeleteFiles((event) => {
@@ -126,7 +161,7 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    void syncUiWithWorkspace();
+    void syncUiWithWorkspace().catch(showError);
   });
 
   context.subscriptions.push(
@@ -694,6 +729,14 @@ function showWorkspaceRequiredError(): void {
   void vscode.window.showErrorMessage(
     'Launch Composer requires exactly one workspace folder.',
   );
+}
+
+function getIssueKey(issue: ComposerDataIssue): string {
+  return `${issue.kind}:${issue.file}`;
+}
+
+function getIssueFingerprint(issue: ComposerDataIssue): string {
+  return `${issue.code}:${issue.message}:${issue.details ?? ''}`;
 }
 
 function getFileNode(

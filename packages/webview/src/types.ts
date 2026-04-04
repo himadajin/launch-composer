@@ -36,9 +36,18 @@ export interface EditorTarget {
   index: number;
 }
 
+export interface ComposerDataIssue {
+  kind: 'template' | 'config';
+  file: string;
+  code: 'empty' | 'invalid-json' | 'not-array';
+  message: string;
+  details?: string;
+}
+
 export interface InitialDataPayload {
   templates: TemplateFileData[];
   configs: ConfigFileData[];
+  issues: ComposerDataIssue[];
   editor: EditorTarget;
   autoSaveDelay: number;
 }
@@ -65,7 +74,11 @@ export type WebviewMessage =
   | { type: 'request-initial-data'; requestId: string }
   | { type: 'generate'; requestId: string }
   | { type: 'browse-file'; requestId: string }
-  | { type: 'open-json'; payload: EditorTarget };
+  | { type: 'open-json'; payload: EditorTarget }
+  | {
+      type: 'open-file-json';
+      payload: { kind: 'template' | 'config'; file: string };
+    };
 
 export type HostMessage =
   | {

@@ -10,7 +10,7 @@ import {
 } from '@himadajin/vscode-components';
 import { useEffect, useState } from 'react';
 
-import type { ConfigData, TemplateData } from '../types.js';
+import type { ComposerDataIssue, ConfigData, TemplateData } from '../types.js';
 import {
   stringOrEmpty,
   updateOptionalArray,
@@ -21,21 +21,26 @@ import {
 
 interface ConfigEditorProps {
   data: ConfigData;
+  sourceFile: string;
   templates: TemplateData[];
   autoSaveDelay: number;
   onBrowseFile: () => Promise<string | null>;
   onChange: (data: ConfigData) => void;
   onOpenJson: () => void;
+  readOnlyIssue?: ComposerDataIssue;
 }
 
 export function ConfigEditor({
   data,
+  sourceFile,
   templates,
   autoSaveDelay,
   onBrowseFile,
   onChange,
   onOpenJson,
+  readOnlyIssue,
 }: ConfigEditorProps) {
+  const readOnly = readOnlyIssue !== undefined;
   const [type, setType] = useState(stringOrEmpty(data.type));
   const [request, setRequest] = useState(stringOrEmpty(data.request));
   const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
@@ -78,11 +83,15 @@ export function ConfigEditor({
     : request;
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
+    if (readOnly) {
+      return;
+    }
+
     onChange(updateOptionalString(data, 'cwd', value));
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
-    if (launchFieldsInherited) {
+    if (readOnly || launchFieldsInherited) {
       return;
     }
 
@@ -90,7 +99,7 @@ export function ConfigEditor({
   });
 
   useDebouncedCommit(request, autoSaveDelay, (value) => {
-    if (launchFieldsInherited) {
+    if (readOnly || launchFieldsInherited) {
       return;
     }
 
@@ -98,6 +107,10 @@ export function ConfigEditor({
   });
 
   useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
+    if (readOnly) {
+      return;
+    }
+
     onChange(updateOptionalString(data, 'argsFile', value));
   });
 
@@ -121,6 +134,19 @@ export function ConfigEditor({
       <Divider />
 
       <FormContainer className="editor-form">
+        {readOnlyIssue !== undefined ? (
+          <FormGroup
+            label="JSON Status"
+            description={readOnlyIssue.message}
+            helper={
+              readOnlyIssue.details ??
+              'Fix the JSON file to resume form editing.'
+            }
+          >
+            <TextInput readOnly value={sourceFile} />
+          </FormGroup>
+        ) : null}
+
         <FormGroup
           label="Name"
           description="Configuration name. This value is fixed after creation."
@@ -130,9 +156,14 @@ export function ConfigEditor({
 
         <FormGroup label="Extends">
           <Select
+            disabled={readOnly}
             enum={templateOptions}
             value={selectValue}
             onChange={(value) => {
+              if (readOnly) {
+                return;
+              }
+
               const next = { ...data };
               if (value === '(none)') {
                 delete next.extends;
@@ -151,8 +182,13 @@ export function ConfigEditor({
         <div className="editor-checkbox-row">
           <Checkbox
             checked={data.enabled === true}
+            disabled={readOnly}
             label="Enabled"
             onChange={(checked) => {
+              if (readOnly) {
+                return;
+              }
+
               onChange({
                 ...data,
                 enabled: checked,
@@ -170,7 +206,7 @@ export function ConfigEditor({
           }
         >
           <TextInput
-            disabled={launchFieldsInherited}
+            disabled={readOnly || launchFieldsInherited}
             value={effectiveType}
             onChange={setType}
           />
@@ -185,21 +221,26 @@ export function ConfigEditor({
           }
         >
           <TextInput
-            disabled={launchFieldsInherited}
+            disabled={readOnly || launchFieldsInherited}
             value={effectiveRequest}
             onChange={setRequest}
           />
         </FormGroup>
 
         <FormGroup label="Working Directory">
-          <TextInput value={cwd} onChange={setCwd} />
+          <TextInput disabled={readOnly} value={cwd} onChange={setCwd} />
         </FormGroup>
 
         <div className="editor-checkbox-row">
           <Checkbox
             checked={data.stopAtEntry === true}
+            disabled={readOnly}
             label="Stop At Entry"
             onChange={(checked) => {
+              if (readOnly) {
+                return;
+              }
+
               onChange({
                 ...data,
                 stopAtEntry: checked,
@@ -214,7 +255,7 @@ export function ConfigEditor({
         >
           <div className="input-action-row">
             <TextInput
-              disabled={argsFileDisabled}
+              disabled={readOnly || argsFileDisabled}
               value={argsFile}
               onChange={setArgsFile}
             />
@@ -222,8 +263,12 @@ export function ConfigEditor({
               icon="folder-opened"
               type="button"
               variant="secondary"
-              disabled={argsFileDisabled}
+              disabled={readOnly || argsFileDisabled}
               onClick={async () => {
+                if (readOnly) {
+                  return;
+                }
+
                 const selected = await onBrowseFile();
                 if (selected === null) {
                   return;
@@ -239,14 +284,18 @@ export function ConfigEditor({
         </FormGroup>
 
         <FormGroup label="Args">
-          <ListEditor
-            reorderable
-            addPlaceholder="Add argument"
-            value={data.args ?? []}
-            onChange={(args) => {
-              onChange(updateOptionalArray(data, 'args', args));
-            }}
-          />
+          {readOnly ? (
+            <TextInput readOnly value={(data.args ?? []).join(', ')} />
+          ) : (
+            <ListEditor
+              reorderable
+              addPlaceholder="Add argument"
+              value={data.args ?? []}
+              onChange={(args) => {
+                onChange(updateOptionalArray(data, 'args', args));
+              }}
+            />
+          )}
         </FormGroup>
       </FormContainer>
     </div>

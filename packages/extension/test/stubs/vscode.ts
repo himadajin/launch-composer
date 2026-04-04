@@ -162,6 +162,7 @@ let lastCreatedWebviewPanel:
   | {
       disposed: boolean;
       title: string;
+      postedMessages: unknown[];
       webview: {
         html: string;
         onDidReceiveMessage(listener: (message: unknown) => void): {
@@ -462,12 +463,14 @@ export const window = {
     const panel = {
       disposed: false,
       title: '',
+      postedMessages: [] as unknown[],
       webview: {
         html: '',
         onDidReceiveMessage() {
           return { dispose() {} };
         },
-        async postMessage() {
+        async postMessage(message: unknown) {
+          panel.postedMessages.push(message);
           return true;
         },
         asWebviewUri(uri: Uri) {
@@ -571,6 +574,10 @@ export const __testing = {
 
   getInfoMessages(): string[] {
     return [...infoMessages];
+  },
+
+  getWarningMessages(): string[] {
+    return [...warningMessages];
   },
 
   getCreatedDirectories(): string[] {

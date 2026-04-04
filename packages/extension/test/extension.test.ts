@@ -29,6 +29,7 @@ const testVscode = vscode as typeof vscode & {
     getRegisteredCommands(): string[];
     getErrorMessages(): string[];
     getInfoMessages(): string[];
+    getWarningMessages(): string[];
     getCreatedDirectories(): string[];
     getClipboardText(): string;
   };
@@ -219,6 +220,7 @@ test('readAll returns empty data when Launch Composer directories do not exist',
   assert.deepEqual(data, {
     templates: [],
     configs: [],
+    issues: [],
   });
 });
 
@@ -233,6 +235,7 @@ test('readAll tolerates ENOENT-style missing directories', async () => {
   assert.deepEqual(data, {
     templates: [],
     configs: [],
+    issues: [],
   });
 });
 
@@ -251,6 +254,80 @@ test('readAll skips files that disappear before they can be read', async () => {
   assert.deepEqual(data, {
     templates: [],
     configs: [],
+    issues: [],
+  });
+});
+
+test('readAll keeps valid files and reports invalid files as issues', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/invalid-project'),
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/invalid-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/invalid-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode(''),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/invalid-project/.vscode/launch-composer/templates/valid.json',
+    ),
+    new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
+  );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data.templates, [
+    {
+      file: 'valid.json',
+      templates: [{ name: 'cpp' }],
+    },
+  ]);
+  assert.deepEqual(data.configs, []);
+  assert.deepEqual(data.issues, [
+    {
+      kind: 'template',
+      file: 'template.json',
+      code: 'empty',
+      message: 'template.json is empty. Expected a JSON array such as [].',
+    },
+  ]);
+});
+
+test('generateLaunchJson returns validation-style errors for invalid files', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/generate-invalid-project'),
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/generate-invalid-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/generate-invalid-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode('{'),
+  );
+
+  const result = await store.generateLaunchJson();
+
+  assert.deepEqual(result, {
+    success: false,
+    errors: [
+      {
+        file: 'template.json',
+        message:
+          'Invalid JSON in template.json. Open the file and fix the syntax.',
+      },
+    ],
   });
 });
 
@@ -527,6 +604,33 @@ test('addTemplate initializes directories before listing files', async () => {
     new TextDecoder().decode(bytes).trim(),
     '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": ""\n  }\n]',
   );
+});
+
+test('sync commands only warn once per invalid file until it is fixed', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/warn-once-project']);
+  testVscode.__testing.setInputBoxResponses(['extra', 'extra-two']);
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/warn-once-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/warn-once-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode(''),
+  );
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.addTemplateFile);
+  await vscode.commands.executeCommand(COMMANDS.addTemplateFile);
+
+  assert.deepEqual(testVscode.__testing.getWarningMessages(), [
+    'template.json is empty. Expected a JSON array such as [].',
+  ]);
 });
 
 test('generate writes an empty launch.json when no templates or configs exist', async () => {
