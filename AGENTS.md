@@ -28,6 +28,16 @@ Install dependencies with `npm install` at the repo root.
 ## Coding Style & Naming Conventions
 Use TypeScript with ES modules and explicit `.js` import specifiers in source. Prettier defines the formatting baseline: semicolons enabled, single quotes, trailing commas. Follow existing style: 2-space indentation, `PascalCase` for React components, `camelCase` for functions and variables, and descriptive file names such as `workspaceStore.ts` or `bundle.test.ts`.
 
+When implementing or changing VS Code extension behavior, consult the official VS Code documentation first and follow the documented patterns. Do not guess at API behavior or replace standard extension APIs with custom implementations unless the docs clearly require a different approach.
+When adding features or fixing bugs around core editor behavior such as file operations, view state, or UI lifecycle, also inspect the VS Code source code and prefer implementations that align with how VS Code itself handles the same class of problem.
+
+Start from these official URLs:
+- Extension API overview: `https://code.visualstudio.com/api`
+- VS Code API reference: `https://code.visualstudio.com/api/references/vscode-api`
+- VS Code documentation home: `https://code.visualstudio.com/docs`
+- VS Code source repository: `https://github.com/microsoft/vscode`
+- VS Code source code organization: `https://github.com/microsoft/vscode/wiki/source-code-organization`
+
 Run `npm run format`, `npm run lint`, `npm run typecheck`, and `npm run test` before opening a PR.
 
 ## Testing Guidelines
