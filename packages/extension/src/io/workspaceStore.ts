@@ -106,7 +106,16 @@ export class WorkspaceStore {
     file: string,
   ): Promise<void> {
     const uri = this.getDataFileUri(kind, file);
-    await vscode.workspace.fs.delete(uri);
+    const edit = new vscode.WorkspaceEdit();
+    edit.deleteFile(uri, {
+      ignoreIfNotExists: true,
+      recursive: false,
+    });
+
+    const applied = await vscode.workspace.applyEdit(edit);
+    if (!applied) {
+      throw new Error(`Failed to delete ${normalizeFileName(file)}.`);
+    }
   }
 
   async addTemplateEntry(file: string, name: string): Promise<EditorTarget> {
@@ -221,6 +230,32 @@ export class WorkspaceStore {
     editor.selection = new vscode.Selection(position, position);
   }
 
+  async hasEntry(target: EditorTarget): Promise<boolean> {
+    try {
+      if (target.kind === 'template') {
+        const fileData = await this.readTemplateFile(target.file);
+        return target.index >= 0 && target.index < fileData.templates.length;
+      }
+
+      const fileData = await this.readConfigFile(target.file);
+      return target.index >= 0 && target.index < fileData.configs.length;
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return false;
+      }
+
+      throw error;
+    }
+  }
+
+  isComposerDataFile(uri: vscode.Uri): boolean {
+    const relativePath = vscode.workspace.asRelativePath(uri, false);
+    return (
+      relativePath.startsWith(`${TEMPLATES_DIR}/`) ||
+      relativePath.startsWith(`${CONFIGS_DIR}/`)
+    );
+  }
+
   async generateLaunchJson(): Promise<GenerateResult> {
     const { templates, configs } = await this.readAll();
 
@@ -276,12 +311,14 @@ export class WorkspaceStore {
 
   private async readTemplateFiles(): Promise<TemplateFileData[]> {
     const entries = await this.listFiles('template');
-    return Promise.all(entries.map((file) => this.readTemplateFile(file)));
+    return this.readExistingFiles(entries, (file) =>
+      this.readTemplateFile(file),
+    );
   }
 
   private async readConfigFiles(): Promise<ConfigFileData[]> {
     const entries = await this.listFiles('config');
-    return Promise.all(entries.map((file) => this.readConfigFile(file)));
+    return this.readExistingFiles(entries, (file) => this.readConfigFile(file));
   }
 
   private async readTemplateFile(file: string): Promise<TemplateFileData> {
@@ -355,6 +392,27 @@ export class WorkspaceStore {
 
       throw error;
     }
+  }
+
+  private async readExistingFiles<T>(
+    files: string[],
+    readFile: (file: string) => Promise<T>,
+  ): Promise<T[]> {
+    const results: T[] = [];
+
+    for (const file of files) {
+      try {
+        results.push(await readFile(file));
+      } catch (error) {
+        if (isMissingFileSystemError(error)) {
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    return results;
   }
 
   private async exists(uri: vscode.Uri): Promise<boolean> {
@@ -451,16 +509,14 @@ function encodeText(text: string): Uint8Array {
 }
 
 function isMissingFileSystemError(error: unknown): boolean {
-  if (error instanceof vscode.FileSystemError) {
-    return /FileNotFound/i.test(error.message);
-  }
-
   if (!(error instanceof Error)) {
     return false;
   }
 
   const errorWithCode = error as Error & { code?: unknown; name?: unknown };
   return (
+    (error instanceof vscode.FileSystemError &&
+      /ENOENT|FileNotFound/i.test(error.message)) ||
     errorWithCode.code === 'ENOENT' ||
     (typeof errorWithCode.name === 'string' &&
       /FileNotFound/i.test(errorWithCode.name)) ||

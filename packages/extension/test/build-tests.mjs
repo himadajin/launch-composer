@@ -14,6 +14,7 @@ await build({
   absWorkingDir: rootDir,
   bundle: true,
   entryPoints: [
+    'test/editorPanel.test.ts',
     'test/extension.test.ts',
     'test/manifest.test.ts',
     'test/bundle.test.ts',

@@ -11,7 +11,10 @@ const testVscode = vscode as typeof vscode & {
     reset(): void;
     createExtensionContext(): unknown;
     setWorkspaceFolders(paths: string[]): void;
-    setMissingPathErrorStyle(style: 'vscode' | 'enoent'): void;
+    setMissingPathErrorStyle(
+      style: 'vscode' | 'enoent' | 'vscode-enoent',
+    ): void;
+    createGhostFile(filePath: string): void;
     setQuickPickResponses(responses: unknown[]): void;
     setInputBoxResponses(responses: unknown[]): void;
     getRegisteredCommands(): string[];
@@ -61,7 +64,7 @@ test('initialize creates the Launch Composer workspace directories', async () =>
     '/workspace/project/.vscode/launch-composer/templates',
   ]);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer initialized (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
   ]);
 });
 
@@ -76,7 +79,7 @@ test('initialize tolerates ENOENT-style missing-path errors from the filesystem'
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer initialized (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
   ]);
 });
 
@@ -91,8 +94,8 @@ test('initialize is idempotent when directories already exist', async () => {
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer initialized (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
-    'Launch Composer initialized (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
   ]);
 });
 
@@ -111,8 +114,51 @@ test('initialize creates missing child directories when composer directory exist
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer initialized (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
   ]);
+});
+
+test('readAll returns empty data when Launch Composer directories do not exist', async () => {
+  const store = new WorkspaceStore(vscode.Uri.file('/workspace/empty-project'));
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data, {
+    templates: [],
+    configs: [],
+  });
+});
+
+test('readAll tolerates ENOENT-style missing directories', async () => {
+  testVscode.__testing.setMissingPathErrorStyle('enoent');
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/enoent-empty-project'),
+  );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data, {
+    templates: [],
+    configs: [],
+  });
+});
+
+test('readAll skips files that disappear before they can be read', async () => {
+  testVscode.__testing.setMissingPathErrorStyle('vscode-enoent');
+  testVscode.__testing.createGhostFile(
+    '/workspace/racy-project/.vscode/launch-composer/templates/racy.json',
+  );
+  testVscode.__testing.createGhostFile(
+    '/workspace/racy-project/.vscode/launch-composer/configs/racy.json',
+  );
+  const store = new WorkspaceStore(vscode.Uri.file('/workspace/racy-project'));
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data, {
+    templates: [],
+    configs: [],
+  });
 });
 
 test('addTemplateEntry creates its backing file when it does not exist', async () => {
@@ -187,6 +233,16 @@ test('createDataFile supports unicode file names without stat-ing the target pat
   assert.equal(new TextDecoder().decode(bytes), '[]\n');
 });
 
+test('deleteDataFile tolerates a file that has already been removed', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/delete-project'),
+  );
+
+  await store.deleteDataFile('config', 'missing.json');
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+});
+
 test('addTemplate initializes directories before listing files', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
@@ -210,5 +266,68 @@ test('addTemplate initializes directories before listing files', async () => {
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
     '[\n  {\n    "name": "cpp"\n  }\n]',
+  );
+});
+
+test('generate writes an empty launch.json when no templates or configs exist', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/generate-empty-project',
+  ]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.generate);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'launch.json was generated.',
+  ]);
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file('/workspace/generate-empty-project/.vscode/launch.json'),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '// This file is auto-generated by Launch Composer.\n' +
+      '// Do not edit manually. Changes will be overwritten.\n' +
+      '{\n' +
+      '  "version": "0.2.0",\n' +
+      '  "configurations": []\n' +
+      '}\n',
+  );
+});
+
+test('generate tolerates FileSystemError-wrapped ENOENT when launch.json does not exist', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/generate-empty-vscode-enoent-project',
+  ]);
+  testVscode.__testing.setMissingPathErrorStyle('vscode-enoent');
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.generate);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'launch.json was generated.',
+  ]);
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/generate-empty-vscode-enoent-project/.vscode/launch.json',
+    ),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '// This file is auto-generated by Launch Composer.\n' +
+      '// Do not edit manually. Changes will be overwritten.\n' +
+      '{\n' +
+      '  "version": "0.2.0",\n' +
+      '  "configurations": []\n' +
+      '}\n',
   );
 });

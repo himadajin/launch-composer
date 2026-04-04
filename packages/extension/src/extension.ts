@@ -45,6 +45,11 @@ export function activate(context: vscode.ExtensionContext): void {
     configProvider.refresh();
   };
 
+  const syncUiWithWorkspace = async (): Promise<void> => {
+    refreshViews();
+    await editorPanel.syncWithWorkspace();
+  };
+
   const revealTarget = async (target: EditorTarget): Promise<void> => {
     await Promise.all([
       templateProvider.reveal(templateView, target),
@@ -76,9 +81,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const handleInitialize = async (): Promise<void> => {
     const result = await store.ensureInitialized();
-    refreshViews();
+    await syncUiWithWorkspace();
     void vscode.window.showInformationMessage(
-      `Launch Composer initialized (${result.ensured.join(', ')}).`,
+      `Launch Composer storage directories are ready (${result.ensured.join(', ')}).`,
     );
   };
 
@@ -88,7 +93,7 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    await addTemplateEntry(store, file, editorPanel, refreshViews);
+    await addTemplateEntry(store, file, editorPanel, syncUiWithWorkspace);
   };
 
   const editorPanel = new EditorPanelController({
@@ -102,14 +107,29 @@ export function activate(context: vscode.ExtensionContext): void {
   const watcher = vscode.workspace.createFileSystemWatcher(
     store.getRelativeComposerPattern(),
   );
-  watcher.onDidCreate(refreshViews);
-  watcher.onDidChange(refreshViews);
-  watcher.onDidDelete(refreshViews);
+  watcher.onDidCreate(() => {
+    void syncUiWithWorkspace();
+  });
+  watcher.onDidChange(() => {
+    void syncUiWithWorkspace();
+  });
+  watcher.onDidDelete(() => {
+    void syncUiWithWorkspace();
+  });
+
+  const deleteSubscription = vscode.workspace.onDidDeleteFiles((event) => {
+    if (!event.files.some((uri) => store.isComposerDataFile(uri))) {
+      return;
+    }
+
+    void syncUiWithWorkspace();
+  });
 
   context.subscriptions.push(
     templateView,
     configView,
     watcher,
+    deleteSubscription,
     registerCommand(COMMANDS.generate, async () => {
       try {
         await handleGenerate();
@@ -139,7 +159,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         const created = await store.createDataFile('template', file);
-        refreshViews();
+        await syncUiWithWorkspace();
         void vscode.window.showInformationMessage(`Created ${created}.`);
       } catch (error) {
         showError(error);
@@ -160,7 +180,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         await store.deleteDataFile('template', node.file);
-        refreshViews();
+        await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
@@ -175,7 +195,12 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       try {
-        await addTemplateEntry(store, node.file, editorPanel, refreshViews);
+        await addTemplateEntry(
+          store,
+          node.file,
+          editorPanel,
+          syncUiWithWorkspace,
+        );
       } catch (error) {
         showError(error);
       }
@@ -188,7 +213,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         const created = await store.createDataFile('config', file);
-        refreshViews();
+        await syncUiWithWorkspace();
         void vscode.window.showInformationMessage(`Created ${created}.`);
       } catch (error) {
         showError(error);
@@ -209,7 +234,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         await store.deleteDataFile('config', node.file);
-        refreshViews();
+        await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
@@ -239,7 +264,7 @@ export function activate(context: vscode.ExtensionContext): void {
           name,
           extendsName === '(none)' ? undefined : extendsName,
         );
-        refreshViews();
+        await syncUiWithWorkspace();
         await editorPanel.open(target);
       } catch (error) {
         showError(error);
@@ -267,7 +292,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
 
         await store.deleteEntry(node.target);
-        refreshViews();
+        await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
@@ -283,7 +308,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         await store.toggleConfigEnabled(node.target.file, node.target.index);
-        refreshViews();
+        await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
@@ -309,7 +334,7 @@ async function addTemplateEntry(
   store: WorkspaceStore,
   file: string,
   editorPanel: EditorPanelController,
-  refreshViews: () => void,
+  refreshViews: () => Promise<void>,
 ): Promise<void> {
   const name = await promptForRequiredValue('Template name');
   if (name === undefined) {
@@ -317,7 +342,7 @@ async function addTemplateEntry(
   }
 
   const target = await store.addTemplateEntry(file, name);
-  refreshViews();
+  await refreshViews();
   await editorPanel.open(target);
 }
 
@@ -325,7 +350,6 @@ async function selectOrCreateFile(
   store: WorkspaceStore,
   kind: 'template' | 'config',
 ): Promise<string | undefined> {
-  await store.ensureInitialized();
   const files = await store.listFiles(kind);
   const createLabel = '$(add) Create new file';
 
@@ -361,7 +385,6 @@ async function selectOrCreateFile(
 async function promptForTemplateSelection(
   store: WorkspaceStore,
 ): Promise<string | null | undefined> {
-  await store.ensureInitialized();
   const templateNames = await store.listTemplateNames();
   const selection = await vscode.window.showQuickPick(
     ['(none)', ...templateNames],

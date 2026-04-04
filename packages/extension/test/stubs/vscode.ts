@@ -32,6 +32,39 @@ export enum FileType {
 
 export class FileSystemError extends Error {}
 
+type DeleteFileOperation = {
+  type: 'deleteFile';
+  uri: Uri;
+  options?: {
+    ignoreIfNotExists?: boolean;
+    recursive?: boolean;
+    useTrash?: boolean;
+  };
+};
+
+export class WorkspaceEdit {
+  readonly entries: DeleteFileOperation[] = [];
+
+  deleteFile(
+    uri: Uri,
+    options?: {
+      ignoreIfNotExists?: boolean;
+      recursive?: boolean;
+      useTrash?: boolean;
+    },
+  ): void {
+    const entry: DeleteFileOperation = {
+      type: 'deleteFile',
+      uri,
+    };
+    if (options !== undefined) {
+      entry.options = options;
+    }
+
+    this.entries.push(entry);
+  }
+}
+
 export class EventEmitter<T> {
   private readonly listeners = new Set<(value: T) => void>();
 
@@ -114,13 +147,32 @@ export const ConfigurationTarget = {
 const registeredCommands = new Map<string, CommandCallback>();
 const createdDirectories = new Set<string>();
 const files = new Map<string, Uint8Array>();
+const ghostFiles = new Set<string>();
 const errorMessages: string[] = [];
 const infoMessages: string[] = [];
 const warningMessages: string[] = [];
 const configuration = new Map<string, unknown>();
 const quickPickResponses: unknown[] = [];
 const inputBoxResponses: unknown[] = [];
-let missingPathErrorStyle: 'vscode' | 'enoent' = 'vscode';
+const didDeleteFilesEmitter = new EventEmitter<{ files: Uri[] }>();
+let missingPathErrorStyle: 'vscode' | 'enoent' | 'vscode-enoent' = 'vscode';
+let lastCreatedWebviewPanel:
+  | {
+      disposed: boolean;
+      title: string;
+      webview: {
+        html: string;
+        onDidReceiveMessage(listener: (message: unknown) => void): {
+          dispose(): void;
+        };
+        postMessage(message: unknown): Promise<boolean>;
+        asWebviewUri(uri: Uri): Uri;
+      };
+      onDidDispose(listener: () => void): { dispose(): void };
+      reveal(): void;
+      dispose(): void;
+    }
+  | undefined;
 
 type WorkspaceFolder = {
   index: number;
@@ -172,6 +224,15 @@ function directChildren(targetPath: string): [string, FileType][] {
     entries.set(path.basename(filePath), FileType.File);
   }
 
+  for (const filePath of ghostFiles) {
+    const parent = path.dirname(filePath);
+    if (parent !== normalizedTarget) {
+      continue;
+    }
+
+    entries.set(path.basename(filePath), FileType.File);
+  }
+
   return [...entries.entries()].sort((left, right) =>
     left[0].localeCompare(right[0]),
   );
@@ -184,6 +245,12 @@ function createMissingPathError(targetPath: string, action: string): Error {
       {
         code: 'ENOENT',
       },
+    );
+  }
+
+  if (missingPathErrorStyle === 'vscode-enoent') {
+    return new FileSystemError(
+      `ENOENT: no such file or directory, ${action} '${targetPath}'`,
     );
   }
 
@@ -219,10 +286,29 @@ export const workspace = {
     workspaceFolders = value;
   },
 
+  onDidDeleteFiles(listener: (event: { files: Uri[] }) => void) {
+    return didDeleteFilesEmitter.event(listener);
+  },
+
+  asRelativePath(uri: Uri, includeWorkspaceFolder = true): string {
+    const folder = workspaceFolders?.find((entry) =>
+      normalize(uri.fsPath).startsWith(
+        `${normalize(entry.uri.fsPath)}${path.sep}`,
+      ),
+    );
+
+    if (folder === undefined) {
+      return normalize(uri.fsPath);
+    }
+
+    const relative = path.relative(folder.uri.fsPath, uri.fsPath);
+    return includeWorkspaceFolder ? path.join(folder.name, relative) : relative;
+  },
+
   fs: {
     async stat(uri: Uri): Promise<{ type: FileType }> {
       const filePath = normalize(uri.fsPath);
-      if (files.has(filePath)) {
+      if (files.has(filePath) || ghostFiles.has(filePath)) {
         return { type: FileType.File };
       }
 
@@ -239,7 +325,9 @@ export const workspace = {
 
     async writeFile(uri: Uri, content: Uint8Array): Promise<void> {
       ensureDirectory(path.dirname(uri.fsPath));
-      files.set(normalize(uri.fsPath), content);
+      const filePath = normalize(uri.fsPath);
+      ghostFiles.delete(filePath);
+      files.set(filePath, content);
     },
 
     async readFile(uri: Uri): Promise<Uint8Array> {
@@ -263,6 +351,7 @@ export const workspace = {
     async delete(uri: Uri): Promise<void> {
       const targetPath = normalize(uri.fsPath);
       files.delete(targetPath);
+      ghostFiles.delete(targetPath);
       createdDirectories.delete(targetPath);
     },
   },
@@ -307,6 +396,32 @@ export const workspace = {
       },
     };
   },
+
+  async applyEdit(edit: WorkspaceEdit): Promise<boolean> {
+    for (const entry of edit.entries) {
+      if (entry.type !== 'deleteFile') {
+        continue;
+      }
+
+      const targetPath = normalize(entry.uri.fsPath);
+      if (
+        !files.has(targetPath) &&
+        !ghostFiles.has(targetPath) &&
+        !createdDirectories.has(targetPath)
+      ) {
+        if (entry.options?.ignoreIfNotExists === true) {
+          continue;
+        }
+
+        throw createMissingPathError(targetPath, 'unlink');
+      }
+
+      await workspace.fs.delete(entry.uri);
+      didDeleteFilesEmitter.fire({ files: [entry.uri] });
+    }
+
+    return true;
+  },
 };
 
 export const window = {
@@ -341,7 +456,9 @@ export const window = {
   },
 
   createWebviewPanel() {
-    return {
+    const didDisposeEmitter = new EventEmitter<void>();
+    const panel = {
+      disposed: false,
       title: '',
       webview: {
         html: '',
@@ -355,12 +472,18 @@ export const window = {
           return uri;
         },
       },
-      onDidDispose() {
-        return { dispose() {} };
+      onDidDispose(listener: () => void) {
+        return didDisposeEmitter.event(listener);
       },
       reveal() {},
-      dispose() {},
+      dispose() {
+        panel.disposed = true;
+        didDisposeEmitter.fire(undefined);
+      },
     };
+
+    lastCreatedWebviewPanel = panel;
+    return panel;
   },
 
   async showOpenDialog(): Promise<undefined> {
@@ -380,6 +503,7 @@ export const __testing = {
     registeredCommands.clear();
     createdDirectories.clear();
     files.clear();
+    ghostFiles.clear();
     errorMessages.length = 0;
     infoMessages.length = 0;
     warningMessages.length = 0;
@@ -388,6 +512,8 @@ export const __testing = {
     inputBoxResponses.length = 0;
     workspaceFolders = undefined;
     missingPathErrorStyle = 'vscode';
+    didDeleteFilesEmitter.dispose();
+    lastCreatedWebviewPanel = undefined;
   },
 
   createExtensionContext() {
@@ -405,8 +531,13 @@ export const __testing = {
     }));
   },
 
-  setMissingPathErrorStyle(style: 'vscode' | 'enoent'): void {
+  setMissingPathErrorStyle(style: 'vscode' | 'enoent' | 'vscode-enoent'): void {
     missingPathErrorStyle = style;
+  },
+
+  createGhostFile(filePath: string): void {
+    ensureDirectory(path.dirname(filePath));
+    ghostFiles.add(normalize(filePath));
   },
 
   setQuickPickResponses(responses: unknown[]): void {
@@ -433,5 +564,9 @@ export const __testing = {
 
   getCreatedDirectories(): string[] {
     return [...createdDirectories].sort();
+  },
+
+  getLastCreatedWebviewPanel() {
+    return lastCreatedWebviewPanel;
   },
 };
