@@ -30,6 +30,7 @@ const testVscode = vscode as typeof vscode & {
     getErrorMessages(): string[];
     getInfoMessages(): string[];
     getCreatedDirectories(): string[];
+    getClipboardText(): string;
   };
 };
 
@@ -333,6 +334,145 @@ test('deleteDataFile tolerates a file that has already been removed', async () =
   await store.deleteDataFile('config', 'missing.json');
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+});
+
+test('renameDataFile moves the JSON file without changing its contents', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/rename-file-project'),
+  );
+  const sourceUri = vscode.Uri.file(
+    '/workspace/rename-file-project/.vscode/launch-composer/templates/template.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/rename-file-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    sourceUri,
+    new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
+  );
+
+  const renamed = await store.renameDataFile(
+    'template',
+    'template.json',
+    'renamed-template.json',
+  );
+
+  assert.equal(renamed, 'renamed-template.json');
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/rename-file-project/.vscode/launch-composer/templates/renamed-template.json',
+    ),
+  );
+  await assert.rejects(async () => vscode.workspace.fs.readFile(sourceUri));
+
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '[\n  {\n    "name": "cpp"\n  }\n]\n',
+  );
+});
+
+test('renameEntry updates template references in configs', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/rename-entry-project'),
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/rename-entry-project/.vscode/launch-composer/configs/config.json',
+    ),
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "Launch",\n    "enabled": false,\n    "extends": "cpp"\n  }\n]\n',
+    ),
+  );
+
+  await store.renameEntry(
+    {
+      kind: 'template',
+      file: 'template.json',
+      index: 0,
+    },
+    'cpp-renamed',
+  );
+
+  const [templateBytes, configBytes] = await Promise.all([
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/rename-entry-project/.vscode/launch-composer/templates/template.json',
+      ),
+    ),
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/rename-entry-project/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  ]);
+
+  assert.equal(
+    new TextDecoder().decode(templateBytes),
+    '[\n  {\n    "name": "cpp-renamed"\n  }\n]\n',
+  );
+  assert.equal(
+    new TextDecoder().decode(configBytes),
+    '[\n  {\n    "name": "Launch",\n    "enabled": false,\n    "extends": "cpp-renamed"\n  }\n]\n',
+  );
+});
+
+test('copyTemplateFilePath writes the backing JSON path to the clipboard', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/copy-path-project']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.copyTemplateFilePath, {
+    type: 'file',
+    kind: 'template',
+    file: 'template.json',
+  });
+
+  assert.equal(
+    testVscode.__testing.getClipboardText(),
+    '/workspace/copy-path-project/.vscode/launch-composer/templates/template.json',
+  );
+});
+
+test('copyTemplateFileRelativePath writes the workspace-relative JSON path to the clipboard', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/copy-relative-path-project',
+  ]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.copyTemplateFileRelativePath, {
+    type: 'file',
+    kind: 'template',
+    file: 'template.json',
+  });
+
+  assert.equal(
+    testVscode.__testing.getClipboardText(),
+    '.vscode/launch-composer/templates/template.json',
+  );
 });
 
 test('addTemplate initializes directories before listing files', async () => {

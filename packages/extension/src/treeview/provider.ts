@@ -96,7 +96,10 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       );
       item.contextValue =
         element.kind === 'template' ? 'templateFile' : 'configFile';
-      item.iconPath = new vscode.ThemeIcon('file-code');
+      item.resourceUri = this.store.getDataFileUriForTreeItem(
+        element.kind,
+        element.file,
+      );
       return item;
     }
 
@@ -105,7 +108,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       vscode.TreeItemCollapsibleState.None,
     );
     item.contextValue =
-      element.target.kind === 'template' ? 'templateEntry' : 'configEntry';
+      element.target.kind === 'template'
+        ? 'templateEntry'
+        : element.enabled
+          ? 'configEntryEnabled'
+          : 'configEntryDisabled';
     item.command = {
       command: 'launch-composer.editItem',
       title: 'Edit',

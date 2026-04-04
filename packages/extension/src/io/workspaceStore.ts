@@ -133,6 +133,52 @@ export class WorkspaceStore {
     return fileName;
   }
 
+  getDataFilePath(kind: 'template' | 'config', file: string): string {
+    return this.getDataFileUri(kind, file).fsPath;
+  }
+
+  getDataFileRelativePath(kind: 'template' | 'config', file: string): string {
+    return vscode.workspace.asRelativePath(
+      this.getDataFileUri(kind, file),
+      false,
+    );
+  }
+
+  getEntryFilePath(target: EditorTarget): string {
+    return this.getDataFilePath(target.kind, target.file);
+  }
+
+  getEntryFileRelativePath(target: EditorTarget): string {
+    return this.getDataFileRelativePath(target.kind, target.file);
+  }
+
+  async renameDataFile(
+    kind: 'template' | 'config',
+    file: string,
+    rawFileName: string,
+  ): Promise<string> {
+    await this.ensureInitializedDirectory(kind);
+
+    const currentFileName = normalizeFileName(file);
+    const nextFileName = normalizeFileName(rawFileName);
+    if (currentFileName === nextFileName) {
+      return currentFileName;
+    }
+
+    if (await this.hasDataFile(kind, nextFileName)) {
+      throw new Error(`File already exists: ${nextFileName}`);
+    }
+
+    const sourceUri = this.getDataFileUri(kind, currentFileName);
+    const destinationUri = this.getDataFileUri(kind, nextFileName);
+    const bytes = await vscode.workspace.fs.readFile(sourceUri);
+
+    await vscode.workspace.fs.writeFile(destinationUri, bytes);
+    await vscode.workspace.fs.delete(sourceUri);
+
+    return nextFileName;
+  }
+
   async deleteDataFile(
     kind: 'template' | 'config',
     file: string,
@@ -244,6 +290,59 @@ export class WorkspaceStore {
     assertIndex(configFile.configs, target.index, target.file);
     configFile.configs.splice(target.index, 1);
     await this.writeConfigFile(configFile);
+  }
+
+  async renameEntry(target: EditorTarget, rawName: string): Promise<void> {
+    const nextName = normalizeEntryName(rawName);
+    await this.assertUniqueEntryName(nextName, target);
+
+    if (target.kind === 'template') {
+      const templateFile = await this.readTemplateFile(target.file);
+      assertIndex(templateFile.templates, target.index, target.file);
+      const current = templateFile.templates[target.index]!;
+      if (current.name === nextName) {
+        return;
+      }
+
+      templateFile.templates[target.index] = {
+        ...current,
+        name: nextName,
+      };
+      await this.writeTemplateFile(templateFile);
+      await this.updateTemplateReferences(current.name, nextName);
+      return;
+    }
+
+    const configFile = await this.readConfigFile(target.file);
+    assertIndex(configFile.configs, target.index, target.file);
+    const current = configFile.configs[target.index]!;
+    if (current.name === nextName) {
+      return;
+    }
+
+    configFile.configs[target.index] = {
+      ...current,
+      name: nextName,
+    };
+    await this.writeConfigFile(configFile);
+  }
+
+  async openDataFileAsJson(
+    kind: 'template' | 'config',
+    file: string,
+  ): Promise<void> {
+    const uri = this.getDataFileUri(kind, file);
+    const document = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(document, {
+      preview: false,
+    });
+  }
+
+  getDataFileUriForTreeItem(
+    kind: 'template' | 'config',
+    file: string,
+  ): vscode.Uri {
+    return this.getDataFileUri(kind, file);
   }
 
   async openEntryAsJson(target: EditorTarget): Promise<void> {
@@ -447,6 +546,82 @@ export class WorkspaceStore {
     return results;
   }
 
+  private async assertUniqueEntryName(
+    name: string,
+    target: EditorTarget,
+  ): Promise<void> {
+    const { templates, configs } = await this.readAll();
+
+    for (const fileData of templates) {
+      fileData.templates.forEach((entry, index) => {
+        if (
+          target.kind === 'template' &&
+          fileData.file === target.file &&
+          index === target.index
+        ) {
+          return;
+        }
+
+        if (entry.name === name) {
+          throw new Error(`Name "${name}" is already in use.`);
+        }
+      });
+    }
+
+    for (const fileData of configs) {
+      fileData.configs.forEach((entry, index) => {
+        if (
+          target.kind === 'config' &&
+          fileData.file === target.file &&
+          index === target.index
+        ) {
+          return;
+        }
+
+        if (entry.name === name) {
+          throw new Error(`Name "${name}" is already in use.`);
+        }
+      });
+    }
+  }
+
+  private async updateTemplateReferences(
+    currentName: string,
+    nextName: string,
+  ): Promise<void> {
+    if (currentName === nextName) {
+      return;
+    }
+
+    const configFiles = await this.readConfigFiles();
+
+    await Promise.all(
+      configFiles.map(async (fileData) => {
+        let changed = false;
+        const nextConfigs = fileData.configs.map((config) => {
+          if (config.extends !== currentName) {
+            return config;
+          }
+
+          changed = true;
+          return {
+            ...config,
+            extends: nextName,
+          };
+        });
+
+        if (!changed) {
+          return;
+        }
+
+        await this.writeConfigFile({
+          ...fileData,
+          configs: nextConfigs,
+        });
+      }),
+    );
+  }
+
   private async exists(uri: vscode.Uri): Promise<boolean> {
     try {
       await vscode.workspace.fs.stat(uri);
@@ -550,6 +725,15 @@ function normalizeFileName(value: string): string {
   }
 
   return trimmed.endsWith('.json') ? trimmed : `${trimmed}.json`;
+}
+
+function normalizeEntryName(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    throw new Error('Name is required.');
+  }
+
+  return trimmed;
 }
 
 function assertIndex(entries: unknown[], index: number, file: string): void {
