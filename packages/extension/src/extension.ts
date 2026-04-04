@@ -82,8 +82,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const handleInitialize = async (): Promise<void> => {
     const result = await store.ensureInitialized();
     await syncUiWithWorkspace();
+    const fileSuffix =
+      result.ensuredFiles.length === 0
+        ? ''
+        : ` Default files are ready (${result.ensuredFiles.join(', ')}).`;
     void vscode.window.showInformationMessage(
-      `Launch Composer storage directories are ready (${result.ensured.join(', ')}).`,
+      `Launch Composer storage is ready (${result.ensuredDirectories.join(', ')}).${fileSuffix}`,
     );
   };
 

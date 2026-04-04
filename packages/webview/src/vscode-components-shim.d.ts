@@ -1,8 +1,10 @@
 declare module '@himadajin/vscode-components' {
   import * as React from 'react';
 
-  export interface ButtonProps
-    extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'> {
+  export interface ButtonProps extends Omit<
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
+    'onClick'
+  > {
     children: React.ReactNode;
     variant?: 'primary' | 'secondary';
     disabled?: boolean;
@@ -16,8 +18,10 @@ declare module '@himadajin/vscode-components' {
     ButtonProps & React.RefAttributes<HTMLButtonElement>
   >;
 
-  export interface CheckboxProps
-    extends Omit<React.HTMLAttributes<HTMLElement>, 'onChange'> {
+  export interface CheckboxProps extends Omit<
+    React.HTMLAttributes<HTMLElement>,
+    'onChange'
+  > {
     checked?: boolean;
     defaultChecked?: boolean;
     disabled?: boolean;
@@ -41,9 +45,7 @@ declare module '@himadajin/vscode-components' {
 
   export type FormContainerProps = React.HTMLAttributes<HTMLDivElement>;
 
-  export function FormContainer(
-    props: FormContainerProps,
-  ): React.JSX.Element;
+  export function FormContainer(props: FormContainerProps): React.JSX.Element;
 
   export interface FormGroupProps extends React.HTMLAttributes<HTMLElement> {
     label: React.ReactNode;
@@ -71,8 +73,10 @@ declare module '@himadajin/vscode-components' {
     props: ListEditorProps<T>,
   ): React.JSX.Element;
 
-  export interface SelectProps
-    extends Omit<React.HTMLAttributes<HTMLElement>, 'defaultValue' | 'onChange'> {
+  export interface SelectProps extends Omit<
+    React.HTMLAttributes<HTMLElement>,
+    'defaultValue' | 'onChange'
+  > {
     value?: string;
     defaultValue?: string;
     enum: string[];
@@ -86,11 +90,10 @@ declare module '@himadajin/vscode-components' {
     SelectProps & React.RefAttributes<HTMLElement>
   >;
 
-  export interface TextInputProps
-    extends Omit<
-      React.InputHTMLAttributes<HTMLInputElement>,
-      'defaultValue' | 'onChange'
-    > {
+  export interface TextInputProps extends Omit<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    'defaultValue' | 'onChange'
+  > {
     value?: string | number;
     defaultValue?: string | number;
     placeholder?: string;

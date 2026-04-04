@@ -1,6 +1,11 @@
 :root {
   color-scheme: light dark;
-  font-family: var(--vscode-font-family, 'Segoe UI Variable', 'Segoe UI', sans-serif);
+  font-family: var(
+    --vscode-font-family,
+    'Segoe UI Variable',
+    'Segoe UI',
+    sans-serif
+  );
   color: var(--vscode-foreground);
   background: var(--vscode-editor-background);
 }

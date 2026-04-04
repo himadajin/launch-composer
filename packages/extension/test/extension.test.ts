@@ -6,6 +6,15 @@ import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from '../src/commands.js';
 import { WorkspaceStore } from '../src/io/workspaceStore.js';
 import * as vscode from 'vscode';
 
+const DEFAULT_TEMPLATE_TEXT =
+  '// Add template entries to this array.\n' +
+  '// Each template should have a unique "name".\n' +
+  '[]\n';
+const DEFAULT_CONFIG_TEXT =
+  '// Add config entries to this array.\n' +
+  '// Use "extends" to reference a template when needed.\n' +
+  '[]\n';
+
 const testVscode = vscode as typeof vscode & {
   __testing: {
     reset(): void;
@@ -64,8 +73,24 @@ test('initialize creates the Launch Composer workspace directories', async () =>
     '/workspace/project/.vscode/launch-composer/templates',
   ]);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
   ]);
+
+  const [templateBytes, configBytes] = await Promise.all([
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/project/.vscode/launch-composer/templates/template.json',
+      ),
+    ),
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/project/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  ]);
+
+  assert.equal(new TextDecoder().decode(templateBytes), DEFAULT_TEMPLATE_TEXT);
+  assert.equal(new TextDecoder().decode(configBytes), DEFAULT_CONFIG_TEXT);
 });
 
 test('initialize tolerates ENOENT-style missing-path errors from the filesystem', async () => {
@@ -79,24 +104,41 @@ test('initialize tolerates ENOENT-style missing-path errors from the filesystem'
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
   ]);
 });
 
-test('initialize is idempotent when directories already exist', async () => {
+test('initialize is idempotent when directories and default files already exist', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders(['/workspace/existing-project']);
 
   activate(context);
   await vscode.commands.executeCommand(COMMANDS.init);
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/existing-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode('[\n  {\n    "name": "existing"\n  }\n]\n'),
+  );
   await vscode.commands.executeCommand(COMMANDS.init);
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
   ]);
+
+  const templateBytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/existing-project/.vscode/launch-composer/templates/template.json',
+    ),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(templateBytes),
+    '[\n  {\n    "name": "existing"\n  }\n]\n',
+  );
 });
 
 test('initialize creates missing child directories when composer directory exists', async () => {
@@ -114,8 +156,58 @@ test('initialize creates missing child directories when composer directory exist
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage directories are ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
   ]);
+});
+
+test('initialize creates only the missing default file when one already exists', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspaceUri = vscode.Uri.file('/workspace/partial-default-project');
+  testVscode.__testing.setWorkspaceFolders([workspaceUri.fsPath]);
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.joinPath(workspaceUri, '.vscode', 'launch-composer', 'configs'),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(
+      workspaceUri,
+      '.vscode',
+      'launch-composer',
+      'configs',
+      'config.json',
+    ),
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "keep-me",\n    "enabled": false\n  }\n]\n',
+    ),
+  );
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.init);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json).',
+  ]);
+
+  const [templateBytes, configBytes] = await Promise.all([
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/partial-default-project/.vscode/launch-composer/templates/template.json',
+      ),
+    ),
+    vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/partial-default-project/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  ]);
+
+  assert.equal(new TextDecoder().decode(templateBytes), DEFAULT_TEMPLATE_TEXT);
+  assert.equal(
+    new TextDecoder().decode(configBytes),
+    '[\n  {\n    "name": "keep-me",\n    "enabled": false\n  }\n]\n',
+  );
 });
 
 test('readAll returns empty data when Launch Composer directories do not exist', async () => {

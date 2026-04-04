@@ -15,6 +15,16 @@ const COMPOSER_DIR = '.vscode/launch-composer';
 const TEMPLATES_DIR = `${COMPOSER_DIR}/templates`;
 const CONFIGS_DIR = `${COMPOSER_DIR}/configs`;
 const LAUNCH_FILE = '.vscode/launch.json';
+const DEFAULT_TEMPLATE_FILE = 'template.json';
+const DEFAULT_CONFIG_FILE = 'config.json';
+const DEFAULT_TEMPLATE_CONTENT =
+  '// Add template entries to this array.\n' +
+  '// Each template should have a unique "name".\n' +
+  '[]\n';
+const DEFAULT_CONFIG_CONTENT =
+  '// Add config entries to this array.\n' +
+  '// Use "extends" to reference a template when needed.\n' +
+  '[]\n';
 
 export class WorkspaceStore {
   constructor(private readonly workspaceRoot: vscode.Uri) {}
@@ -64,7 +74,8 @@ export class WorkspaceStore {
   }
 
   async ensureInitialized(): Promise<{
-    ensured: string[];
+    ensuredDirectories: string[];
+    ensuredFiles: string[];
   }> {
     const targets = [
       [COMPOSER_DIR, this.getComposerDirUri()],
@@ -72,14 +83,35 @@ export class WorkspaceStore {
       [CONFIGS_DIR, this.getConfigsDirUri()],
     ] as const;
 
-    const ensured: string[] = [];
+    const ensuredDirectories: string[] = [];
 
     for (const [label, uri] of targets) {
       await vscode.workspace.fs.createDirectory(uri);
-      ensured.push(label);
+      ensuredDirectories.push(label);
     }
 
-    return { ensured };
+    const ensuredFiles: string[] = [];
+    if (
+      await this.ensureDefaultDataFile(
+        'template',
+        DEFAULT_TEMPLATE_FILE,
+        DEFAULT_TEMPLATE_CONTENT,
+      )
+    ) {
+      ensuredFiles.push(`${TEMPLATES_DIR}/${DEFAULT_TEMPLATE_FILE}`);
+    }
+
+    if (
+      await this.ensureDefaultDataFile(
+        'config',
+        DEFAULT_CONFIG_FILE,
+        DEFAULT_CONFIG_CONTENT,
+      )
+    ) {
+      ensuredFiles.push(`${CONFIGS_DIR}/${DEFAULT_CONFIG_FILE}`);
+    }
+
+    return { ensuredDirectories, ensuredFiles };
   }
 
   async createDataFile(
@@ -459,6 +491,23 @@ export class WorkspaceStore {
     await vscode.workspace.fs.writeFile(uri, encodeText('[]\n'));
   }
 
+  private async ensureDefaultDataFile(
+    kind: 'template' | 'config',
+    file: string,
+    content: string,
+  ): Promise<boolean> {
+    await this.ensureInitializedDirectory(kind);
+
+    const fileName = normalizeFileName(file);
+    if (await this.hasDataFile(kind, fileName)) {
+      return false;
+    }
+
+    const uri = this.getDataFileUri(kind, fileName);
+    await vscode.workspace.fs.writeFile(uri, encodeText(content));
+    return true;
+  }
+
   private async hasDataFile(
     kind: 'template' | 'config',
     file: string,
@@ -482,6 +531,15 @@ export class WorkspaceStore {
     return kind === 'template'
       ? vscode.Uri.joinPath(this.getTemplatesDirUri(), fileName)
       : vscode.Uri.joinPath(this.getConfigsDirUri(), fileName);
+  }
+
+  private async ensureInitializedDirectory(
+    kind: 'template' | 'config',
+  ): Promise<void> {
+    await vscode.workspace.fs.createDirectory(this.getComposerDirUri());
+    await vscode.workspace.fs.createDirectory(
+      kind === 'template' ? this.getTemplatesDirUri() : this.getConfigsDirUri(),
+    );
   }
 }
 
