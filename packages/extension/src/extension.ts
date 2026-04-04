@@ -78,7 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const result = await store.ensureInitialized();
     refreshViews();
     void vscode.window.showInformationMessage(
-      `Launch Composer initialized (${result.ensured.join(', ')}).`,
+      `Launch Composer storage directories are ready (${result.ensured.join(', ')}).`,
     );
   };
 
@@ -325,7 +325,6 @@ async function selectOrCreateFile(
   store: WorkspaceStore,
   kind: 'template' | 'config',
 ): Promise<string | undefined> {
-  await store.ensureInitialized();
   const files = await store.listFiles(kind);
   const createLabel = '$(add) Create new file';
 
@@ -361,7 +360,6 @@ async function selectOrCreateFile(
 async function promptForTemplateSelection(
   store: WorkspaceStore,
 ): Promise<string | null | undefined> {
-  await store.ensureInitialized();
   const templateNames = await store.listTemplateNames();
   const selection = await vscode.window.showQuickPick(
     ['(none)', ...templateNames],
