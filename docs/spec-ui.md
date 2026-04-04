@@ -1,0 +1,224 @@
+# Launch Composer - UI 設計仕様
+
+`@launch-composer/webview` および `launch-composer`（extension）の Webview 管理層が実装する UI 仕様。
+
+前提として読むべきファイル:
+- [spec-communication.md](./spec-communication.md) §1 — Extension Host との通信契約・データ型定義
+
+---
+
+## 概要
+
+ユーザーは VSCode のサイドバーでテンプレートと config の一覧を確認し、各アイテムをクリックしてエディタ領域のフォームで詳細を編集する。フォームへの変更は自動的に JSON ファイルに書き込まれる。編集が終わったら CONFIGS ビューヘッダーの Generate ボタンで `.vscode/launch.json` を生成する。
+
+UI は2つの独立したコンポーネントで構成される:
+
+- **サイドバー（一覧パネル）**: VSCode TreeView API で実装。テンプレートと config の一覧表示・ファイル/エントリの追加・削除・有効無効の切り替えを行う。JSON ファイルを直接編集せずに基本的な操作を完結できる。
+- **エディタパネル（編集フォーム）**: React 19 + `@himadajin/vscode-components` で実装した Webview Panel。選択したアイテムのフィールドをフォームで編集する。GUI では編集できないフィールド（`type`, `request`, `env` 等）は "Edit as JSON" ボタンで対応する JSON ファイルを直接開いて編集する。
+
+---
+
+## 1. UI 設計
+
+技術スタック・全体構成・各コンポーネントの詳細仕様を以下のサブセクションで定める。
+
+### 1.1 技術スタック
+
+Extension Host と Webview のいずれも TypeScript で実装する。
+
+| レイヤー | 技術 | 備考 |
+|---------|------|------|
+| サイドバー一覧 | VSCode TreeView API | VSCode ネイティブの API を使用し、Webview は使わない |
+| エディタ編集画面 | React 19 + @himadajin/vscode-components + Vite 8 | Webview Panel 上のフォーム UI。テーマ変更に自動対応する |
+| Extension Host ↔ Webview 通信 | VSCode postMessage API | VSCode が提供する標準の通信手段 |
+
+ライブラリ:
+- `@himadajin/vscode-components`: React 19 ベースの VSCode デザイン準拠コンポーネント集。VSCode 設定画面と同様の UI 要素を React コンポーネントとして提供する。スタイルは `@himadajin/vscode-components/styles.css` でインポートする。
+
+Vite 8 から Vite+ への移行が将来必要になった場合は、`vp migrate` コマンドで移行できる。
+
+### 1.2 全体構成: ハイブリッド方式
+
+Launch Composer の UI は以下の2つのコンポーネントで構成する。
+
+| コンポーネント | 配置 | 技術 | 役割 |
+|---------------|------|------|------|
+| 一覧パネル | サイドバー | VSCode TreeView API | テンプレート・config 一覧、操作エントリポイント |
+| 編集パネル | エディタ領域（Webview Panel） | React 19 + @himadajin/vscode-components | 選択アイテムの詳細編集フォーム |
+
+### 1.3 サイドバー（一覧パネル）: TreeView API
+
+サイドバーパネルに **TEMPLATES** と **CONFIGS** の2つの独立した TreeView を配置する。各 TreeView はそれぞれ折りたたみ・展開できる（VSCode の標準ビュー機能）。
+
+```
+┌─ TEMPLATES ──────────────────────── [+] ─┐
+│  $(file-code) cpp.json          [+]       │
+│    cpp                                    │
+│  $(file-code) scripting.json    [+]       │
+│    python-debug                           │
+└───────────────────────────────────────────┘
+
+┌─ CONFIGS ──────────────── [+] [$(play)] ─┐
+│  $(file-code) basic-test.json   [+]       │
+│    $(pass-filled) Basic Test              │
+│    $(circle-large-outline) Input Test     │
+│  $(file-code) input-test.json   [+]       │
+│    $(circle-large-outline) Replay Test    │
+└───────────────────────────────────────────┘
+```
+
+ビューヘッダーのツールバーアクション:
+- **TEMPLATES ビュー**: `[+]`（`$(add)` アイコン）— テンプレートファイルを新規作成
+- **CONFIGS ビュー**: `[+]`（`$(add)` アイコン）— config ファイルを新規作成、`[$(play)]` — launch.json を生成
+
+アイテムのアイコン:
+- **ファイルアイテム**: `$(file-code)` アイコン。ラベルはファイル名を拡張子付きで表示する（例: `cpp.json`）。
+- **テンプレートエントリ**: アイコンなし。ラベルのみ表示する。
+- **config エントリ（enabled）**: `$(pass-filled)` アイコンを `testing.iconPassed` のテーマカラー（緑）で表示する。
+- **config エントリ（disabled）**: `$(circle-large-outline)` アイコンをグレーで表示し、description 欄に `disabled` と表示する。
+
+インラインアクション（ホバー時のみ表示）:
+- **ファイルアイテム**: `$(add)` ボタン — エントリを追加する。
+- **config エントリ**: `$(eye)`（enabled 時）または `$(eye-closed)`（disabled 時）ボタン — クリックすると即座にファイルに書き込み、enabled の状態を切り替える。
+
+インラインアクションは VSCode の標準動作に従いホバー時のみ表示する。config エントリの有効/無効状態は左側のアイコン（`$(pass-filled)` / `$(circle-large-outline)`）で常時示す。
+
+空の状態:
+- TEMPLATES ビューにファイルが存在しない場合、`welcomeContent` でガイダンスを表示する: `No template files found. [Create Template File]`
+- CONFIGS ビューにファイルが存在しない場合、`welcomeContent` でガイダンスを表示する: `No config files found. [Create Config File]`
+- `welcomeContent` 内のリンクは対応するファイル作成コマンドを実行する。
+
+操作:
+
+| 操作 | トリガー | 動作 |
+|------|---------|------|
+| テンプレートファイル新規作成 | TEMPLATES ビューヘッダーの `$(add)` | InputBox でファイル名入力 → 空配列 `[]` の JSON ファイルを作成 |
+| テンプレートファイル削除 | ファイルアイテムを右クリック → "Delete File" | 確認ダイアログ → ファイル削除 |
+| テンプレートエントリ追加 | ファイルアイテムの `$(add)` インラインアクション（ホバー時） | InputBox でテンプレート名を入力（空文字は拒否） → JSON に最小構成のエントリを書き込む → エディタパネルを開く（name は確定済み・read-only） |
+| テンプレートエントリ削除 | テンプレートアイテムを右クリック → "Delete" | 確認ダイアログ → 配列から要素を削除してファイルに書き戻す。そのテンプレートを参照する config エントリが存在する場合は削除を拒否しエラーを通知する |
+| テンプレートエントリ編集 | テンプレートアイテムをクリック | エディタパネルで編集画面を開く |
+| config ファイル新規作成 | CONFIGS ビューヘッダーの `$(add)` | InputBox でファイル名入力 → 空配列 `[]` の JSON ファイルを作成 |
+| config ファイル削除 | ファイルアイテムを右クリック → "Delete File" | 確認ダイアログ → ファイル削除 |
+| 構成エントリ追加 | ファイルアイテムの `$(add)` インラインアクション（ホバー時） | QuickPick でテンプレートを選択（`(none)` を含む） → InputBox で name 入力（空文字は拒否） → JSON に最小構成のエントリを書き込む → エディタパネルを開く（extends・name は確定済み・read-only、enabled は false） |
+| 構成エントリ削除 | 構成アイテムを右クリック → "Delete" | 確認ダイアログ → 配列から要素を削除してファイルに書き戻す |
+| 構成エントリ編集 | 構成アイテムをクリック | エディタパネルで編集画面を開く |
+| enabled トグル | 構成アイテムの `$(eye)` / `$(eye-closed)` インラインアクション（ホバー時） | 即座にファイルに書き込み、状態を切り替え |
+| Generate | CONFIGS ビューヘッダーの `$(play)` | launch.json を生成 |
+
+ファイル名に使える文字は、VSCode がサポートする各 OS（Linux・Windows・macOS）で有効なファイル名であれば受理する。拡張機能側で独自の追加制限は設けない。
+
+### 1.4 エディタパネル（編集フォーム）: React 19 + @himadajin/vscode-components
+
+エディタパネルは、サイドバーで選択したアイテムの詳細フィールドを編集するためのフォームを Webview Panel として表示する。使用する主要コンポーネント:
+- フォームレイアウト: `<FormContainer>`, `<FormGroup>`（label・description を内包）
+- 入力: `<TextInput>`, `<Checkbox>`
+- リスト編集（args）: `<ListEditor>`（追加・削除・ドラッグ並び替え対応）
+- オブジェクト編集（env・追加プロパティ）: `<ObjectEditor>`（key-value ペア編集）
+- レイアウト: `<Collapsible>`（Override Properties セクション）, `<Divider>`
+- 操作: `<Button>`（`variant='secondary'`）, `<Icon>`（Codicon）
+
+#### テンプレート編集
+
+GUI で編集できるフィールドは以下に限定する。それ以外のプロパティ（`type`, `request`, `env` 等）を変更する場合は、JSON ファイルを直接編集する。
+
+| フィールド | JSON キー | UI コンポーネント | 備考 |
+|-----------|-----------|-----------------|------|
+| Name | `name`（拡張機能固有キー） | read-only テキスト + `$(settings-gear)` アイコン | 新規作成時の InputBox で確定。以降は変更不可 |
+| Program | `program` | `<TextInput>` | 空欄時はキーを JSON から削除 |
+| Working Directory | `cwd` | `<TextInput>` | 空欄時はキーを JSON から削除 |
+| Stop At Entry | `stopAtEntry` | `<Checkbox>` | 常に `true` / `false` を明示的に書き込む |
+| Args | `args` | `<ListEditor>` | 空リスト時はキーを JSON から削除 |
+
+`$(settings-gear)` アイコン: クリックで "Edit as JSON" を直接実行する（メニューなし）。VSCode 設定画面のギアアイコンと同じパターン。
+
+"Edit as JSON" ボタン: 対応する JSON ファイルを VSCode エディタで開き、該当エントリの先頭行にカーソルを移動する（`vscode.window.showTextDocument` + `revealRange`）。
+
+自動保存の動作: フォームの変更は即座に JSON に書き込む（パーシャル更新）。GUI で編集した Program / cwd / stopAtEntry / args のみを書き込み、JSON ファイルに存在するその他のキー（`type`, `request`, `env` 等）はそのまま保持する。
+
+- `<TextInput>` フィールドは `launch-composer.autoSaveDelay`（デフォルト 1000ms）の debounce を挟んでから書き込む。
+- `<Checkbox>` は変更と同時に即座に書き込む（debounce なし）。
+- `<ListEditor>`（args）は要素の追加・削除・並び替えの各操作完了時に即座に書き込む（debounce なし）。
+
+```
+┌─ Edit Template: cpp ──────────────────────────┐
+│                                                │
+│  Name:              cpp ⚙                      │
+│  Program:           [${workspaceFolder}/...  ] │
+│  Working Directory: [                        ] │
+│  Stop At Entry:     [ ]                        │
+│  Args:      [--verbose] [×]                   │
+│             [+ Add arg]                        │
+│                                                │
+│  [Edit as JSON]                                │
+└────────────────────────────────────────────────┘
+```
+
+#### config 編集
+
+GUI で編集できるフィールドは以下に限定する。それ以外のプロパティ（`program`, `env` 等）を変更する場合は、JSON ファイルを直接編集する。
+
+| フィールド | JSON キー | UI コンポーネント | 備考 |
+|-----------|-----------|-----------------|------|
+| Name | `name`（拡張機能固有キー） | read-only テキスト + `$(settings-gear)` アイコン | 新規作成時の InputBox で確定。以降は変更不可 |
+| Extends | `extends` | `<Select>` | 先頭に `(none)` を常に表示し、その後に利用可能なテンプレート名を列挙。`(none)` 選択時は `extends` キーを JSON から削除。参照先テンプレートが削除されて存在しない場合は現在の値をそのまま表示し、Generate 時バリデーションで検出する |
+| Enabled | `enabled` | `<Checkbox>` | 常に `true` / `false` を明示的に書き込む |
+| Working Directory | `cwd` | `<TextInput>` | 空欄時はキーを JSON から削除 |
+| Stop At Entry | `stopAtEntry` | `<Checkbox>` | 常に `true` / `false` を明示的に書き込む |
+| Args File | `argsFile` | `<TextInput>` + Browse ボタン | 空欄時はキーを JSON から削除。選択中テンプレートに `args` が定義されている場合は disabled にし、"Template has args defined" と表示する |
+| Args | `args` | `<ListEditor>` | 空リスト時はキーを JSON から削除 |
+
+自動保存の動作: フォームの変更は即座に JSON に書き込む（パーシャル更新）。GUI で編集したフィールドのみを書き込み、JSON ファイルに存在するその他のキー（`program`, `env` 等）はそのまま保持する。
+
+- `<TextInput>` フィールド（cwd, argsFile）は `launch-composer.autoSaveDelay`（デフォルト 1000ms）の debounce を挟んでから書き込む。
+- `<Checkbox>`（enabled, stopAtEntry）・`<Select>`（extends）は変更と同時に即座に書き込む（debounce なし）。
+- `<ListEditor>`（args）は要素の追加・削除・並び替えの各操作完了時に即座に書き込む（debounce なし）。
+
+"Edit as JSON" ボタン・`$(settings-gear)` アイコンの挙動はテンプレート編集と同様（対応する JSON ファイルを開き、該当エントリの先頭行にジャンプ）。
+
+```
+┌─ Edit Config: Basic Test ─────────────────────┐
+│                                                │
+│  Name:              Basic Test ⚙               │
+│  Extends:           [cpp ▼]                    │
+│  Enabled:           [✓]                        │
+│                                                │
+│  Working Directory: [                        ] │
+│  Stop At Entry:     [ ]                        │
+│                                                │
+│  ── Args ────────────────────────────────────  │
+│  Args File: [/path/to/args.json     ] [...]    │
+│  Args:      [--debug-mode] [×]  [-v] [×]      │
+│             [+ Add arg]                        │
+│                                                │
+│  [Edit as JSON]                                │
+└────────────────────────────────────────────────┘
+```
+
+### 1.5 フォーム要素の編集方法
+
+フィールドの種類と使用する UI コンポーネントの対応を以下に示す。
+
+| フィールド | コンポーネント |
+|-----------|--------------|
+| テキスト入力（program, cwd, argsFile 等） | `<TextInput>` |
+| テンプレート選択（extends） | `<Select>` |
+| boolean（enabled, stopAtEntry） | `<Checkbox>` |
+| 文字列リスト（args） | `<ListEditor>`（追加・削除・ドラッグ並び替え） |
+
+### 1.6 エディタパネルの枚数とタブ管理
+
+エディタパネルは**単一パネル方式**とする。サイドバーのアイテムをクリックするたびに同じ Webview Panel の内容が切り替わる。パネルは常に最大1枚。複数の編集画面を同時に開く手段は提供しない。
+
+これは VSCode の Settings エディタ（`workbench.action.openSettings`）と同じパターンであり、「一覧から選んで詳細を編集する」UIの標準的な実装に従う。
+
+### 1.7 サイドバーの選択状態
+
+エディタパネルで編集中のアイテムに対応するサイドバーのツリーアイテムをハイライト（選択状態）にする。`TreeView.reveal()` を使用して実装する。
+
+エディタパネルを閉じたとき、またはパネルが存在しないときは選択状態を解除する。
+
+### 1.8 ファイル変更の自動検知とツリー更新
+
+`vscode.workspace.createFileSystemWatcher` で `.vscode/launch-composer/templates/` および `.vscode/launch-composer/configs/` 以下のファイルを監視し、ファイルの作成・変更・削除を検知したらサイドバーのツリーを自動更新する。
+
+本実装は、VSCode の拡張機能が外部変更を反映する標準的なパターンに従う。
