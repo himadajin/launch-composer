@@ -1,10 +1,9 @@
 import {
   Button,
   Checkbox,
-  Divider,
   FormContainer,
   FormGroup,
-  Icon,
+  FormHelper,
   ListEditor,
   Select,
   TextInput,
@@ -15,8 +14,8 @@ import type { ComposerDataIssue, ConfigData, TemplateData } from '../types.js';
 import {
   stringOrEmpty,
   updateOptionalArray,
-  updateRequiredString,
   updateOptionalString,
+  updateRequiredString,
   useDebouncedCommit,
 } from './editorUtils.js';
 
@@ -116,44 +115,58 @@ export function ConfigEditor({
   });
 
   return (
-    <div className="editor-root">
-      <header className="editor-header">
-        <div>
-          <p className="editor-kind">Config</p>
-          <h1>{data.name}</h1>
+    <div className="composer-editor">
+      <header className="composer-editor-header">
+        <div className="composer-editor-title">
+          <p className="composer-editor-eyebrow">Config</p>
+          <h1 className="settings-group-title-label composer-editor-heading">
+            {data.name}
+          </h1>
+          <p className="composer-editor-meta">{sourceFile}</p>
         </div>
-        <Button type="button" variant="secondary" onClick={onOpenJson}>
-          <span className="button-inline-content">
-            <Icon name="settings-gear" size={16} />
-            <span>Edit as JSON</span>
-          </span>
+        <Button
+          type="button"
+          variant="secondary"
+          icon="json"
+          onClick={onOpenJson}
+        >
+          Open JSON
         </Button>
       </header>
 
-      <Divider />
-
-      <FormContainer className="editor-form">
+      <FormContainer className="composer-form">
         {readOnlyIssue !== undefined ? (
           <FormGroup
             label="JSON Status"
             description={readOnlyIssue.message}
             helper={
-              readOnlyIssue.details ??
-              'Fix the JSON file to resume form editing.'
+              <FormHelper tone="warning">
+                {readOnlyIssue.details ??
+                  'Fix the JSON file to resume form editing.'}
+              </FormHelper>
             }
+            fill
           >
-            <TextInput readOnly value={sourceFile} />
+            <TextInput
+              readOnly
+              value={sourceFile}
+              style={{ width: '100%', maxWidth: 'none' }}
+            />
           </FormGroup>
         ) : null}
 
         <FormGroup
-          label="Name"
+          category="Launch Composer"
+          label="Config: Name"
           description="Configuration name. This value is fixed after creation."
         >
           <TextInput readOnly value={data.name} />
         </FormGroup>
 
-        <FormGroup label="Extends">
+        <FormGroup
+          label="Config: Extends"
+          description="Inherit launch fields from an existing template."
+        >
           <Select
             disabled={readOnly}
             enum={templateOptions}
@@ -178,11 +191,16 @@ export function ConfigEditor({
           />
         </FormGroup>
 
-        <div className="editor-checkbox-row">
+        <FormGroup
+          label="Config: Enabled"
+          description="Include this config when generating launch.json."
+          modified={data.enabled === true}
+        >
           <Checkbox
+            toggle
             checked={data.enabled === true}
             disabled={readOnly}
-            label="Enabled"
+            label={data.enabled === true ? 'Enabled' : 'Disabled'}
             onChange={(checked) => {
               if (readOnly) {
                 return;
@@ -194,14 +212,17 @@ export function ConfigEditor({
               });
             }}
           />
-        </div>
+        </FormGroup>
 
         <FormGroup
-          label="Type"
+          label="Config: Type"
+          description="Debugger type written to the generated launch.json entry."
           helper={
-            launchFieldsInherited
-              ? 'Inherited from the selected template.'
-              : undefined
+            launchFieldsInherited ? (
+              <FormHelper tone="info">
+                Inherited from the selected template.
+              </FormHelper>
+            ) : undefined
           }
         >
           <TextInput
@@ -212,11 +233,14 @@ export function ConfigEditor({
         </FormGroup>
 
         <FormGroup
-          label="Request"
+          label="Config: Request"
+          description="Debugger request written to the generated launch.json entry."
           helper={
-            launchFieldsInherited
-              ? 'Inherited from the selected template.'
-              : undefined
+            launchFieldsInherited ? (
+              <FormHelper tone="info">
+                Inherited from the selected template.
+              </FormHelper>
+            ) : undefined
           }
         >
           <TextInput
@@ -226,15 +250,23 @@ export function ConfigEditor({
           />
         </FormGroup>
 
-        <FormGroup label="Working Directory">
+        <FormGroup
+          label="Config: Working Directory"
+          description="Working directory passed to the debug adapter."
+        >
           <TextInput disabled={readOnly} value={cwd} onChange={setCwd} />
         </FormGroup>
 
-        <div className="editor-checkbox-row">
+        <FormGroup
+          label="Config: Stop At Entry"
+          description="Pause execution immediately after the program starts."
+          modified={data.stopAtEntry === true}
+        >
           <Checkbox
+            toggle
             checked={data.stopAtEntry === true}
             disabled={readOnly}
-            label="Stop At Entry"
+            label={data.stopAtEntry === true ? 'Enabled' : 'Disabled'}
             onChange={(checked) => {
               if (readOnly) {
                 return;
@@ -246,17 +278,26 @@ export function ConfigEditor({
               });
             }}
           />
-        </div>
+        </FormGroup>
 
         <FormGroup
-          label="Args File"
-          helper={argsFileDisabled ? 'Template has args defined.' : undefined}
+          label="Config: Args File"
+          description="Path to an argument file loaded before launch."
+          helper={
+            argsFileDisabled ? (
+              <FormHelper tone="info">
+                The selected template already defines args.
+              </FormHelper>
+            ) : undefined
+          }
+          fill
         >
-          <div className="input-action-row">
+          <div className="composer-input-action-row">
             <TextInput
               disabled={readOnly || argsFileDisabled}
               value={argsFile}
               onChange={setArgsFile}
+              style={{ width: '100%', maxWidth: 'none' }}
             />
             <Button
               icon="folder-opened"
@@ -282,9 +323,17 @@ export function ConfigEditor({
           </div>
         </FormGroup>
 
-        <FormGroup label="Args">
+        <FormGroup
+          label="Config: Args"
+          description="Arguments appended to the debug configuration."
+          fill
+        >
           {readOnly ? (
-            <TextInput readOnly value={(data.args ?? []).join(', ')} />
+            <TextInput
+              readOnly
+              value={(data.args ?? []).join(', ')}
+              style={{ width: '100%', maxWidth: 'none' }}
+            />
           ) : (
             <ListEditor
               reorderable

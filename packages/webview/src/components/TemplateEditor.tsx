@@ -1,10 +1,9 @@
 import {
   Button,
   Checkbox,
-  Divider,
   FormContainer,
   FormGroup,
-  Icon,
+  FormHelper,
   ListEditor,
   TextInput,
 } from '@himadajin/vscode-components';
@@ -14,8 +13,8 @@ import type { ComposerDataIssue, TemplateData } from '../types.js';
 import {
   stringOrEmpty,
   updateOptionalArray,
-  updateRequiredString,
   updateOptionalString,
+  updateRequiredString,
   useDebouncedCommit,
 } from './editorUtils.js';
 
@@ -91,53 +90,64 @@ export function TemplateEditor({
   });
 
   return (
-    <div className="editor-root">
-      <header className="editor-header">
-        <div>
-          <p className="editor-kind">Template</p>
-          <h1>{data.name}</h1>
+    <div className="composer-editor">
+      <header className="composer-editor-header">
+        <div className="composer-editor-title">
+          <p className="composer-editor-eyebrow">Template</p>
+          <h1 className="settings-group-title-label composer-editor-heading">
+            {data.name}
+          </h1>
+          <p className="composer-editor-meta">{sourceFile}</p>
         </div>
-        <Button type="button" variant="secondary" onClick={onOpenJson}>
-          <span className="button-inline-content">
-            <Icon name="settings-gear" size={16} />
-            <span>Edit as JSON</span>
-          </span>
+        <Button
+          type="button"
+          variant="secondary"
+          icon="json"
+          onClick={onOpenJson}
+        >
+          Open JSON
         </Button>
       </header>
 
-      <Divider />
-
-      <FormContainer className="editor-form">
+      <FormContainer className="composer-form">
         {readOnlyIssue !== undefined ? (
           <FormGroup
             label="JSON Status"
             description={readOnlyIssue.message}
             helper={
-              readOnlyIssue.details ??
-              'Fix the JSON file to resume form editing.'
+              <FormHelper tone="warning">
+                {readOnlyIssue.details ??
+                  'Fix the JSON file to resume form editing.'}
+              </FormHelper>
             }
+            fill
           >
-            <TextInput readOnly value={sourceFile} />
+            <TextInput
+              readOnly
+              value={sourceFile}
+              style={{ width: '100%', maxWidth: 'none' }}
+            />
           </FormGroup>
         ) : null}
 
         <FormGroup
-          label="Name"
+          category="Launch Composer"
+          label="Template: Name"
           description="Template identifier. This value is fixed after creation."
         >
           <TextInput readOnly value={data.name} />
         </FormGroup>
 
         <FormGroup
-          label="Type"
-          description="Required in generated launch.json."
+          label="Template: Type"
+          description="Debugger type written to the generated launch.json entry."
         >
           <TextInput disabled={readOnly} value={type} onChange={setType} />
         </FormGroup>
 
         <FormGroup
-          label="Request"
-          description="Required in generated launch.json."
+          label="Template: Request"
+          description="Debugger request written to the generated launch.json entry."
         >
           <TextInput
             disabled={readOnly}
@@ -146,7 +156,10 @@ export function TemplateEditor({
           />
         </FormGroup>
 
-        <FormGroup label="Program">
+        <FormGroup
+          label="Template: Program"
+          description="Program path or expression used by the debugger."
+        >
           <TextInput
             disabled={readOnly}
             value={program}
@@ -154,15 +167,23 @@ export function TemplateEditor({
           />
         </FormGroup>
 
-        <FormGroup label="Working Directory">
+        <FormGroup
+          label="Template: Working Directory"
+          description="Working directory passed to the debug adapter."
+        >
           <TextInput disabled={readOnly} value={cwd} onChange={setCwd} />
         </FormGroup>
 
-        <div className="editor-checkbox-row">
+        <FormGroup
+          label="Template: Stop At Entry"
+          description="Pause execution immediately after the program starts."
+          modified={data.stopAtEntry === true}
+        >
           <Checkbox
+            toggle
             checked={data.stopAtEntry === true}
             disabled={readOnly}
-            label="Stop At Entry"
+            label={data.stopAtEntry === true ? 'Enabled' : 'Disabled'}
             onChange={(checked) => {
               if (readOnly) {
                 return;
@@ -174,11 +195,19 @@ export function TemplateEditor({
               });
             }}
           />
-        </div>
+        </FormGroup>
 
-        <FormGroup label="Args">
+        <FormGroup
+          label="Template: Args"
+          description="Arguments appended to the debug configuration."
+          fill
+        >
           {readOnly ? (
-            <TextInput readOnly value={(data.args ?? []).join(', ')} />
+            <TextInput
+              readOnly
+              value={(data.args ?? []).join(', ')}
+              style={{ width: '100%', maxWidth: 'none' }}
+            />
           ) : (
             <ListEditor
               reorderable

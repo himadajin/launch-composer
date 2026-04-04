@@ -78,6 +78,13 @@ declare module '@himadajin/vscode-components' {
 
   export function FormGroup(props: FormGroupProps): React.JSX.Element;
 
+  export interface FormHelperProps extends React.HTMLAttributes<HTMLDivElement> {
+    tone?: 'default' | 'info' | 'warning' | 'error';
+    id?: string;
+  }
+
+  export function FormHelper(props: FormHelperProps): React.JSX.Element;
+
   export interface ListEditorProps<T = string> {
     value: T[];
     itemSchema?: unknown;
