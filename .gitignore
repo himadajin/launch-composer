@@ -6,6 +6,7 @@ packages/*/dist/
 packages/*/.test-dist/
 build/
 coverage/
+*.vsix
 *.tsbuildinfo
 
 # Environment files
