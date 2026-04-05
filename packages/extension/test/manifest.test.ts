@@ -12,6 +12,16 @@ test('package.json command contributions stay aligned with the extension impleme
   const packageJsonPath = path.resolve(__dirname, '..', 'package.json');
   const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8')) as {
     activationEvents?: string[];
+    publisher: string;
+    license: string;
+    homepage: string;
+    repository: {
+      type: string;
+      url: string;
+    };
+    bugs: {
+      url: string;
+    };
     contributes: {
       viewsContainers: {
         activitybar: Array<{
@@ -70,6 +80,19 @@ test('package.json command contributions stay aligned with the extension impleme
     },
   ]);
   assert.equal(packageJson.contributes.views.explorer, undefined);
+  assert.equal(packageJson.publisher, 'himadajin');
+  assert.equal(packageJson.license, 'MIT');
+  assert.equal(
+    packageJson.homepage,
+    'https://github.com/himadajin/launch-composer',
+  );
+  assert.deepEqual(packageJson.repository, {
+    type: 'git',
+    url: 'https://github.com/himadajin/launch-composer.git',
+  });
+  assert.deepEqual(packageJson.bugs, {
+    url: 'https://github.com/himadajin/launch-composer/issues',
+  });
 
   const itemContextMenu = packageJson.contributes.menus?.['view/item/context'];
   assert.ok(itemContextMenu);
