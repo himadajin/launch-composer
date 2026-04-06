@@ -102,17 +102,25 @@ Extension Host は `templates/*.json` および `configs/*.json` の各ファイ
 
 issue は少なくとも `kind`, `file`, `code`, `message` を持つ。空ファイルは `empty`、構文エラーは `invalid-json`、配列以外のルートは `not-array` とする。
 
-ユーザー通知は `1 file 1回` を基本とする。同一ファイルが同一 issue のまま監視更新されても警告は繰り返さない。ファイルが正常化した場合は通知状態を破棄し、復旧通知は出さない。
+ユーザー通知は `1 file 1回` を基本とする。重複判定は issue の `code` と `message` を基準に行い、構文エラー位置など `details` だけの変化では警告を繰り返さない。ファイルが正常化した場合は通知状態を破棄し、復旧通知は出さない。
 
 ## 2. ファイル監視
 
-Extension Host は設定ファイルの変更をリアルタイムで検知し、サイドバーを常に最新の状態に保つ。`vscode.workspace.createFileSystemWatcher` を使い、`.vscode/launch-composer/**/*.json` のファイル変更を監視する。
+Extension Host は設定ファイルの変更をリアルタイムで検知し、サイドバーを常に最新の状態に保つ。`vscode.workspace.createFileSystemWatcher` と `workspace.onDidChangeTextDocument` / `workspace.onDidSaveTextDocument` を使い、`.vscode/launch-composer/**/*.json` のファイル変更を監視する。
 
-| イベント                   | 動作                                             |
-| -------------------------- | ------------------------------------------------ |
-| ファイルの作成・変更・削除 | サイドバーの TreeView と編集パネルを自動更新する |
+| イベント                               | 動作                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------- |
+| `FileSystemWatcher` の作成・変更・削除 | サイドバーの TreeView と編集パネルを自動更新する。issue 通知は出さない |
+| `workspace.onDidChangeTextDocument`    | サイドバーの TreeView と編集パネルを自動更新する。issue 通知は出さない |
+| `workspace.onDidSaveTextDocument`      | サイドバーの TreeView と編集パネルを自動更新し、issue 通知を評価する   |
 
 現在開いているエントリの所属ファイルが invalid になった場合、編集パネルは閉じず read-only 状態に切り替える。対象ファイルが未存在になった場合のみ、編集対象なしとしてパネルを閉じる。
+
+### 2.1 GUI 保存と直接編集の競合
+
+Webview からの保存は、対象ファイル全体の再生成ではなく、編集中エントリに対する差分パッチとして適用する。Extension Host は保存要求ごとに `baseRevision` と現在の file revision を照合し、一致した場合のみ JSONC の該当エントリへ部分更新を書く。
+
+revision が一致しない場合、Extension Host は保存を拒否して conflict を返す。Webview はその結果を受けて最新のワークスペース状態を再取得し、直接編集された内容を優先して UI を更新する。
 
 ---
 

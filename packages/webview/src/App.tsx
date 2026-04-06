@@ -1,6 +1,8 @@
 import {
   startTransition,
+  useCallback,
   useEffect,
+  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
@@ -10,6 +12,7 @@ import { ConfigEditor } from './components/ConfigEditor.js';
 import { TemplateEditor } from './components/TemplateEditor.js';
 import type {
   ConfigData,
+  EntryPatchOperation,
   HostMessage,
   InitialDataPayload,
   TemplateData,
@@ -19,9 +22,92 @@ import { vscode } from './utils/vscode.js';
 
 const rpc = new RpcClient();
 
+type EntryData = TemplateData | ConfigData;
+
 export function App() {
   const [payload, setPayload] = useState<InitialDataPayload | null>(
     () => vscode.getState<InitialDataPayload>() ?? null,
+  );
+  const updateQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const revisionRef = useRef<string | null>(payload?.editorRevision ?? null);
+  const editorKey =
+    payload === null
+      ? ''
+      : `${payload.editor.kind}:${payload.editor.file}:${payload.editor.index}`;
+
+  const requestLatestPayload = useCallback(async () => {
+    const result = await rpc.sendRequest({ type: 'request-initial-data' });
+    if (!isInitialDataPayload(result)) {
+      return;
+    }
+
+    startTransition(() => {
+      setPayload(result);
+    });
+  }, []);
+
+  const enqueueUpdate = useCallback(
+    (
+      kind: 'template' | 'config',
+      file: string,
+      index: number,
+      patches: EntryPatchOperation[],
+    ) => {
+      if (patches.length === 0) {
+        return;
+      }
+
+      updateQueueRef.current = updateQueueRef.current
+        .then(async () => {
+          const baseRevision = revisionRef.current;
+          const result = await rpc.sendRequest(
+            kind === 'template'
+              ? {
+                  type: 'update-template',
+                  payload: {
+                    file,
+                    index,
+                    baseRevision,
+                    patches,
+                  },
+                }
+              : {
+                  type: 'update-config',
+                  payload: {
+                    file,
+                    index,
+                    baseRevision,
+                    patches,
+                  },
+                },
+          );
+
+          if (!isUpdateResult(result)) {
+            return;
+          }
+
+          if (result.success !== true) {
+            if (result.conflict === true) {
+              await requestLatestPayload();
+            }
+            return;
+          }
+
+          revisionRef.current = result.revision ?? baseRevision;
+          setPayload((currentPayload) => {
+            if (currentPayload === null) {
+              return currentPayload;
+            }
+
+            return {
+              ...currentPayload,
+              editorRevision: result.revision ?? currentPayload.editorRevision,
+            };
+          });
+        })
+        .catch(() => undefined);
+    },
+    [requestLatestPayload],
   );
 
   useEffect(() => {
@@ -37,24 +123,30 @@ export function App() {
 
       startTransition(() => {
         setPayload(message.payload);
-        vscode.setState(message.payload);
       });
     }
 
     window.addEventListener('message', onMessage as EventListener);
-    void rpc.sendRequest({ type: 'request-initial-data' }).then((result) => {
-      if (isInitialDataPayload(result)) {
-        startTransition(() => {
-          setPayload(result);
-          vscode.setState(result);
-        });
-      }
-    });
+    void requestLatestPayload();
 
     return () => {
       window.removeEventListener('message', onMessage as EventListener);
     };
-  }, []);
+  }, [requestLatestPayload]);
+
+  useEffect(() => {
+    revisionRef.current = payload?.editorRevision ?? null;
+  }, [payload?.editorRevision, editorKey]);
+
+  useEffect(() => {
+    updateQueueRef.current = Promise.resolve();
+  }, [editorKey]);
+
+  useEffect(() => {
+    if (payload !== null) {
+      vscode.setState(payload);
+    }
+  }, [payload]);
 
   if (payload === null) {
     return (
@@ -111,15 +203,17 @@ export function App() {
                   readOnlyIssue: currentIssue,
                 })}
             onChange={(nextData) => {
+              const currentData =
+                (current as TemplateData | undefined) ??
+                createPlaceholderTemplate(payload.editor.file);
+              const patches = createEntryPatches(currentData, nextData);
               updatePayload(payload, setPayload, payload.editor, nextData);
-              rpc.post({
-                type: 'update-template',
-                payload: {
-                  file: payload.editor.file,
-                  index: payload.editor.index,
-                  data: nextData,
-                },
-              });
+              enqueueUpdate(
+                'template',
+                payload.editor.file,
+                payload.editor.index,
+                patches,
+              );
             }}
             onOpenJson={() => {
               rpc.post(
@@ -157,15 +251,17 @@ export function App() {
               return isFileSelected(result) ? result.path : null;
             }}
             onChange={(nextData) => {
+              const currentData =
+                (current as ConfigData | undefined) ??
+                createPlaceholderConfig(payload.editor.file);
+              const patches = createEntryPatches(currentData, nextData);
               updatePayload(payload, setPayload, payload.editor, nextData);
-              rpc.post({
-                type: 'update-config',
-                payload: {
-                  file: payload.editor.file,
-                  index: payload.editor.index,
-                  data: nextData,
-                },
-              });
+              enqueueUpdate(
+                'config',
+                payload.editor.file,
+                payload.editor.index,
+                patches,
+              );
             }}
             onOpenJson={() => {
               rpc.post(
@@ -228,7 +324,6 @@ function updatePayload(
         };
 
   setPayload(nextPayload);
-  vscode.setState(nextPayload);
 }
 
 function isInitialDataPayload(value: unknown): value is InitialDataPayload {
@@ -237,6 +332,75 @@ function isInitialDataPayload(value: unknown): value is InitialDataPayload {
 
 function isFileSelected(value: unknown): value is { path: string | null } {
   return typeof value === 'object' && value !== null && 'path' in value;
+}
+
+function isUpdateResult(value: unknown): value is {
+  success: boolean;
+  conflict?: boolean;
+  revision?: string | null;
+  error?: string;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'success' in value &&
+    typeof (value as { success: unknown }).success === 'boolean'
+  );
+}
+
+function createEntryPatches(
+  current: EntryData,
+  next: EntryData,
+): EntryPatchOperation[] {
+  const currentRecord = current as Record<string, unknown>;
+  const nextRecord = next as Record<string, unknown>;
+  const keys = new Set([
+    ...Object.keys(currentRecord),
+    ...Object.keys(nextRecord),
+  ]);
+
+  const patches: EntryPatchOperation[] = [];
+  for (const key of [...keys].sort((left, right) =>
+    left.localeCompare(right),
+  )) {
+    const hasCurrent = Object.hasOwn(currentRecord, key);
+    const hasNext = Object.hasOwn(nextRecord, key);
+
+    if (hasCurrent && !hasNext) {
+      patches.push({
+        type: 'delete',
+        key,
+      });
+      continue;
+    }
+
+    if (!hasNext) {
+      continue;
+    }
+
+    const nextValue = nextRecord[key];
+    if (!hasCurrent || !isEqualPatchValue(currentRecord[key], nextValue)) {
+      patches.push({
+        type: 'set',
+        key,
+        value: nextValue,
+      });
+    }
+  }
+
+  return patches;
+}
+
+function isEqualPatchValue(left: unknown, right: unknown): boolean {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    if (left.length !== right.length) {
+      return false;
+    }
+
+    return left.every((entry, index) => entry === right[index]);
+  }
+
+  return left === right;
 }
 
 function createPlaceholderTemplate(file: string): TemplateData {

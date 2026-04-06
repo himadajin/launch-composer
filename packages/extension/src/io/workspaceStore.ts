@@ -10,9 +10,12 @@ import * as vscode from 'vscode';
 
 import type { EditorTarget } from '../messages.js';
 import {
+  applyArrayObjectPatch,
+  createTextRevision,
   findArrayEntryOffset,
   parseJsonc,
   parseJsoncDocument,
+  type JsonObjectPatchOperation,
   type JsonParseIssue,
   stringifyJsonFile,
 } from './json.js';
@@ -50,6 +53,16 @@ type ArrayFileReadResult<T> =
   | { status: 'ok'; data: T[] }
   | { status: 'missing' }
   | { status: 'invalid'; issue: ComposerDataIssue };
+
+export type EntryPatchResult =
+  | {
+      status: 'ok';
+      revision: string | null;
+    }
+  | {
+      status: 'conflict';
+      revision: string | null;
+    };
 
 export class WorkspaceStore {
   constructor(private readonly workspaceRoot: vscode.Uri) {}
@@ -178,6 +191,26 @@ export class WorkspaceStore {
     return this.getDataFileRelativePath(target.kind, target.file);
   }
 
+  async getDataFileRevision(
+    kind: 'template' | 'config',
+    file: string,
+  ): Promise<string | null> {
+    const uri = this.getDataFileUri(kind, file);
+    let bytes: Uint8Array;
+
+    try {
+      bytes = await vscode.workspace.fs.readFile(uri);
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return null;
+      }
+
+      throw error;
+    }
+
+    return createTextRevision(decodeText(bytes));
+  }
+
   async renameDataFile(
     kind: 'template' | 'config',
     file: string,
@@ -268,26 +301,22 @@ export class WorkspaceStore {
     };
   }
 
-  async updateTemplate(
+  async patchTemplateEntry(
     file: string,
     index: number,
-    data: TemplateData,
-  ): Promise<void> {
-    const fileData = await this.readTemplateFile(file);
-    assertIndex(fileData.templates, index, file);
-    fileData.templates[index] = data;
-    await this.writeTemplateFile(fileData);
+    baseRevision: string | null,
+    patches: JsonObjectPatchOperation[],
+  ): Promise<EntryPatchResult> {
+    return this.patchArrayEntry('template', file, index, baseRevision, patches);
   }
 
-  async updateConfig(
+  async patchConfigEntry(
     file: string,
     index: number,
-    data: ConfigData,
-  ): Promise<void> {
-    const fileData = await this.readConfigFile(file);
-    assertIndex(fileData.configs, index, file);
-    fileData.configs[index] = data;
-    await this.writeConfigFile(fileData);
+    baseRevision: string | null,
+    patches: JsonObjectPatchOperation[],
+  ): Promise<EntryPatchResult> {
+    return this.patchArrayEntry('config', file, index, baseRevision, patches);
   }
 
   async toggleConfigEnabled(file: string, index: number): Promise<void> {
@@ -603,6 +632,75 @@ export class WorkspaceStore {
     }
 
     return { status: 'ok', data: parsed.value as T[] };
+  }
+
+  private async patchArrayEntry(
+    kind: 'template' | 'config',
+    file: string,
+    index: number,
+    baseRevision: string | null,
+    patches: JsonObjectPatchOperation[],
+  ): Promise<EntryPatchResult> {
+    if (patches.length === 0) {
+      const revision = await this.getDataFileRevision(kind, file);
+      return {
+        status: 'ok',
+        revision,
+      };
+    }
+
+    const uri = this.getDataFileUri(kind, file);
+    let bytes: Uint8Array;
+
+    try {
+      bytes = await vscode.workspace.fs.readFile(uri);
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        throw new Error(`File not found: ${file}`);
+      }
+
+      throw error;
+    }
+
+    const text = decodeText(bytes);
+    const currentRevision = createTextRevision(text);
+    if (baseRevision !== currentRevision) {
+      return {
+        status: 'conflict',
+        revision: currentRevision,
+      };
+    }
+
+    const parsed = parseJsoncDocument<unknown>(text);
+    if (parsed.issues.length > 0) {
+      throw new Error(
+        this.createParseIssue(kind, file, text, parsed.issues).message,
+      );
+    }
+
+    if (!Array.isArray(parsed.value)) {
+      throw new Error(`${file} must contain a JSON array.`);
+    }
+
+    assertIndex(parsed.value, index, file);
+    const entry = parsed.value[index];
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new Error(`Entry index ${index} in ${file} must be a JSON object.`);
+    }
+
+    const nextText = applyArrayObjectPatch(text, index, patches);
+    if (nextText === text) {
+      return {
+        status: 'ok',
+        revision: currentRevision,
+      };
+    }
+
+    await vscode.workspace.fs.writeFile(uri, encodeText(nextText));
+    return {
+      status: 'ok',
+      revision: createTextRevision(nextText),
+    };
   }
 
   private async writeTemplateFile(fileData: TemplateFileData): Promise<void> {

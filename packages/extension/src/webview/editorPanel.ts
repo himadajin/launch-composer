@@ -5,6 +5,7 @@ import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
 import type {
+  EntryPatchOperation,
   EditorTarget,
   HostMessage,
   InitialDataPayload,
@@ -105,20 +106,20 @@ export class EditorPanelController {
           await this.postInitialData(message.requestId);
           return;
         case 'update-template':
-          await this.options.store.updateTemplate(
-            message.payload.file,
-            message.payload.index,
-            message.payload.data,
-          );
-          this.options.onDidMutate();
+          await this.applyEntryPatch(message.requestId, 'template', {
+            file: message.payload.file,
+            index: message.payload.index,
+            baseRevision: message.payload.baseRevision,
+            patches: message.payload.patches,
+          });
           return;
         case 'update-config':
-          await this.options.store.updateConfig(
-            message.payload.file,
-            message.payload.index,
-            message.payload.data,
-          );
-          this.options.onDidMutate();
+          await this.applyEntryPatch(message.requestId, 'config', {
+            file: message.payload.file,
+            index: message.payload.index,
+            baseRevision: message.payload.baseRevision,
+            patches: message.payload.patches,
+          });
           return;
         case 'browse-file':
           await this.respond(message.requestId, {
@@ -193,6 +194,69 @@ export class EditorPanelController {
     }
   }
 
+  private async applyEntryPatch(
+    requestId: string,
+    kind: 'template' | 'config',
+    payload: {
+      file: string;
+      index: number;
+      baseRevision: string | null;
+      patches: EntryPatchOperation[];
+    },
+  ): Promise<void> {
+    try {
+      const result =
+        kind === 'template'
+          ? await this.options.store.patchTemplateEntry(
+              payload.file,
+              payload.index,
+              payload.baseRevision,
+              payload.patches,
+            )
+          : await this.options.store.patchConfigEntry(
+              payload.file,
+              payload.index,
+              payload.baseRevision,
+              payload.patches,
+            );
+
+      if (result.status === 'conflict') {
+        await this.respond(requestId, {
+          type: 'update-result',
+          requestId,
+          payload: {
+            success: false,
+            conflict: true,
+            revision: result.revision,
+          },
+        });
+        await this.syncWithWorkspace();
+        return;
+      }
+
+      this.options.onDidMutate();
+      await this.respond(requestId, {
+        type: 'update-result',
+        requestId,
+        payload: {
+          success: true,
+          revision: result.revision,
+        },
+      });
+    } catch (error) {
+      await this.respond(requestId, {
+        type: 'update-result',
+        requestId,
+        payload: {
+          success: false,
+          error:
+            error instanceof Error ? error.message : 'Failed to update entry.',
+        },
+      });
+      throw error;
+    }
+  }
+
   private async postInitialData(
     requestId: string,
     data?: WorkspaceDataSnapshot,
@@ -205,6 +269,10 @@ export class EditorPanelController {
     const payload: InitialDataPayload = {
       ...snapshot,
       editor: this.currentTarget,
+      editorRevision: await this.options.store.getDataFileRevision(
+        this.currentTarget.kind,
+        this.currentTarget.file,
+      ),
       autoSaveDelay: getAutoSaveDelay(),
     };
 

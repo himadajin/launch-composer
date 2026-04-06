@@ -1,7 +1,5 @@
 import type {
-  ConfigData,
   ConfigFileData,
-  TemplateData,
   TemplateFileData,
   ValidationError,
 } from '@launch-composer/core';
@@ -18,17 +16,41 @@ export interface InitialDataPayload {
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
   editor: EditorTarget;
+  editorRevision: string | null;
   autoSaveDelay: number;
 }
+
+export type EntryPatchOperation =
+  | {
+      type: 'set';
+      key: string;
+      value: unknown;
+    }
+  | {
+      type: 'delete';
+      key: string;
+    };
 
 export type WebviewMessage =
   | {
       type: 'update-template';
-      payload: { file: string; index: number; data: TemplateData };
+      requestId: string;
+      payload: {
+        file: string;
+        index: number;
+        baseRevision: string | null;
+        patches: EntryPatchOperation[];
+      };
     }
   | {
       type: 'update-config';
-      payload: { file: string; index: number; data: ConfigData };
+      requestId: string;
+      payload: {
+        file: string;
+        index: number;
+        baseRevision: string | null;
+        patches: EntryPatchOperation[];
+      };
     }
   | {
       type: 'delete-template';
@@ -54,6 +76,16 @@ export type HostMessage =
       type: 'initial-data';
       requestId: string;
       payload: InitialDataPayload;
+    }
+  | {
+      type: 'update-result';
+      requestId: string;
+      payload: {
+        success: boolean;
+        conflict?: boolean;
+        revision?: string | null;
+        error?: string;
+      };
     }
   | {
       type: 'delete-result';

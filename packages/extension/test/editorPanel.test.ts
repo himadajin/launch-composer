@@ -30,10 +30,16 @@ test('syncWithWorkspace closes the editor panel when the current target no longe
         issues: [],
       };
     },
+    async getDataFileRevision() {
+      return 'rev:0';
+    },
     async hasEntry() {
       return exists;
     },
-  } as Pick<WorkspaceStore, 'readAll' | 'hasEntry'> as WorkspaceStore;
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'hasEntry'
+  > as WorkspaceStore;
 
   const controller = new EditorPanelController({
     context:
@@ -76,10 +82,16 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
         issues: [],
       };
     },
+    async getDataFileRevision() {
+      return 'rev:1';
+    },
     async hasEntry() {
       return true;
     },
-  } as Pick<WorkspaceStore, 'readAll' | 'hasEntry'> as WorkspaceStore;
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'hasEntry'
+  > as WorkspaceStore;
 
   const controller = new EditorPanelController({
     context:
