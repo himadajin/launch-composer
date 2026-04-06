@@ -53,4 +53,4 @@ Install the VSIX in VS Code:
 
 1. Open the Command Palette.
 2. Run `Extensions: Install from VSIX...`.
-3. Select `packages/extension/launch-composer-0.1.0.vsix`.
+3. Select `packages/extension/launch-composer.vsix`.

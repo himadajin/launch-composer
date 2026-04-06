@@ -2,7 +2,7 @@
   "name": "launch-composer",
   "displayName": "Launch Composer",
   "description": "Compose VSCode launch.json from templates and configs.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "himadajin",
   "license": "MIT",
   "homepage": "https://github.com/himadajin/launch-composer",
@@ -33,7 +33,7 @@
     "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
-    "@launch-composer/core": "0.1.0",
+    "@launch-composer/core": "0.1.1",
     "@types/vscode": "^1.99.0",
     "@vscode/vsce": "^3.7.1",
     "esbuild": "^0.25.11"
