@@ -71,12 +71,12 @@ test('package.json command contributions stay aligned with the extension impleme
   ]);
   assert.deepEqual(packageJson.contributes.views.launchComposer, [
     {
-      id: 'launchComposer.templates',
-      name: 'TEMPLATES',
-    },
-    {
       id: 'launchComposer.configs',
       name: 'CONFIGS',
+    },
+    {
+      id: 'launchComposer.templates',
+      name: 'TEMPLATES',
     },
   ]);
   assert.equal(packageJson.contributes.views.explorer, undefined);

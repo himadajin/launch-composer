@@ -74,15 +74,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
-  const syncUiWithWorkspace = async (): Promise<void> => {
+  const syncUiWithWorkspace = async (options?: {
+    notifyIssues?: boolean;
+  }): Promise<void> => {
     const snapshot = await store.readAll();
-    reportIssues(snapshot.issues);
+    if (options?.notifyIssues !== false) {
+      reportIssues(snapshot.issues);
+    }
     applySnapshot(snapshot);
     await editorPanel.syncWithWorkspaceData(snapshot);
   };
 
   const refreshViews = (): void => {
-    void syncUiWithWorkspace().catch(showError);
+    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
   };
 
   const revealTarget = async (target: EditorTarget): Promise<void> => {
@@ -147,13 +151,13 @@ export function activate(context: vscode.ExtensionContext): void {
     store.getRelativeComposerPattern(),
   );
   watcher.onDidCreate(() => {
-    void syncUiWithWorkspace().catch(showError);
+    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
   });
   watcher.onDidChange(() => {
-    void syncUiWithWorkspace().catch(showError);
+    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
   });
   watcher.onDidDelete(() => {
-    void syncUiWithWorkspace().catch(showError);
+    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
   });
 
   const deleteSubscription = vscode.workspace.onDidDeleteFiles((event) => {
@@ -164,11 +168,33 @@ export function activate(context: vscode.ExtensionContext): void {
     void syncUiWithWorkspace().catch(showError);
   });
 
+  const textChangeSubscription = vscode.workspace.onDidChangeTextDocument(
+    (event) => {
+      if (!store.isComposerDataFile(event.document.uri)) {
+        return;
+      }
+
+      void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
+    },
+  );
+
+  const saveSubscription = vscode.workspace.onDidSaveTextDocument(
+    (document) => {
+      if (!store.isComposerDataFile(document.uri)) {
+        return;
+      }
+
+      void syncUiWithWorkspace({ notifyIssues: true }).catch(showError);
+    },
+  );
+
   context.subscriptions.push(
     templateView,
     configView,
     watcher,
     deleteSubscription,
+    textChangeSubscription,
+    saveSubscription,
     registerCommand(COMMANDS.generate, async () => {
       try {
         await handleGenerate();
@@ -436,6 +462,13 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
+    registerCommand(COMMANDS.openActiveEditorJson, async () => {
+      try {
+        await editorPanel.openCurrentAsJson();
+      } catch (error) {
+        showError(error);
+      }
+    }),
     registerCommand(COMMANDS.openItemJson, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {
@@ -526,16 +559,15 @@ export function activate(context: vscode.ExtensionContext): void {
       await setConfigEnabled(node, false, store, syncUiWithWorkspace);
     }),
     registerCommand(COMMANDS.toggleEnabled, async (node?: TreeNode) => {
-      if (
-        node === undefined ||
-        node.type !== 'entry' ||
-        node.target.kind !== 'config'
-      ) {
-        return;
-      }
-
       try {
-        await store.toggleConfigEnabled(node.target.file, node.target.index);
+        if (node?.type === 'entry' && node.target.kind === 'config') {
+          await store.toggleConfigEnabled(node.target.file, node.target.index);
+        } else if (node?.type === 'file' && node.kind === 'config') {
+          await store.toggleConfigFileEnabled(node.file);
+        } else {
+          return;
+        }
+
         await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
@@ -736,7 +768,7 @@ function getIssueKey(issue: ComposerDataIssue): string {
 }
 
 function getIssueFingerprint(issue: ComposerDataIssue): string {
-  return `${issue.code}:${issue.message}:${issue.details ?? ''}`;
+  return `${issue.code}:${issue.message}`;
 }
 
 function getFileNode(
@@ -768,6 +800,20 @@ async function setConfigEnabled(
   store: WorkspaceStore,
   refresh: () => Promise<void>,
 ): Promise<void> {
+  if (node?.type === 'file' && node.kind === 'config') {
+    if (node.enabled === enabled) {
+      return;
+    }
+
+    try {
+      await store.toggleConfigFileEnabled(node.file);
+      await refresh();
+    } catch (error) {
+      showError(error);
+    }
+    return;
+  }
+
   const entryNode = getEntryNode(node);
   if (entryNode === undefined || entryNode.target.kind !== 'config') {
     return;

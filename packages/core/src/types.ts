@@ -20,7 +20,8 @@ export interface TemplateFileData {
 
 export interface ConfigFileData {
   file: string;
-  configs: ConfigData[];
+  enabled?: boolean;
+  configurations: ConfigData[];
 }
 
 export interface ArgsFileData {

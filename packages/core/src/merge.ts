@@ -26,7 +26,7 @@ export function buildLaunchConfig(
   }
 
   merged.type = ensureRequiredLaunchField(merged.type);
-  merged.request = ensureRequiredLaunchField(merged.request);
+  merged.request = requireDebugRequest(merged.request);
 
   return merged;
 }
@@ -75,4 +75,12 @@ function omitKeys(
 
 function ensureRequiredLaunchField(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function requireDebugRequest(value: unknown): 'launch' | 'attach' {
+  if (value === 'launch' || value === 'attach') {
+    return value;
+  }
+
+  throw new Error('Debug request must be "launch" or "attach".');
 }

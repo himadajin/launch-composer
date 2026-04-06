@@ -11,9 +11,12 @@ const DEFAULT_TEMPLATE_TEXT =
   '// Each template should have a unique "name".\n' +
   '[]\n';
 const DEFAULT_CONFIG_TEXT =
-  '// Add config entries to this array.\n' +
+  '// Configure this file and add entries to "configurations".\n' +
   '// Use "extends" to reference a template when needed.\n' +
-  '[]\n';
+  '{\n' +
+  '  "enabled": true,\n' +
+  '  "configurations": []\n' +
+  '}\n';
 
 const testVscode = vscode as typeof vscode & {
   __testing: {
@@ -180,7 +183,7 @@ test('initialize creates only the missing default file when one already exists',
       'config.json',
     ),
     new TextEncoder().encode(
-      '[\n  {\n    "name": "keep-me",\n    "enabled": false\n  }\n]\n',
+      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "keep-me",\n      "enabled": false\n    }\n  ]\n}\n',
     ),
   );
 
@@ -208,7 +211,7 @@ test('initialize creates only the missing default file when one already exists',
   assert.equal(new TextDecoder().decode(templateBytes), DEFAULT_TEMPLATE_TEXT);
   assert.equal(
     new TextDecoder().decode(configBytes),
-    '[\n  {\n    "name": "keep-me",\n    "enabled": false\n  }\n]\n',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "keep-me",\n      "enabled": false\n    }\n  ]\n}\n',
   );
 });
 
@@ -352,7 +355,7 @@ test('addTemplateEntry creates its backing file when it does not exist', async (
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": ""\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": "launch"\n  }\n]',
   );
 });
 
@@ -381,7 +384,7 @@ test('addConfigEntry creates its backing file when it does not exist', async () 
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "Basic Test",\n    "enabled": true,\n    "extends": "cpp"\n  }\n]',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Basic Test",\n      "enabled": true,\n      "extends": "cpp"\n    }\n  ]\n}',
   );
 });
 
@@ -409,7 +412,27 @@ test('addConfig command creates enabled configs by default', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "Launch",\n    "enabled": true,\n    "type": "",\n    "request": ""\n  }\n]',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "",\n      "request": "launch"\n    }\n  ]\n}',
+  );
+});
+
+test('toggleConfigFileEnabled updates the file-level enabled flag', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/toggle-config-file-project'),
+  );
+
+  await store.addConfigEntry('config.json', 'Launch', undefined);
+  await store.toggleConfigFileEnabled('config.json');
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/toggle-config-file-project/.vscode/launch-composer/configs/config.json',
+    ),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "",\n      "request": "launch"\n    }\n  ]\n}\n',
   );
 });
 
@@ -506,7 +529,7 @@ test('renameEntry updates template references in configs', async () => {
       '/workspace/rename-entry-project/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '[\n  {\n    "name": "Launch",\n    "enabled": false,\n    "extends": "cpp"\n  }\n]\n',
+      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "extends": "cpp"\n    }\n  ]\n}\n',
     ),
   );
 
@@ -538,7 +561,89 @@ test('renameEntry updates template references in configs', async () => {
   );
   assert.equal(
     new TextDecoder().decode(configBytes),
-    '[\n  {\n    "name": "Launch",\n    "enabled": false,\n    "extends": "cpp-renamed"\n  }\n]\n',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "extends": "cpp-renamed"\n    }\n  ]\n}\n',
+  );
+});
+
+test('patchTemplateEntry rejects name updates', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/patch-template-name-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/patch-template-name-project/.vscode/launch-composer/templates/template.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/patch-template-name-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "cpp",\n    "type": "cppdbg",\n    "request": "launch"\n  }\n]\n',
+    ),
+  );
+
+  const revision = await store.getDataFileRevision('template', 'template.json');
+
+  await assert.rejects(
+    async () =>
+      store.patchTemplateEntry('template.json', 0, revision, [
+        {
+          type: 'set',
+          key: 'name',
+          value: 'cpp-renamed',
+        },
+      ]),
+    /Entry name changes must use the rename entry flow\./,
+  );
+
+  const bytes = await vscode.workspace.fs.readFile(fileUri);
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '[\n  {\n    "name": "cpp",\n    "type": "cppdbg",\n    "request": "launch"\n  }\n]\n',
+  );
+});
+
+test('patchConfigEntry rejects name updates', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/patch-config-name-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/patch-config-name-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/patch-config-name-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "cppdbg",\n      "request": "launch"\n    }\n  ]\n}\n',
+    ),
+  );
+
+  const revision = await store.getDataFileRevision('config', 'config.json');
+
+  await assert.rejects(
+    async () =>
+      store.patchConfigEntry('config.json', 0, revision, [
+        {
+          type: 'set',
+          key: 'name',
+          value: 'Launch Renamed',
+        },
+      ]),
+    /Entry name changes must use the rename entry flow\./,
+  );
+
+  const bytes = await vscode.workspace.fs.readFile(fileUri);
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "cppdbg",\n      "request": "launch"\n    }\n  ]\n}\n',
   );
 });
 
@@ -602,7 +707,7 @@ test('addTemplate initializes directories before listing files', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": ""\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": "launch"\n  }\n]',
   );
 });
 

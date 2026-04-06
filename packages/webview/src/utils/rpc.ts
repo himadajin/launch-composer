@@ -1,6 +1,12 @@
 import { vscode } from './vscode.js';
 import type { HostMessage, WebviewMessage } from '../types.js';
 
+type RequestMessage = Extract<WebviewMessage, { requestId: string }>;
+type WithoutRequestId<T> = T extends { requestId: string }
+  ? Omit<T, 'requestId'>
+  : never;
+type RequestPayloadMessage = WithoutRequestId<RequestMessage>;
+
 export class RpcClient {
   private readonly pending = new Map<string, (message: HostMessage) => void>();
 
@@ -8,9 +14,7 @@ export class RpcClient {
     vscode.postMessage(message);
   }
 
-  sendRequest(
-    message: Omit<WebviewMessage, 'requestId'>,
-  ): Promise<HostMessage['payload']> {
+  sendRequest(message: RequestPayloadMessage): Promise<HostMessage['payload']> {
     const requestId = crypto.randomUUID();
 
     return new Promise((resolve) => {

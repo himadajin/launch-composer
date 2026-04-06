@@ -12,20 +12,25 @@ import { useEffect, useState } from 'react';
 
 import type { ComposerDataIssue, ConfigData, TemplateData } from '../types.js';
 import {
+  DEBUG_REQUEST_OPTIONS,
+  normalizeDebugRequest,
   stringOrEmpty,
   updateOptionalArray,
   updateOptionalString,
   updateRequiredString,
   useDebouncedCommit,
 } from './editorUtils.js';
+import { EditInJsonHint } from './EditInJsonHint.js';
 
 interface ConfigEditorProps {
   data: ConfigData;
   sourceFile: string;
+  fileEnabled: boolean;
   templates: TemplateData[];
   autoSaveDelay: number;
   onBrowseFile: () => Promise<string | null>;
   onChange: (data: ConfigData) => void;
+  onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
   readOnlyIssue?: ComposerDataIssue;
 }
@@ -33,25 +38,32 @@ interface ConfigEditorProps {
 export function ConfigEditor({
   data,
   sourceFile,
+  fileEnabled,
   templates,
   autoSaveDelay,
   onBrowseFile,
   onChange,
+  onRename,
   onOpenJson,
   readOnlyIssue,
 }: ConfigEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
+  const [name, setName] = useState(data.name);
   const [type, setType] = useState(stringOrEmpty(data.type));
-  const [request, setRequest] = useState(stringOrEmpty(data.request));
+  const [request, setRequest] = useState(normalizeDebugRequest(data.request));
   const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
   const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
+
+  useEffect(() => {
+    setName(data.name);
+  }, [data.name]);
 
   useEffect(() => {
     setType(stringOrEmpty(data.type));
   }, [data.type]);
 
   useEffect(() => {
-    setRequest(stringOrEmpty(data.request));
+    setRequest(normalizeDebugRequest(data.request));
   }, [data.request]);
 
   useEffect(() => {
@@ -79,7 +91,7 @@ export function ConfigEditor({
     ? stringOrEmpty(currentTemplate?.type)
     : type;
   const effectiveRequest = launchFieldsInherited
-    ? stringOrEmpty(currentTemplate?.request)
+    ? normalizeDebugRequest(currentTemplate?.request)
     : request;
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
@@ -98,14 +110,6 @@ export function ConfigEditor({
     onChange(updateRequiredString(data, 'type', value));
   });
 
-  useDebouncedCommit(request, autoSaveDelay, (value) => {
-    if (readOnly || launchFieldsInherited) {
-      return;
-    }
-
-    onChange(updateRequiredString(data, 'request', value));
-  });
-
   useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
     if (readOnly) {
       return;
@@ -114,36 +118,35 @@ export function ConfigEditor({
     onChange(updateOptionalString(data, 'argsFile', value));
   });
 
+  const commitName = async () => {
+    if (readOnly || name === data.name) {
+      return;
+    }
+
+    await onRename(name);
+  };
+
   return (
     <div className="composer-editor">
-      <header className="composer-editor-header">
-        <div className="composer-editor-title">
-          <p className="composer-editor-eyebrow">Config</p>
-          <h1 className="settings-group-title-label composer-editor-heading">
-            {data.name}
-          </h1>
-          <p className="composer-editor-meta">{sourceFile}</p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          icon="json"
-          onClick={onOpenJson}
-        >
-          Open JSON
-        </Button>
-      </header>
-
       <FormContainer className="composer-form">
         {readOnlyIssue !== undefined ? (
           <FormGroup
             label="JSON Status"
             description={readOnlyIssue.message}
             helper={
-              <FormHelper tone="warning">
-                {readOnlyIssue.details ??
-                  'Fix the JSON file to resume form editing.'}
-              </FormHelper>
+              <div className="composer-json-status">
+                <FormHelper tone="warning">
+                  {readOnlyIssue.details ??
+                    'Fix the JSON file to resume form editing.'}
+                </FormHelper>
+                <button
+                  type="button"
+                  className="composer-json-link"
+                  onClick={onOpenJson}
+                >
+                  Edit in {sourceFile}
+                </button>
+              </div>
             }
             fill
           >
@@ -158,9 +161,24 @@ export function ConfigEditor({
         <FormGroup
           category="Launch Composer"
           label="Config: Name"
-          description="Configuration name. This value is fixed after creation."
+          description="Configuration name written to the generated launch.json entry."
         >
-          <TextInput readOnly value={data.name} />
+          <TextInput
+            disabled={readOnly}
+            value={name}
+            onChange={setName}
+            onBlur={() => {
+              void commitName();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') {
+                return;
+              }
+
+              event.preventDefault();
+              event.currentTarget.blur();
+            }}
+          />
         </FormGroup>
 
         <FormGroup
@@ -180,7 +198,7 @@ export function ConfigEditor({
               if (value === '(none)') {
                 delete next.extends;
                 next.type = stringOrEmpty(next.type);
-                next.request = stringOrEmpty(next.request);
+                next.request = 'launch';
               } else {
                 next.extends = value;
                 delete next.type;
@@ -195,6 +213,13 @@ export function ConfigEditor({
           label="Config: Enabled"
           description="Include this config when generating launch.json."
           modified={data.enabled === true}
+          helper={
+            !fileEnabled ? (
+              <FormHelper tone="info">
+                This config is currently disabled by the file-level setting.
+              </FormHelper>
+            ) : undefined
+          }
         >
           <Checkbox
             toggle
@@ -243,10 +268,18 @@ export function ConfigEditor({
             ) : undefined
           }
         >
-          <TextInput
+          <Select
             disabled={readOnly || launchFieldsInherited}
+            enum={[...DEBUG_REQUEST_OPTIONS]}
             value={effectiveRequest}
-            onChange={setRequest}
+            onChange={(value) => {
+              if (readOnly || launchFieldsInherited) {
+                return;
+              }
+
+              setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
+              onChange(updateRequiredString(data, 'request', value));
+            }}
           />
         </FormGroup>
 
@@ -345,6 +378,12 @@ export function ConfigEditor({
             />
           )}
         </FormGroup>
+
+        <EditInJsonHint
+          fileLabel={sourceFile}
+          description="Only common launch.json properties are available here. Edit the source file to add or adjust unsupported fields."
+          onOpenFileJson={onOpenJson}
+        />
       </FormContainer>
     </div>
   );

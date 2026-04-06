@@ -157,6 +157,10 @@ const configuration = new Map<string, unknown>();
 const quickPickResponses: unknown[] = [];
 const inputBoxResponses: unknown[] = [];
 const didDeleteFilesEmitter = new EventEmitter<{ files: Uri[] }>();
+const didChangeTextDocumentEmitter = new EventEmitter<{
+  document: { uri: Uri };
+}>();
+const didSaveTextDocumentEmitter = new EventEmitter<{ uri: Uri }>();
 let missingPathErrorStyle: 'vscode' | 'enoent' | 'vscode-enoent' = 'vscode';
 let lastCreatedWebviewPanel:
   | {
@@ -291,6 +295,16 @@ export const workspace = {
 
   onDidDeleteFiles(listener: (event: { files: Uri[] }) => void) {
     return didDeleteFilesEmitter.event(listener);
+  },
+
+  onDidChangeTextDocument(
+    listener: (event: { document: { uri: Uri } }) => void,
+  ) {
+    return didChangeTextDocumentEmitter.event(listener);
+  },
+
+  onDidSaveTextDocument(listener: (document: { uri: Uri }) => void) {
+    return didSaveTextDocumentEmitter.event(listener);
   },
 
   asRelativePath(uri: Uri, includeWorkspaceFolder = true): string {
@@ -527,6 +541,8 @@ export const __testing = {
     workspaceFolders = undefined;
     missingPathErrorStyle = 'vscode';
     didDeleteFilesEmitter.dispose();
+    didChangeTextDocumentEmitter.dispose();
+    didSaveTextDocumentEmitter.dispose();
     lastCreatedWebviewPanel = undefined;
   },
 

@@ -1,4 +1,6 @@
 import {
+  applyEdits,
+  modify,
   parse,
   parseTree,
   printParseErrorCode,
@@ -9,6 +11,17 @@ export interface JsonParseIssue {
   code: string;
   offset: number;
 }
+
+export type JsonObjectPatchOperation =
+  | {
+      type: 'set';
+      key: string;
+      value: unknown;
+    }
+  | {
+      type: 'delete';
+      key: string;
+    };
 
 export function parseJsoncDocument<T>(text: string): {
   value: T;
@@ -46,22 +59,76 @@ export function stringifyJsonFile(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+export function applyArrayObjectPatch(
+  text: string,
+  path: (string | number)[],
+  patches: JsonObjectPatchOperation[],
+): string {
+  let nextText = text;
+
+  for (const patch of patches) {
+    const edits = modify(
+      nextText,
+      [...path, patch.key],
+      patch.type === 'set' ? patch.value : undefined,
+      {
+        formattingOptions: {
+          insertSpaces: true,
+          tabSize: 2,
+          eol: '\n',
+        },
+      },
+    );
+
+    nextText = applyEdits(nextText, edits);
+  }
+
+  return nextText.endsWith('\n') ? nextText : `${nextText}\n`;
+}
+
 export function findArrayEntryOffset(
   text: string,
-  index: number,
+  path: (string | number)[],
 ): number | null {
   const tree = parseTree(text, undefined, {
     allowTrailingComma: true,
     disallowComments: false,
   });
+  let node = tree;
 
-  if (
-    tree === undefined ||
-    tree.type !== 'array' ||
-    tree.children === undefined
-  ) {
-    return null;
+  for (const segment of path) {
+    if (node === undefined) {
+      return null;
+    }
+
+    if (typeof segment === 'number') {
+      if (node.type !== 'array' || node.children === undefined) {
+        return null;
+      }
+      node = node.children[segment];
+      continue;
+    }
+
+    if (node.type !== 'object' || node.children === undefined) {
+      return null;
+    }
+
+    const property = node.children.find(
+      (child) => child.children?.[0]?.value === segment,
+    );
+    node = property?.children?.[1];
   }
 
-  return tree.children[index]?.offset ?? null;
+  return node?.offset ?? null;
+}
+
+export function createTextRevision(text: string): string {
+  let hash = 2166136261;
+
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return `${(hash >>> 0).toString(16)}:${text.length}`;
 }

@@ -37,6 +37,7 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
 - 機能は必要最小限に絞る。実装コストに見合わない機能、使用頻度の低い機能は入れない。後から追加できるものは後から追加する。
 - VSCode の既存の UI パターンと API に従う。独自の UI 規約を作らず、TreeView API、Codicon、テーマカラー等の標準要素をそのまま使う。
 - JSON ファイルはユーザーが直接編集する前提で扱う。入力が一時的に不正でも全体を停止させず、問題は file 単位で扱う。
+- GUI 保存はファイル全体の再生成ではなく、編集中エントリ単位の更新として扱う。`name` 以外は差分反映、`name` は専用 rename 処理とし、保存前に必要な整合性確認を行う。GUI 編集と直接編集が競合した場合はファイル側を優先する。
 - 設定や挙動のカスタマイズ項目を増やさない。選択肢が増えるとコードパスが分岐し、テストとメンテナンスのコストが増える。
 
 ---
@@ -92,8 +93,9 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
 制約:
 
 - `name` は必須とする。`templates/` ディレクトリ以下の全ファイルにわたって一意でなければならない。
+- GUI から `name` を変更する場合、テンプレート名の変更はそれを参照する config の `extends` を同時に更新する。
 - `args` は省略可能。値は文字列の配列でなければならない。
-- `type` と `request` は生成される `launch.json` では必須キーとして常に出力する。テンプレート作成直後など未設定の状態では、入力データ上は空文字 `""` を保持してよい。
+- `request` は必須とする。値は `launch` または `attach` のいずれかでなければならない。
 - テンプレートに `args` が定義されている場合、そのテンプレートを `extends` する config エントリで `argsFile` を指定してはならない。指定されていた場合は Generate 時エラーとする（spec-core.md §3.1 参照）。
 - テンプレート間の継承（template extends template）は実装しない。将来も追加しない。
 
@@ -101,34 +103,41 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
 
 ### 4.2 configs/\*.json
 
-各ファイルのルートはデバッグ構成オブジェクトの配列とする。1ファイルに複数の構成を含められる。
+各ファイルのルートは config ファイルオブジェクトとする。`configurations` 配列の各要素が 1 件のデバッグ構成を表す。1 ファイルに複数の構成を含められる。
 
 ```jsonc
-[
-  {
-    // --- 拡張機能固有キー ---
-    "name": "Basic Test", // 必須。launch.json の name になる。
-    "extends": "cpp", // 省略可。templates の name を参照。省略時はテンプレートとのマージを行わない。
-    "enabled": true, // 省略時 true。true のもののみ launch.json に出力。
-    "argsFile": "/absolute/path/to/args.json", // 省略可。
-    "args": ["--debug-mode"], // 省略可。
+{
+  "enabled": true, // 省略時 true。false の場合、このファイル内の全構成は生成対象外。
+  "configurations": [
+    {
+      // --- 拡張機能固有キー ---
+      "name": "Basic Test", // 必須。launch.json の name になる。
+      "extends": "cpp", // 省略可。templates の name を参照。省略時はテンプレートとのマージを行わない。
+      "enabled": true, // 省略時 true。file.enabled とこの値の両方が false でない場合のみ launch.json に出力。
+      "argsFile": "/absolute/path/to/args.json", // 省略可。
+      "args": ["--debug-mode"], // 省略可。
 
-    // --- パススルーキー（テンプレートをオーバーライド） ---
-    "type": "cppdbg", // extends を使わない場合のみこの config 自身で指定する。
-    "request": "launch", // extends を使わない場合のみこの config 自身で指定する。
-    "env": { "DEBUG": "1" },
-    "cwd": "${workspaceFolder}/test",
-  },
-]
+      // --- パススルーキー（テンプレートをオーバーライド） ---
+      "type": "cppdbg", // extends を使わない場合のみこの config 自身で指定する。
+      "request": "launch", // extends を使わない場合のみこの config 自身で指定する。
+      "env": { "DEBUG": "1" },
+      "cwd": "${workspaceFolder}/test",
+    },
+  ],
+}
 ```
 
-以下のキーは拡張機能が解釈する固有キーであり、launch.json にはパススルーしない: `name`, `extends`, `enabled`, `argsFile`, `args`。これら以外のキーはすべて launch.json にそのまま出力される。
+`enabled` の評価は file 単位と config 単位で独立して行う。`file.enabled === false` の場合、そのファイル内の config は各 config の `enabled` の値に関係なくすべて無効とする。`enabled` を省略した場合は file・config のどちらも `true` として扱う。
+
+以下のキーは拡張機能が解釈する固有キーであり、launch.json にはパススルーしない: file ルートの `enabled`、config エントリの `name`, `extends`, `enabled`, `argsFile`, `args`。これら以外のキーはすべて launch.json にそのまま出力される。
 
 ただし `args` は例外で、拡張機能が argsFile との合成処理を行った結果を launch.json に出力する。
 
 拡張機能固有キーとパススルーキーは同一階層にフラットに配置する。`overrides` のような名前空間分離は行わない。
 
-`extends` を使う config では、`type` と `request` は参照先テンプレートで管理する。`extends` を使わない config では、その config 自身が `type` と `request` を持つ。
+`extends` を使う config では、`type` と `request` は参照先テンプレートで管理する。`extends` を使わない config では、その config 自身が `type` と `request` を持つ。`request` は `launch` または `attach` のいずれかでなければならない。
+
+GUI から `name` を変更する場合、config の `name` はそのエントリ自身だけを更新する。template の `name` はそれを参照する config の `extends` を同時に更新する。
 
 ### 4.3 argsFile（外部ファイル）
 
@@ -173,7 +182,7 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
 
 ※ env は config で指定したため、template の env（`"PATH": "/usr/bin"`）は継承されず、config の env で丸ごと置換される（shallow merge）。
 
-`type` と `request` は生成結果で常に出力する。template と config のどちらにも値がない場合も、キー自体は削除せず空文字 `""` を出力する。
+`type` と `request` は生成結果で常に出力する。`request` は常に `launch` または `attach` のいずれかでなければならない。
 
 ---
 

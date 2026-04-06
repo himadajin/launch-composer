@@ -1,28 +1,32 @@
 import {
-  Button,
   Checkbox,
   FormContainer,
   FormGroup,
   FormHelper,
   ListEditor,
+  Select,
   TextInput,
 } from '@himadajin/vscode-components';
 import { useEffect, useState } from 'react';
 
 import type { ComposerDataIssue, TemplateData } from '../types.js';
 import {
+  DEBUG_REQUEST_OPTIONS,
+  normalizeDebugRequest,
   stringOrEmpty,
   updateOptionalArray,
   updateOptionalString,
   updateRequiredString,
   useDebouncedCommit,
 } from './editorUtils.js';
+import { EditInJsonHint } from './EditInJsonHint.js';
 
 interface TemplateEditorProps {
   data: TemplateData;
   sourceFile: string;
   autoSaveDelay: number;
   onChange: (data: TemplateData) => void;
+  onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
   readOnlyIssue?: ComposerDataIssue;
 }
@@ -32,21 +36,27 @@ export function TemplateEditor({
   sourceFile,
   autoSaveDelay,
   onChange,
+  onRename,
   onOpenJson,
   readOnlyIssue,
 }: TemplateEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
+  const [name, setName] = useState(data.name);
   const [type, setType] = useState(stringOrEmpty(data.type));
-  const [request, setRequest] = useState(stringOrEmpty(data.request));
+  const [request, setRequest] = useState(normalizeDebugRequest(data.request));
   const [program, setProgram] = useState(stringOrEmpty(data.program));
   const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
+
+  useEffect(() => {
+    setName(data.name);
+  }, [data.name]);
 
   useEffect(() => {
     setType(stringOrEmpty(data.type));
   }, [data.type]);
 
   useEffect(() => {
-    setRequest(stringOrEmpty(data.request));
+    setRequest(normalizeDebugRequest(data.request));
   }, [data.request]);
 
   useEffect(() => {
@@ -73,14 +83,6 @@ export function TemplateEditor({
     onChange(updateRequiredString(data, 'type', value));
   });
 
-  useDebouncedCommit(request, autoSaveDelay, (value) => {
-    if (readOnly) {
-      return;
-    }
-
-    onChange(updateRequiredString(data, 'request', value));
-  });
-
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
     if (readOnly) {
       return;
@@ -89,36 +91,35 @@ export function TemplateEditor({
     onChange(updateOptionalString(data, 'cwd', value));
   });
 
+  const commitName = async () => {
+    if (readOnly || name === data.name) {
+      return;
+    }
+
+    await onRename(name);
+  };
+
   return (
     <div className="composer-editor">
-      <header className="composer-editor-header">
-        <div className="composer-editor-title">
-          <p className="composer-editor-eyebrow">Template</p>
-          <h1 className="settings-group-title-label composer-editor-heading">
-            {data.name}
-          </h1>
-          <p className="composer-editor-meta">{sourceFile}</p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          icon="json"
-          onClick={onOpenJson}
-        >
-          Open JSON
-        </Button>
-      </header>
-
       <FormContainer className="composer-form">
         {readOnlyIssue !== undefined ? (
           <FormGroup
             label="JSON Status"
             description={readOnlyIssue.message}
             helper={
-              <FormHelper tone="warning">
-                {readOnlyIssue.details ??
-                  'Fix the JSON file to resume form editing.'}
-              </FormHelper>
+              <div className="composer-json-status">
+                <FormHelper tone="warning">
+                  {readOnlyIssue.details ??
+                    'Fix the JSON file to resume form editing.'}
+                </FormHelper>
+                <button
+                  type="button"
+                  className="composer-json-link"
+                  onClick={onOpenJson}
+                >
+                  Edit in {sourceFile}
+                </button>
+              </div>
             }
             fill
           >
@@ -133,9 +134,24 @@ export function TemplateEditor({
         <FormGroup
           category="Launch Composer"
           label="Template: Name"
-          description="Template identifier. This value is fixed after creation."
+          description="Template identifier. Config extends references this value."
         >
-          <TextInput readOnly value={data.name} />
+          <TextInput
+            disabled={readOnly}
+            value={name}
+            onChange={setName}
+            onBlur={() => {
+              void commitName();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') {
+                return;
+              }
+
+              event.preventDefault();
+              event.currentTarget.blur();
+            }}
+          />
         </FormGroup>
 
         <FormGroup
@@ -149,10 +165,18 @@ export function TemplateEditor({
           label="Template: Request"
           description="Debugger request written to the generated launch.json entry."
         >
-          <TextInput
+          <Select
             disabled={readOnly}
+            enum={[...DEBUG_REQUEST_OPTIONS]}
             value={request}
-            onChange={setRequest}
+            onChange={(value) => {
+              if (readOnly) {
+                return;
+              }
+
+              setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
+              onChange(updateRequiredString(data, 'request', value));
+            }}
           />
         </FormGroup>
 
@@ -219,6 +243,12 @@ export function TemplateEditor({
             />
           )}
         </FormGroup>
+
+        <EditInJsonHint
+          fileLabel={sourceFile}
+          description="Some launch.json properties are only available in JSON. Edit the source file to add or adjust unsupported fields."
+          onOpenFileJson={onOpenJson}
+        />
       </FormContainer>
     </div>
   );

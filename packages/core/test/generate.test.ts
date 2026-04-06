@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   buildLaunchArgs,
+  type ConfigFileData,
   generate,
   resolveArgsFilePath,
   validateGenerateInput,
@@ -45,7 +46,8 @@ test('generate shallow-merges template and config for enabled entries only', asy
     configs: [
       {
         file: 'basic.json',
-        configs: [
+        enabled: true,
+        configurations: [
           {
             name: 'Basic Test',
             extends: 'cpp',
@@ -91,7 +93,8 @@ test('generate resolves argsFile via workspaceFolder and appends config args', a
     configs: [
       {
         file: 'configs.json',
-        configs: [
+        enabled: true,
+        configurations: [
           {
             name: 'Replay',
             enabled: true,
@@ -155,7 +158,8 @@ test('validateGenerateInput reports spec violations together', async () => {
     configs: [
       {
         file: 'configs.json',
-        configs: [
+        enabled: true,
+        configurations: [
           {
             name: 'cpp',
             extends: 'missing',
@@ -183,7 +187,7 @@ test('validateGenerateInput reports spec violations together', async () => {
   );
 });
 
-test('generate fills missing type and request with empty strings', async () => {
+test('generate fails when a template request is not launch or attach', async () => {
   const result = await generate({
     templates: [
       {
@@ -191,64 +195,54 @@ test('generate fills missing type and request with empty strings', async () => {
         templates: [
           {
             name: 'cpp',
-            type: '',
-            request: '',
+            type: 'cppdbg',
+            request: 'start',
           },
         ],
       },
     ],
-    configs: [
-      {
-        file: 'config.json',
-        configs: [
-          {
-            name: 'Test',
-            extends: 'cpp',
-            enabled: true,
-          },
-        ],
-      },
-    ],
+    configs: [],
   });
 
-  assert.equal(result.success, true);
-  if (!result.success) {
-    throw new Error('Expected success');
+  assert.equal(result.success, false);
+  if (result.success) {
+    throw new Error('Expected failure');
   }
 
-  assert.deepEqual(result.launchJson.configurations, [
-    {
-      name: 'Test',
-      type: '',
-      request: '',
-    },
-  ]);
+  assert.match(
+    result.errors[0]?.message ?? '',
+    /Template request must be one of/,
+  );
 });
 
-test('generate ignores missing type and request on disabled configs', async () => {
+test('generate fails when a standalone config request is not launch or attach', async () => {
   const result = await generate({
     templates: [],
     configs: [
       {
         file: 'config.json',
-        configs: [
+        enabled: true,
+        configurations: [
           {
             name: 'Draft',
-            enabled: false,
-            type: '',
-            request: '',
+            enabled: true,
+            type: 'cppdbg',
+            request: 'start',
           },
         ],
       },
     ],
   });
 
-  assert.equal(result.success, true);
-  if (!result.success) {
-    throw new Error('Expected success');
+  assert.equal(result.success, false);
+  if (result.success) {
+    throw new Error('Expected failure');
   }
 
-  assert.deepEqual(result.launchJson.configurations, []);
+  assert.match(
+    result.errors[0]?.message ?? '',
+    /Config request must be one of/,
+  );
 });
 
 test('generate fails when template args and config argsFile are combined', async () => {
@@ -270,7 +264,8 @@ test('generate fails when template args and config argsFile are combined', async
     configs: [
       {
         file: 'config.json',
-        configs: [
+        enabled: true,
+        configurations: [
           {
             name: 'Test',
             extends: 'cpp',
@@ -293,6 +288,64 @@ test('generate fails when template args and config argsFile are combined', async
   assert.match(result.errors[0]?.message ?? '', /cannot specify argsFile/);
 });
 
+test('generate excludes all configs when the config file is disabled', async () => {
+  const result = await generate({
+    templates: [],
+    configs: [
+      {
+        file: 'config.json',
+        enabled: false,
+        configurations: [
+          {
+            name: 'Draft',
+            enabled: true,
+            type: 'cppdbg',
+            request: 'launch',
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    throw new Error('Expected success');
+  }
+
+  assert.deepEqual(result.launchJson.configurations, []);
+});
+
+test('generate treats omitted enabled values as enabled', async () => {
+  const result = await generate({
+    templates: [],
+    configs: [
+      {
+        file: 'config.json',
+        configurations: [
+          {
+            name: 'Default Enabled',
+            type: 'cppdbg',
+            request: 'launch',
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    throw new Error('Expected success');
+  }
+
+  assert.deepEqual(result.launchJson.configurations, [
+    {
+      name: 'Default Enabled',
+      type: 'cppdbg',
+      request: 'launch',
+    },
+  ]);
+});
+
 test('resolveArgsFilePath supports Unix and Windows absolute paths', () => {
   assert.deepEqual(resolveArgsFilePath('/tmp/args.json', {}), {
     ok: true,
@@ -307,5 +360,21 @@ test('resolveArgsFilePath supports Unix and Windows absolute paths', () => {
       workspaceFolder: '/workspace/project',
     }).ok,
     true,
+  );
+});
+
+test('validateGenerateInput rejects legacy config array files', async () => {
+  const errors = await validateGenerateInput({
+    templates: [],
+    configs: [
+      {
+        file: 'legacy.json',
+      } as unknown as ConfigFileData,
+    ],
+  });
+
+  assert.match(
+    errors.map((error) => error.message).join('\n'),
+    /configurations must be an array/i,
   );
 });
