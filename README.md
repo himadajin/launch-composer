@@ -49,8 +49,12 @@ Create a VSIX package:
 npm run package -w launch-composer
 ```
 
-Install the VSIX in VS Code:
+This writes the package to `packages/extension/launch-composer.vsix`.
 
-1. Open the Command Palette.
-2. Run `Extensions: Install from VSIX...`.
-3. Select `packages/extension/launch-composer-0.1.0.vsix`.
+Package and install the extension in VS Code:
+
+```bash
+npm run install:vscode
+```
+
+This script packages the extension and runs `code --install-extension packages/extension/launch-composer.vsix --force`.

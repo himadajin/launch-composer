@@ -8,6 +8,7 @@
     "build:core": "npm run build -w @launch-composer/core",
     "build:webview": "npm run build -w @launch-composer/webview",
     "build:extension": "npm run build -w launch-composer",
+    "install:vscode": "npm run install:vscode -w launch-composer",
     "build": "npm run build:core && npm run build:webview && npm run build:extension",
     "lint": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/extension/src packages/extension/test packages/extension/esbuild.mjs",
     "lint:fix": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/extension/src packages/extension/test packages/extension/esbuild.mjs --fix",
