@@ -10,6 +10,7 @@ const testVscode = vscode as typeof vscode & {
   __testing: {
     reset(): void;
     createExtensionContext(): unknown;
+    getErrorMessages(): string[];
     getLastCreatedWebviewPanel():
       | { disposed: boolean; postedMessages: unknown[] }
       | undefined;
@@ -262,4 +263,189 @@ test('openCurrentAsJson opens the backing file when the active file is invalid',
     kind: 'template',
     file: 'template.json',
   });
+});
+
+test('rename-entry message calls renameEntry and posts refreshed data', async () => {
+  let renamed:
+    | {
+        target: {
+          kind: 'template' | 'config';
+          file: string;
+          index: number;
+        };
+        name: string;
+      }
+    | undefined;
+  let mutateCount = 0;
+  const store = {
+    async readAll() {
+      return {
+        templates: [
+          {
+            file: 'template.json',
+            templates: [{ name: 'cpp-renamed' }],
+          },
+        ],
+        configs: [],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:4';
+    },
+    async hasEntry() {
+      return true;
+    },
+    async renameEntry(target, name) {
+      renamed = { target, name };
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'hasEntry' | 'renameEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {
+      mutateCount += 1;
+    },
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'template',
+    file: 'template.json',
+    index: 0,
+  });
+
+  await (
+    controller as unknown as {
+      handleMessage(message: unknown): Promise<void>;
+    }
+  ).handleMessage({
+    type: 'rename-entry',
+    requestId: 'rename-1',
+    payload: {
+      kind: 'template',
+      file: 'template.json',
+      index: 0,
+      name: 'cpp-renamed',
+    },
+  });
+
+  assert.deepEqual(renamed, {
+    target: {
+      kind: 'template',
+      file: 'template.json',
+      index: 0,
+    },
+    name: 'cpp-renamed',
+  });
+  assert.equal(mutateCount, 1);
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.deepEqual(panel.postedMessages.at(-2), {
+    type: 'initial-data',
+    requestId: 'local',
+    payload: {
+      templates: [
+        {
+          file: 'template.json',
+          templates: [{ name: 'cpp-renamed' }],
+        },
+      ],
+      configs: [],
+      issues: [],
+      editor: {
+        kind: 'template',
+        file: 'template.json',
+        index: 0,
+      },
+      editorRevision: 'rev:4',
+      autoSaveDelay: 1000,
+    },
+  });
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'rename-result',
+    requestId: 'rename-1',
+    payload: { success: true },
+  });
+});
+
+test('rename-entry message returns an error when renameEntry fails', async () => {
+  const store = {
+    async readAll() {
+      return {
+        templates: [],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch' }],
+          },
+        ],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:5';
+    },
+    async renameEntry() {
+      throw new Error('Name "Launch" is already in use.');
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'renameEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  await (
+    controller as unknown as {
+      handleMessage(message: unknown): Promise<void>;
+    }
+  ).handleMessage({
+    type: 'rename-entry',
+    requestId: 'rename-2',
+    payload: {
+      kind: 'config',
+      file: 'config.json',
+      index: 0,
+      name: 'Launch',
+    },
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'rename-result',
+    requestId: 'rename-2',
+    payload: {
+      success: false,
+      error: 'Name "Launch" is already in use.',
+    },
+  });
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), [
+    'Name "Launch" is already in use.',
+  ]);
 });

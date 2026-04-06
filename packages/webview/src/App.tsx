@@ -46,6 +46,33 @@ export function App() {
     });
   }, []);
 
+  const renameEntry = useCallback(
+    async (
+      kind: 'template' | 'config',
+      file: string,
+      index: number,
+      name: string,
+    ) => {
+      const result = await rpc.sendRequest({
+        type: 'rename-entry',
+        payload: {
+          kind,
+          file,
+          index,
+          name,
+        },
+      });
+
+      if (!isRenameResult(result)) {
+        await requestLatestPayload();
+        return;
+      }
+
+      await requestLatestPayload();
+    },
+    [requestLatestPayload],
+  );
+
   const enqueueUpdate = useCallback(
     (
       kind: 'template' | 'config',
@@ -243,6 +270,14 @@ export function App() {
                 patches,
               );
             }}
+            onRename={async (name) => {
+              await renameEntry(
+                'template',
+                payload.editor.file,
+                payload.editor.index,
+                name,
+              );
+            }}
             onOpenJson={openFileJson}
           />
         ) : (
@@ -275,6 +310,14 @@ export function App() {
                 payload.editor.file,
                 payload.editor.index,
                 patches,
+              );
+            }}
+            onRename={async (name) => {
+              await renameEntry(
+                'config',
+                payload.editor.file,
+                payload.editor.index,
+                name,
               );
             }}
             onOpenJson={openFileJson}
@@ -340,6 +383,18 @@ function isUpdateResult(value: unknown): value is {
   success: boolean;
   conflict?: boolean;
   revision?: string | null;
+  error?: string;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'success' in value &&
+    typeof (value as { success: unknown }).success === 'boolean'
+  );
+}
+
+function isRenameResult(value: unknown): value is {
+  success: boolean;
   error?: string;
 } {
   return (

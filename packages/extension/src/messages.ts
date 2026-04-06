@@ -53,6 +53,16 @@ export type WebviewMessage =
       };
     }
   | {
+      type: 'rename-entry';
+      requestId: string;
+      payload: {
+        kind: 'template' | 'config';
+        file: string;
+        index: number;
+        name: string;
+      };
+    }
+  | {
       type: 'delete-template';
       requestId: string;
       payload: { file: string; index: number };
@@ -83,6 +93,14 @@ export type HostMessage =
         success: boolean;
         conflict?: boolean;
         revision?: string | null;
+        error?: string;
+      };
+    }
+  | {
+      type: 'rename-result';
+      requestId: string;
+      payload: {
+        success: boolean;
         error?: string;
       };
     }

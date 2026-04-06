@@ -28,6 +28,7 @@ interface ConfigEditorProps {
   autoSaveDelay: number;
   onBrowseFile: () => Promise<string | null>;
   onChange: (data: ConfigData) => void;
+  onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
   readOnlyIssue?: ComposerDataIssue;
 }
@@ -40,14 +41,20 @@ export function ConfigEditor({
   autoSaveDelay,
   onBrowseFile,
   onChange,
+  onRename,
   onOpenJson,
   readOnlyIssue,
 }: ConfigEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
+  const [name, setName] = useState(data.name);
   const [type, setType] = useState(stringOrEmpty(data.type));
   const [request, setRequest] = useState(stringOrEmpty(data.request));
   const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
   const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
+
+  useEffect(() => {
+    setName(data.name);
+  }, [data.name]);
 
   useEffect(() => {
     setType(stringOrEmpty(data.type));
@@ -117,6 +124,14 @@ export function ConfigEditor({
     onChange(updateOptionalString(data, 'argsFile', value));
   });
 
+  const commitName = async () => {
+    if (readOnly || name === data.name) {
+      return;
+    }
+
+    await onRename(name);
+  };
+
   return (
     <div className="composer-editor">
       <FormContainer className="composer-form">
@@ -152,9 +167,24 @@ export function ConfigEditor({
         <FormGroup
           category="Launch Composer"
           label="Config: Name"
-          description="Configuration name. This value is fixed after creation."
+          description="Configuration name written to the generated launch.json entry."
         >
-          <TextInput readOnly value={data.name} />
+          <TextInput
+            disabled={readOnly}
+            value={name}
+            onChange={setName}
+            onBlur={() => {
+              void commitName();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') {
+                return;
+              }
+
+              event.preventDefault();
+              event.currentTarget.blur();
+            }}
+          />
         </FormGroup>
 
         <FormGroup

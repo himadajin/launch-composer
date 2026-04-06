@@ -138,6 +138,17 @@ export class EditorPanelController {
             patches: message.payload.patches,
           });
           return;
+        case 'rename-entry':
+          await this.renameEntry(
+            message.requestId,
+            {
+              kind: message.payload.kind,
+              file: message.payload.file,
+              index: message.payload.index,
+            },
+            message.payload.name,
+          );
+          return;
         case 'browse-file':
           await this.respond(message.requestId, {
             type: 'file-selected',
@@ -205,6 +216,34 @@ export class EditorPanelController {
             error instanceof Error ? error.message : 'Failed to delete entry.',
         },
       });
+    }
+  }
+
+  private async renameEntry(
+    requestId: string,
+    target: EditorTarget,
+    name: string,
+  ): Promise<void> {
+    try {
+      await this.options.store.renameEntry(target, name);
+      this.options.onDidMutate();
+      await this.syncWithWorkspace();
+      await this.respond(requestId, {
+        type: 'rename-result',
+        requestId,
+        payload: { success: true },
+      });
+    } catch (error) {
+      await this.respond(requestId, {
+        type: 'rename-result',
+        requestId,
+        payload: {
+          success: false,
+          error:
+            error instanceof Error ? error.message : 'Failed to rename entry.',
+        },
+      });
+      throw error;
     }
   }
 

@@ -565,6 +565,88 @@ test('renameEntry updates template references in configs', async () => {
   );
 });
 
+test('patchTemplateEntry rejects name updates', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/patch-template-name-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/patch-template-name-project/.vscode/launch-composer/templates/template.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/patch-template-name-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "cpp",\n    "type": "cppdbg",\n    "request": "launch"\n  }\n]\n',
+    ),
+  );
+
+  const revision = await store.getDataFileRevision('template', 'template.json');
+
+  await assert.rejects(
+    async () =>
+      store.patchTemplateEntry('template.json', 0, revision, [
+        {
+          type: 'set',
+          key: 'name',
+          value: 'cpp-renamed',
+        },
+      ]),
+    /Entry name changes must use the rename entry flow\./,
+  );
+
+  const bytes = await vscode.workspace.fs.readFile(fileUri);
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '[\n  {\n    "name": "cpp",\n    "type": "cppdbg",\n    "request": "launch"\n  }\n]\n',
+  );
+});
+
+test('patchConfigEntry rejects name updates', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/patch-config-name-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/patch-config-name-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/patch-config-name-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "cppdbg",\n      "request": "launch"\n    }\n  ]\n}\n',
+    ),
+  );
+
+  const revision = await store.getDataFileRevision('config', 'config.json');
+
+  await assert.rejects(
+    async () =>
+      store.patchConfigEntry('config.json', 0, revision, [
+        {
+          type: 'set',
+          key: 'name',
+          value: 'Launch Renamed',
+        },
+      ]),
+    /Entry name changes must use the rename entry flow\./,
+  );
+
+  const bytes = await vscode.workspace.fs.readFile(fileUri);
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "cppdbg",\n      "request": "launch"\n    }\n  ]\n}\n',
+  );
+});
+
 test('copyTemplateFilePath writes the backing JSON path to the clipboard', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;

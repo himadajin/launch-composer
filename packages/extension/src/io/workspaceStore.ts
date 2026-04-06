@@ -706,6 +706,10 @@ export class WorkspaceStore {
     baseRevision: string | null,
     patches: JsonObjectPatchOperation[],
   ): Promise<EntryPatchResult> {
+    if (patches.some((patch) => patch.key === 'name')) {
+      throw new Error('Entry name changes must use the rename entry flow.');
+    }
+
     if (patches.length === 0) {
       const revision = await this.getDataFileRevision(kind, file);
       return {
