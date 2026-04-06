@@ -187,7 +187,7 @@ test('validateGenerateInput reports spec violations together', async () => {
   );
 });
 
-test('generate fills missing type and request with empty strings', async () => {
+test('generate fails when a template request is not launch or attach', async () => {
   const result = await generate({
     templates: [
       {
@@ -195,42 +195,27 @@ test('generate fills missing type and request with empty strings', async () => {
         templates: [
           {
             name: 'cpp',
-            type: '',
-            request: '',
+            type: 'cppdbg',
+            request: 'start',
           },
         ],
       },
     ],
-    configs: [
-      {
-        file: 'config.json',
-        enabled: true,
-        configurations: [
-          {
-            name: 'Test',
-            extends: 'cpp',
-            enabled: true,
-          },
-        ],
-      },
-    ],
+    configs: [],
   });
 
-  assert.equal(result.success, true);
-  if (!result.success) {
-    throw new Error('Expected success');
+  assert.equal(result.success, false);
+  if (result.success) {
+    throw new Error('Expected failure');
   }
 
-  assert.deepEqual(result.launchJson.configurations, [
-    {
-      name: 'Test',
-      type: '',
-      request: '',
-    },
-  ]);
+  assert.match(
+    result.errors[0]?.message ?? '',
+    /Template request must be one of/,
+  );
 });
 
-test('generate ignores missing type and request on disabled configs', async () => {
+test('generate fails when a standalone config request is not launch or attach', async () => {
   const result = await generate({
     templates: [],
     configs: [
@@ -240,21 +225,24 @@ test('generate ignores missing type and request on disabled configs', async () =
         configurations: [
           {
             name: 'Draft',
-            enabled: false,
-            type: '',
-            request: '',
+            enabled: true,
+            type: 'cppdbg',
+            request: 'start',
           },
         ],
       },
     ],
   });
 
-  assert.equal(result.success, true);
-  if (!result.success) {
-    throw new Error('Expected success');
+  assert.equal(result.success, false);
+  if (result.success) {
+    throw new Error('Expected failure');
   }
 
-  assert.deepEqual(result.launchJson.configurations, []);
+  assert.match(
+    result.errors[0]?.message ?? '',
+    /Config request must be one of/,
+  );
 });
 
 test('generate fails when template args and config argsFile are combined', async () => {

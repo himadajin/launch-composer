@@ -12,6 +12,8 @@ import { useEffect, useState } from 'react';
 
 import type { ComposerDataIssue, ConfigData, TemplateData } from '../types.js';
 import {
+  DEBUG_REQUEST_OPTIONS,
+  normalizeDebugRequest,
   stringOrEmpty,
   updateOptionalArray,
   updateOptionalString,
@@ -48,7 +50,7 @@ export function ConfigEditor({
   const readOnly = readOnlyIssue !== undefined;
   const [name, setName] = useState(data.name);
   const [type, setType] = useState(stringOrEmpty(data.type));
-  const [request, setRequest] = useState(stringOrEmpty(data.request));
+  const [request, setRequest] = useState(normalizeDebugRequest(data.request));
   const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
   const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
 
@@ -61,7 +63,7 @@ export function ConfigEditor({
   }, [data.type]);
 
   useEffect(() => {
-    setRequest(stringOrEmpty(data.request));
+    setRequest(normalizeDebugRequest(data.request));
   }, [data.request]);
 
   useEffect(() => {
@@ -89,7 +91,7 @@ export function ConfigEditor({
     ? stringOrEmpty(currentTemplate?.type)
     : type;
   const effectiveRequest = launchFieldsInherited
-    ? stringOrEmpty(currentTemplate?.request)
+    ? normalizeDebugRequest(currentTemplate?.request)
     : request;
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
@@ -106,14 +108,6 @@ export function ConfigEditor({
     }
 
     onChange(updateRequiredString(data, 'type', value));
-  });
-
-  useDebouncedCommit(request, autoSaveDelay, (value) => {
-    if (readOnly || launchFieldsInherited) {
-      return;
-    }
-
-    onChange(updateRequiredString(data, 'request', value));
   });
 
   useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
@@ -204,7 +198,7 @@ export function ConfigEditor({
               if (value === '(none)') {
                 delete next.extends;
                 next.type = stringOrEmpty(next.type);
-                next.request = stringOrEmpty(next.request);
+                next.request = 'launch';
               } else {
                 next.extends = value;
                 delete next.type;
@@ -274,10 +268,18 @@ export function ConfigEditor({
             ) : undefined
           }
         >
-          <TextInput
+          <Select
             disabled={readOnly || launchFieldsInherited}
+            enum={[...DEBUG_REQUEST_OPTIONS]}
             value={effectiveRequest}
-            onChange={setRequest}
+            onChange={(value) => {
+              if (readOnly || launchFieldsInherited) {
+                return;
+              }
+
+              setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
+              onChange(updateRequiredString(data, 'request', value));
+            }}
           />
         </FormGroup>
 

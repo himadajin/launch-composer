@@ -464,7 +464,7 @@ function createPlaceholderTemplate(file: string): TemplateData {
   return {
     name: file,
     type: '',
-    request: '',
+    request: 'launch',
   };
 }
 
@@ -473,6 +473,6 @@ function createPlaceholderConfig(file: string): ConfigData {
     name: file,
     enabled: true,
     type: '',
-    request: '',
+    request: 'launch',
   };
 }

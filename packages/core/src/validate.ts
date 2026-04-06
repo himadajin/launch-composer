@@ -10,6 +10,7 @@ import type {
 import { resolveArgsFilePath } from './variables.js';
 
 const BLOCKED_OVERRIDE_KEYS = ['program', 'type', 'request'] as const;
+const DEBUG_REQUEST_VALUES = ['launch', 'attach'] as const;
 
 export async function validateGenerateInput(
   input: GenerateInput,
@@ -141,6 +142,16 @@ function validateTemplateEntries(
         }),
       );
     }
+
+    if (!isDebugRequestValue(templateRef.data.request)) {
+      errors.push(
+        createValidationError({
+          file: templateRef.file,
+          field: 'request',
+          message: `Template request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
+        }),
+      );
+    }
   }
 }
 
@@ -213,6 +224,20 @@ function validateConfigEntries(
           configName: safeConfigName(configRef.data.name),
           field: 'args',
           message: 'Config args must be an array of strings.',
+        }),
+      );
+    }
+
+    if (
+      configRef.data.extends === undefined &&
+      !isDebugRequestValue(configRef.data.request)
+    ) {
+      errors.push(
+        createValidationError({
+          file: configRef.file,
+          configName: safeConfigName(configRef.data.name),
+          field: 'request',
+          message: `Config request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
         }),
       );
     }
@@ -459,6 +484,15 @@ function isNonEmptyString(value: unknown): value is string {
 
 function safeConfigName(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+function isDebugRequestValue(
+  value: unknown,
+): value is (typeof DEBUG_REQUEST_VALUES)[number] {
+  return (
+    typeof value === 'string' &&
+    DEBUG_REQUEST_VALUES.some((entry) => entry === value)
+  );
 }
 
 function createValidationError(input: {

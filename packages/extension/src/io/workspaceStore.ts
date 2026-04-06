@@ -276,7 +276,7 @@ export class WorkspaceStore {
     fileData.templates.push({
       name,
       type: '',
-      request: '',
+      request: 'launch',
     });
     await this.writeTemplateFile(fileData);
 
@@ -303,7 +303,7 @@ export class WorkspaceStore {
       data.extends = extendsName;
     } else {
       data.type = '';
-      data.request = '';
+      data.request = 'launch';
     }
 
     fileData.configurations.push(data);

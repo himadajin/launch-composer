@@ -4,12 +4,15 @@ import {
   FormGroup,
   FormHelper,
   ListEditor,
+  Select,
   TextInput,
 } from '@himadajin/vscode-components';
 import { useEffect, useState } from 'react';
 
 import type { ComposerDataIssue, TemplateData } from '../types.js';
 import {
+  DEBUG_REQUEST_OPTIONS,
+  normalizeDebugRequest,
   stringOrEmpty,
   updateOptionalArray,
   updateOptionalString,
@@ -40,7 +43,7 @@ export function TemplateEditor({
   const readOnly = readOnlyIssue !== undefined;
   const [name, setName] = useState(data.name);
   const [type, setType] = useState(stringOrEmpty(data.type));
-  const [request, setRequest] = useState(stringOrEmpty(data.request));
+  const [request, setRequest] = useState(normalizeDebugRequest(data.request));
   const [program, setProgram] = useState(stringOrEmpty(data.program));
   const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
 
@@ -53,7 +56,7 @@ export function TemplateEditor({
   }, [data.type]);
 
   useEffect(() => {
-    setRequest(stringOrEmpty(data.request));
+    setRequest(normalizeDebugRequest(data.request));
   }, [data.request]);
 
   useEffect(() => {
@@ -78,14 +81,6 @@ export function TemplateEditor({
     }
 
     onChange(updateRequiredString(data, 'type', value));
-  });
-
-  useDebouncedCommit(request, autoSaveDelay, (value) => {
-    if (readOnly) {
-      return;
-    }
-
-    onChange(updateRequiredString(data, 'request', value));
   });
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
@@ -170,10 +165,18 @@ export function TemplateEditor({
           label="Template: Request"
           description="Debugger request written to the generated launch.json entry."
         >
-          <TextInput
+          <Select
             disabled={readOnly}
+            enum={[...DEBUG_REQUEST_OPTIONS]}
             value={request}
-            onChange={setRequest}
+            onChange={(value) => {
+              if (readOnly) {
+                return;
+              }
+
+              setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
+              onChange(updateRequiredString(data, 'request', value));
+            }}
           />
         </FormGroup>
 

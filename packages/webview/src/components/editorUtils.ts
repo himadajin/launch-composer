@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 
+export const DEBUG_REQUEST_OPTIONS = ['launch', 'attach'] as const;
+
 export function useDebouncedCommit(
   value: string,
   delay: number,
@@ -59,4 +61,19 @@ export function updateRequiredString<T extends Record<string, unknown>>(
 
 export function stringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+export function normalizeDebugRequest(
+  value: unknown,
+): (typeof DEBUG_REQUEST_OPTIONS)[number] {
+  return isDebugRequest(value) ? value : 'launch';
+}
+
+function isDebugRequest(
+  value: unknown,
+): value is (typeof DEBUG_REQUEST_OPTIONS)[number] {
+  return (
+    typeof value === 'string' &&
+    DEBUG_REQUEST_OPTIONS.some((entry) => entry === value)
+  );
 }
