@@ -184,7 +184,7 @@ interface TemplateData {
 interface ConfigData {
   name: string;
   extends?: string;
-  enabled: boolean;
+  enabled?: boolean;
   argsFile?: string;
   args?: string[];
   [key: string]: unknown; // パススルーキー
@@ -197,7 +197,8 @@ interface TemplateFileData {
 
 interface ConfigFileData {
   file: string; // ファイル名（例: "basic-test.json"）
-  configs: ConfigData[];
+  enabled?: boolean;
+  configurations: ConfigData[];
 }
 
 interface ValidationError {
@@ -227,7 +228,7 @@ type EntryPatchOperation =
 interface ComposerDataIssue {
   kind: 'template' | 'config';
   file: string;
-  code: 'empty' | 'invalid-json' | 'not-array';
+  code: 'empty' | 'invalid-json' | 'invalid-shape';
   message: string;
   details?: string;
 }

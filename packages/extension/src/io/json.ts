@@ -61,7 +61,7 @@ export function stringifyJsonFile(value: unknown): string {
 
 export function applyArrayObjectPatch(
   text: string,
-  index: number,
+  path: (string | number)[],
   patches: JsonObjectPatchOperation[],
 ): string {
   let nextText = text;
@@ -69,7 +69,7 @@ export function applyArrayObjectPatch(
   for (const patch of patches) {
     const edits = modify(
       nextText,
-      [index, patch.key],
+      [...path, patch.key],
       patch.type === 'set' ? patch.value : undefined,
       {
         formattingOptions: {
@@ -88,22 +88,38 @@ export function applyArrayObjectPatch(
 
 export function findArrayEntryOffset(
   text: string,
-  index: number,
+  path: (string | number)[],
 ): number | null {
   const tree = parseTree(text, undefined, {
     allowTrailingComma: true,
     disallowComments: false,
   });
+  let node = tree;
 
-  if (
-    tree === undefined ||
-    tree.type !== 'array' ||
-    tree.children === undefined
-  ) {
-    return null;
+  for (const segment of path) {
+    if (node === undefined) {
+      return null;
+    }
+
+    if (typeof segment === 'number') {
+      if (node.type !== 'array' || node.children === undefined) {
+        return null;
+      }
+      node = node.children[segment];
+      continue;
+    }
+
+    if (node.type !== 'object' || node.children === undefined) {
+      return null;
+    }
+
+    const property = node.children.find(
+      (child) => child.children?.[0]?.value === segment,
+    );
+    node = property?.children?.[1];
   }
 
-  return tree.children[index]?.offset ?? null;
+  return node?.offset ?? null;
 }
 
 export function createTextRevision(text: string): string {

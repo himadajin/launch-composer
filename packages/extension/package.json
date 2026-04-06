@@ -225,7 +225,7 @@
         },
         {
           "command": "launch-composer.addConfigEntry",
-          "when": "view == launchComposer.configs && viewItem == configFile",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileDisabled)",
           "group": "1_new@1"
         },
         {
@@ -255,62 +255,62 @@
         },
         {
           "command": "launch-composer.openConfigFileJson",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileDisabled || viewItem == configFileInvalid)",
           "group": "2_open@1"
         },
         {
           "command": "launch-composer.copyConfigFilePath",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileDisabled || viewItem == configFileInvalid)",
           "group": "3_copy@1"
         },
         {
           "command": "launch-composer.copyConfigFileRelativePath",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileDisabled || viewItem == configFileInvalid)",
           "group": "3_copy@2"
         },
         {
           "command": "launch-composer.renameConfigFile",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileDisabled || viewItem == configFileInvalid)",
           "group": "4_modify@1"
         },
         {
           "command": "launch-composer.enableConfig",
-          "when": "viewItem == configEntryDisabled",
+          "when": "viewItem == configEntryDisabled || viewItem == configFileDisabled",
           "group": "0_state@1"
         },
         {
           "command": "launch-composer.disableConfig",
-          "when": "viewItem == configEntryEnabled",
+          "when": "viewItem == configEntryEnabled || viewItem == configFile",
           "group": "0_state@1"
         },
         {
           "command": "launch-composer.deleteConfigFile",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileDisabled || viewItem == configFileInvalid)",
           "group": "5_delete@1"
         },
         {
           "command": "launch-composer.openItemJson",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "2_open@1"
         },
         {
           "command": "launch-composer.copyItemFilePath",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "3_copy@1"
         },
         {
           "command": "launch-composer.copyItemFileRelativePath",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "3_copy@2"
         },
         {
           "command": "launch-composer.renameItem",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "4_modify@1"
         },
         {
           "command": "launch-composer.deleteItem",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "5_delete@1"
         }
       ],
@@ -322,12 +322,12 @@
         },
         {
           "command": "launch-composer.addConfigEntry",
-          "when": "view == launchComposer.configs && viewItem == configFile",
+          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileDisabled)",
           "group": "inline"
         },
         {
           "command": "launch-composer.toggleEnabled",
-          "when": "viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "when": "viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configFile || viewItem == configFileDisabled",
           "group": "inline"
         }
       ],

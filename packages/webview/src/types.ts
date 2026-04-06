@@ -20,7 +20,8 @@ export interface TemplateFileData {
 
 export interface ConfigFileData {
   file: string;
-  configs: ConfigData[];
+  enabled?: boolean;
+  configurations: ConfigData[];
 }
 
 export interface ValidationError {
@@ -39,7 +40,7 @@ export interface EditorTarget {
 export interface ComposerDataIssue {
   kind: 'template' | 'config';
   file: string;
-  code: 'empty' | 'invalid-json' | 'not-array';
+  code: 'empty' | 'invalid-json' | 'invalid-shape';
   message: string;
   details?: string;
 }

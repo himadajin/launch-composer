@@ -102,28 +102,33 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
 
 ### 4.2 configs/\*.json
 
-各ファイルのルートはデバッグ構成オブジェクトの配列とする。1ファイルに複数の構成を含められる。
+各ファイルのルートは config ファイルオブジェクトとする。`configurations` 配列の各要素が 1 件のデバッグ構成を表す。1 ファイルに複数の構成を含められる。
 
 ```jsonc
-[
-  {
-    // --- 拡張機能固有キー ---
-    "name": "Basic Test", // 必須。launch.json の name になる。
-    "extends": "cpp", // 省略可。templates の name を参照。省略時はテンプレートとのマージを行わない。
-    "enabled": true, // 省略時 true。true のもののみ launch.json に出力。
-    "argsFile": "/absolute/path/to/args.json", // 省略可。
-    "args": ["--debug-mode"], // 省略可。
+{
+  "enabled": true, // 省略時 true。false の場合、このファイル内の全構成は生成対象外。
+  "configurations": [
+    {
+      // --- 拡張機能固有キー ---
+      "name": "Basic Test", // 必須。launch.json の name になる。
+      "extends": "cpp", // 省略可。templates の name を参照。省略時はテンプレートとのマージを行わない。
+      "enabled": true, // 省略時 true。file.enabled とこの値の両方が false でない場合のみ launch.json に出力。
+      "argsFile": "/absolute/path/to/args.json", // 省略可。
+      "args": ["--debug-mode"], // 省略可。
 
-    // --- パススルーキー（テンプレートをオーバーライド） ---
-    "type": "cppdbg", // extends を使わない場合のみこの config 自身で指定する。
-    "request": "launch", // extends を使わない場合のみこの config 自身で指定する。
-    "env": { "DEBUG": "1" },
-    "cwd": "${workspaceFolder}/test",
-  },
-]
+      // --- パススルーキー（テンプレートをオーバーライド） ---
+      "type": "cppdbg", // extends を使わない場合のみこの config 自身で指定する。
+      "request": "launch", // extends を使わない場合のみこの config 自身で指定する。
+      "env": { "DEBUG": "1" },
+      "cwd": "${workspaceFolder}/test",
+    },
+  ],
+}
 ```
 
-以下のキーは拡張機能が解釈する固有キーであり、launch.json にはパススルーしない: `name`, `extends`, `enabled`, `argsFile`, `args`。これら以外のキーはすべて launch.json にそのまま出力される。
+`enabled` の評価は file 単位と config 単位で独立して行う。`file.enabled === false` の場合、そのファイル内の config は各 config の `enabled` の値に関係なくすべて無効とする。`enabled` を省略した場合は file・config のどちらも `true` として扱う。
+
+以下のキーは拡張機能が解釈する固有キーであり、launch.json にはパススルーしない: file ルートの `enabled`、config エントリの `name`, `extends`, `enabled`, `argsFile`, `args`。これら以外のキーはすべて launch.json にそのまま出力される。
 
 ただし `args` は例外で、拡張機能が argsFile との合成処理を行った結果を launch.json に出力する。
 

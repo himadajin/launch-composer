@@ -552,16 +552,15 @@ export function activate(context: vscode.ExtensionContext): void {
       await setConfigEnabled(node, false, store, syncUiWithWorkspace);
     }),
     registerCommand(COMMANDS.toggleEnabled, async (node?: TreeNode) => {
-      if (
-        node === undefined ||
-        node.type !== 'entry' ||
-        node.target.kind !== 'config'
-      ) {
-        return;
-      }
-
       try {
-        await store.toggleConfigEnabled(node.target.file, node.target.index);
+        if (node?.type === 'entry' && node.target.kind === 'config') {
+          await store.toggleConfigEnabled(node.target.file, node.target.index);
+        } else if (node?.type === 'file' && node.kind === 'config') {
+          await store.toggleConfigFileEnabled(node.file);
+        } else {
+          return;
+        }
+
         await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
@@ -794,6 +793,20 @@ async function setConfigEnabled(
   store: WorkspaceStore,
   refresh: () => Promise<void>,
 ): Promise<void> {
+  if (node?.type === 'file' && node.kind === 'config') {
+    if (node.enabled === enabled) {
+      return;
+    }
+
+    try {
+      await store.toggleConfigFileEnabled(node.file);
+      await refresh();
+    } catch (error) {
+      showError(error);
+    }
+    return;
+  }
+
   const entryNode = getEntryNode(node);
   if (entryNode === undefined || entryNode.target.kind !== 'config') {
     return;

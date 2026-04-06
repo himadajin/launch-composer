@@ -22,6 +22,7 @@ import {
 interface ConfigEditorProps {
   data: ConfigData;
   sourceFile: string;
+  fileEnabled: boolean;
   templates: TemplateData[];
   autoSaveDelay: number;
   onBrowseFile: () => Promise<string | null>;
@@ -33,6 +34,7 @@ interface ConfigEditorProps {
 export function ConfigEditor({
   data,
   sourceFile,
+  fileEnabled,
   templates,
   autoSaveDelay,
   onBrowseFile,
@@ -195,6 +197,13 @@ export function ConfigEditor({
           label="Config: Enabled"
           description="Include this config when generating launch.json."
           modified={data.enabled === true}
+          helper={
+            !fileEnabled ? (
+              <FormHelper tone="info">
+                This config is currently disabled by the file-level setting.
+              </FormHelper>
+            ) : undefined
+          }
         >
           <Checkbox
             toggle

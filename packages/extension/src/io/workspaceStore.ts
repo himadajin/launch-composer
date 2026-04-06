@@ -31,14 +31,17 @@ const DEFAULT_TEMPLATE_CONTENT =
   '// Each template should have a unique "name".\n' +
   '[]\n';
 const DEFAULT_CONFIG_CONTENT =
-  '// Add config entries to this array.\n' +
+  '// Configure this file and add entries to "configurations".\n' +
   '// Use "extends" to reference a template when needed.\n' +
-  '[]\n';
+  '{\n' +
+  '  "enabled": true,\n' +
+  '  "configurations": []\n' +
+  '}\n';
 
 export interface ComposerDataIssue {
   kind: 'template' | 'config';
   file: string;
-  code: 'empty' | 'invalid-json' | 'not-array';
+  code: 'empty' | 'invalid-json' | 'invalid-shape';
   message: string;
   details?: string;
 }
@@ -51,6 +54,11 @@ export interface WorkspaceDataSnapshot {
 
 type ArrayFileReadResult<T> =
   | { status: 'ok'; data: T[] }
+  | { status: 'missing' }
+  | { status: 'invalid'; issue: ComposerDataIssue };
+
+type ConfigFileReadResult =
+  | { status: 'ok'; data: ConfigFileData }
   | { status: 'missing' }
   | { status: 'invalid'; issue: ComposerDataIssue };
 
@@ -168,7 +176,14 @@ export class WorkspaceStore {
       throw new Error(`File already exists: ${fileName}`);
     }
 
-    await vscode.workspace.fs.writeFile(uri, encodeText('[]\n'));
+    await vscode.workspace.fs.writeFile(
+      uri,
+      encodeText(
+        kind === 'template'
+          ? '[]\n'
+          : stringifyJsonFile(createEmptyConfigFile(fileName)),
+      ),
+    );
     return fileName;
   }
 
@@ -277,7 +292,7 @@ export class WorkspaceStore {
     name: string,
     extendsName: string | undefined,
   ): Promise<EditorTarget> {
-    await this.ensureArrayDataFile('config', file);
+    await this.ensureConfigDataFile(file);
     const fileData = await this.readConfigFile(file);
     const data: ConfigData = {
       name,
@@ -291,13 +306,13 @@ export class WorkspaceStore {
       data.request = '';
     }
 
-    fileData.configs.push(data);
+    fileData.configurations.push(data);
     await this.writeConfigFile(fileData);
 
     return {
       kind: 'config',
       file,
-      index: fileData.configs.length - 1,
+      index: fileData.configurations.length - 1,
     };
   }
 
@@ -321,12 +336,18 @@ export class WorkspaceStore {
 
   async toggleConfigEnabled(file: string, index: number): Promise<void> {
     const fileData = await this.readConfigFile(file);
-    assertIndex(fileData.configs, index, file);
-    const current = fileData.configs[index]!;
-    fileData.configs[index] = {
+    assertIndex(fileData.configurations, index, file);
+    const current = fileData.configurations[index]!;
+    fileData.configurations[index] = {
       ...current,
-      enabled: current.enabled !== true,
+      enabled: current.enabled === false,
     };
+    await this.writeConfigFile(fileData);
+  }
+
+  async toggleConfigFileEnabled(file: string): Promise<void> {
+    const fileData = await this.readConfigFile(file);
+    fileData.enabled = fileData.enabled === false;
     await this.writeConfigFile(fileData);
   }
 
@@ -349,8 +370,8 @@ export class WorkspaceStore {
     }
 
     const configFile = await this.readConfigFile(target.file);
-    assertIndex(configFile.configs, target.index, target.file);
-    configFile.configs.splice(target.index, 1);
+    assertIndex(configFile.configurations, target.index, target.file);
+    configFile.configurations.splice(target.index, 1);
     await this.writeConfigFile(configFile);
   }
 
@@ -376,13 +397,13 @@ export class WorkspaceStore {
     }
 
     const configFile = await this.readConfigFile(target.file);
-    assertIndex(configFile.configs, target.index, target.file);
-    const current = configFile.configs[target.index]!;
+    assertIndex(configFile.configurations, target.index, target.file);
+    const current = configFile.configurations[target.index]!;
     if (current.name === nextName) {
       return;
     }
 
-    configFile.configs[target.index] = {
+    configFile.configurations[target.index] = {
       ...current,
       name: nextName,
     };
@@ -411,7 +432,13 @@ export class WorkspaceStore {
     const uri = this.getDataFileUri(target.kind, target.file);
     const document = await vscode.workspace.openTextDocument(uri);
     const text = document.getText();
-    const offset = findArrayEntryOffset(text, target.index) ?? 0;
+    const offset =
+      findArrayEntryOffset(
+        text,
+        target.kind === 'template'
+          ? [target.index]
+          : ['configurations', target.index],
+      ) ?? 0;
     const position = document.positionAt(offset);
     const editor = await vscode.window.showTextDocument(document, {
       preview: false,
@@ -438,7 +465,9 @@ export class WorkspaceStore {
       return false;
     }
 
-    return target.index >= 0 && target.index < result.data.configs.length;
+    return (
+      target.index >= 0 && target.index < result.data.configurations.length
+    );
   }
 
   isComposerDataFile(uri: vscode.Uri): boolean {
@@ -577,19 +606,55 @@ export class WorkspaceStore {
 
   private async readConfigFileResult(
     file: string,
-  ): Promise<
-    | { status: 'ok'; data: ConfigFileData }
-    | { status: 'missing' }
-    | { status: 'invalid'; issue: ComposerDataIssue }
-  > {
-    const result = await this.readArrayFile<ConfigData>('config', file);
-    if (result.status !== 'ok') {
-      return result;
+  ): Promise<ConfigFileReadResult> {
+    const uri = this.getDataFileUri('config', file);
+    let bytes: Uint8Array;
+
+    try {
+      bytes = await vscode.workspace.fs.readFile(uri);
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return { status: 'missing' };
+      }
+
+      throw error;
+    }
+
+    const text = decodeText(bytes);
+    const parsed = parseJsoncDocument<unknown>(text);
+    if (parsed.issues.length > 0) {
+      return {
+        status: 'invalid',
+        issue: this.createParseIssue('config', file, text, parsed.issues),
+      };
+    }
+
+    if (
+      !isRecord(parsed.value) ||
+      !Array.isArray(parsed.value.configurations)
+    ) {
+      return {
+        status: 'invalid',
+        issue: {
+          kind: 'config',
+          file,
+          code: 'invalid-shape',
+          message: `${file} must contain an object with a "configurations" array.`,
+        },
+      };
     }
 
     return {
       status: 'ok',
-      data: { file, configs: result.data },
+      data: {
+        file,
+        ...(Object.hasOwn(parsed.value, 'enabled')
+          ? {
+              enabled: parsed.value.enabled as boolean,
+            }
+          : {}),
+        configurations: parsed.value.configurations as ConfigData[],
+      },
     };
   }
 
@@ -625,7 +690,7 @@ export class WorkspaceStore {
         issue: {
           kind,
           file,
-          code: 'not-array',
+          code: 'invalid-shape',
           message: `${file} must contain a JSON array.`,
         },
       };
@@ -678,17 +743,30 @@ export class WorkspaceStore {
       );
     }
 
-    if (!Array.isArray(parsed.value)) {
-      throw new Error(`${file} must contain a JSON array.`);
+    const entryPath = kind === 'template' ? [index] : ['configurations', index];
+    const entries =
+      kind === 'template'
+        ? Array.isArray(parsed.value)
+          ? parsed.value
+          : undefined
+        : isRecord(parsed.value) && Array.isArray(parsed.value.configurations)
+          ? parsed.value.configurations
+          : undefined;
+    if (entries === undefined) {
+      throw new Error(
+        kind === 'template'
+          ? `${file} must contain a JSON array.`
+          : `${file} must contain an object with a "configurations" array.`,
+      );
     }
 
-    assertIndex(parsed.value, index, file);
-    const entry = parsed.value[index];
+    assertIndex(entries, index, file);
+    const entry = entries[index];
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
       throw new Error(`Entry index ${index} in ${file} must be a JSON object.`);
     }
 
-    const nextText = applyArrayObjectPatch(text, index, patches);
+    const nextText = applyArrayObjectPatch(text, entryPath, patches);
     if (nextText === text) {
       return {
         status: 'ok',
@@ -717,7 +795,12 @@ export class WorkspaceStore {
     const uri = this.getDataFileUri('config', fileData.file);
     await vscode.workspace.fs.writeFile(
       uri,
-      encodeText(stringifyJsonFile(fileData.configs)),
+      encodeText(
+        stringifyJsonFile({
+          enabled: fileData.enabled ?? true,
+          configurations: fileData.configurations,
+        }),
+      ),
     );
   }
 
@@ -726,7 +809,7 @@ export class WorkspaceStore {
     const references: string[] = [];
 
     for (const fileData of configFiles.data) {
-      fileData.configs.forEach((config) => {
+      fileData.configurations.forEach((config) => {
         if (config.extends === templateName) {
           references.push(`${fileData.file}:${config.name}`);
         }
@@ -801,7 +884,7 @@ export class WorkspaceStore {
     }
 
     for (const fileData of configs) {
-      fileData.configs.forEach((entry, index) => {
+      fileData.configurations.forEach((entry, index) => {
         if (
           target.kind === 'config' &&
           fileData.file === target.file &&
@@ -830,7 +913,7 @@ export class WorkspaceStore {
     await Promise.all(
       configFiles.data.map(async (fileData) => {
         let changed = false;
-        const nextConfigs = fileData.configs.map((config) => {
+        const nextConfigurations = fileData.configurations.map((config) => {
           if (config.extends !== currentName) {
             return config;
           }
@@ -848,7 +931,7 @@ export class WorkspaceStore {
 
         await this.writeConfigFile({
           ...fileData,
-          configs: nextConfigs,
+          configurations: nextConfigurations,
         });
       }),
     );
@@ -896,6 +979,21 @@ export class WorkspaceStore {
 
     const uri = this.getDataFileUri(kind, fileName);
     await vscode.workspace.fs.writeFile(uri, encodeText('[]\n'));
+  }
+
+  private async ensureConfigDataFile(file: string): Promise<void> {
+    await this.ensureInitialized();
+
+    const fileName = normalizeFileName(file);
+    if (await this.hasDataFile('config', fileName)) {
+      return;
+    }
+
+    const uri = this.getDataFileUri('config', fileName);
+    await vscode.workspace.fs.writeFile(
+      uri,
+      encodeText(stringifyJsonFile(createEmptyConfigFile(fileName))),
+    );
   }
 
   private async ensureDefaultDataFile(
@@ -960,7 +1058,10 @@ export class WorkspaceStore {
         kind,
         file,
         code: 'empty',
-        message: `${file} is empty. Expected a JSON array such as [].`,
+        message:
+          kind === 'template'
+            ? `${file} is empty. Expected a JSON array such as [].`
+            : `${file} is empty. Expected an object with a "configurations" array.`,
       };
     }
 
@@ -1006,6 +1107,18 @@ function decodeText(bytes: Uint8Array): string {
 
 function encodeText(text: string): Uint8Array {
   return new TextEncoder().encode(text);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function createEmptyConfigFile(file: string): ConfigFileData {
+  return {
+    file,
+    enabled: true,
+    configurations: [],
+  };
 }
 
 function isMissingFileSystemError(error: unknown): boolean {

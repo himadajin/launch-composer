@@ -18,8 +18,9 @@ type FileNode = {
   kind: 'template' | 'config';
   file: string;
   issue?: ComposerDataIssue;
+  enabled?: boolean;
   templates?: TemplateData[];
-  configs?: ConfigData[];
+  configurations?: ConfigData[];
 };
 
 type EntryNode = {
@@ -27,6 +28,7 @@ type EntryNode = {
   target: EditorTarget;
   label: string;
   enabled?: boolean;
+  inheritedDisabled?: boolean;
 };
 
 export type TreeNode = FileNode | EntryNode;
@@ -65,7 +67,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     const entries =
       element.kind === 'template'
         ? (element.templates ?? [])
-        : (element.configs ?? []);
+        : (element.configurations ?? []);
 
     return entries.map((entry, index) => {
       const node: EntryNode =
@@ -87,7 +89,12 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
                 index,
               },
               label: (entry as ConfigData).name,
-              enabled: (entry as ConfigData).enabled === true,
+              enabled:
+                element.enabled !== false &&
+                (entry as ConfigData).enabled !== false,
+              inheritedDisabled:
+                element.enabled === false &&
+                (entry as ConfigData).enabled !== false,
             };
 
       this.entryNodes.set(getEntryKey(node.target), node);
@@ -107,7 +114,9 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
         element.issue === undefined
           ? element.kind === 'template'
             ? 'templateFile'
-            : 'configFile'
+            : element.enabled === false
+              ? 'configFileDisabled'
+              : 'configFile'
           : element.kind === 'template'
             ? 'templateFileInvalid'
             : 'configFileInvalid';
@@ -129,6 +138,12 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
           new vscode.ThemeColor('list.warningForeground'),
         );
         item.description = getIssueDescription(element.issue);
+      } else if (element.kind === 'config' && element.enabled === false) {
+        item.iconPath = new vscode.ThemeIcon(
+          'circle-slash',
+          new vscode.ThemeColor('descriptionForeground'),
+        );
+        item.description = 'disabled';
       }
 
       return item;
@@ -141,9 +156,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     item.contextValue =
       element.target.kind === 'template'
         ? 'templateEntry'
-        : element.enabled
-          ? 'configEntryEnabled'
-          : 'configEntryDisabled';
+        : element.inheritedDisabled
+          ? 'configEntryDisabledByFile'
+          : element.enabled
+            ? 'configEntryEnabled'
+            : 'configEntryDisabled';
     item.command = {
       command: 'launch-composer.editItem',
       title: 'Edit',
@@ -161,7 +178,9 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
             new vscode.ThemeColor('descriptionForeground'),
           );
       if (!element.enabled) {
-        item.description = 'disabled';
+        item.description = element.inheritedDisabled
+          ? 'disabled by file'
+          : 'disabled';
       }
     }
 
@@ -223,7 +242,14 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
               type: 'file',
               kind: 'config',
               file,
-              configs: (fileData as ConfigFileData | undefined)?.configs ?? [],
+              ...((fileData as ConfigFileData | undefined)?.enabled ===
+              undefined
+                ? {}
+                : {
+                    enabled: (fileData as ConfigFileData).enabled,
+                  }),
+              configurations:
+                (fileData as ConfigFileData | undefined)?.configurations ?? [],
             };
 
       this.fileNodes.set(file, node);
@@ -240,8 +266,8 @@ function getIssueDescription(issue: ComposerDataIssue): string {
   switch (issue.code) {
     case 'empty':
       return 'empty file';
-    case 'not-array':
-      return 'must be array';
+    case 'invalid-shape':
+      return 'invalid shape';
     case 'invalid-json':
       return 'invalid JSON';
   }

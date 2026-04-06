@@ -1,6 +1,7 @@
 import type {
   ArgsFileData,
   ConfigRef,
+  ConfigFileData,
   GenerateInput,
   TemplateRef,
   ValidationError,
@@ -27,6 +28,7 @@ export async function collectValidationState(
   const argsFileCache = new Map<string, ArgsFileData>();
 
   validateTemplateEntries(templateRefs, errors);
+  validateConfigFiles(input.configs, errors);
   validateConfigEntries(configRefs, errors);
   validateNameUniqueness(templateRefs, configRefs, errors);
 
@@ -71,12 +73,45 @@ function flattenTemplates(files: GenerateInput['templates']): TemplateRef[] {
 
 function flattenConfigs(files: GenerateInput['configs']): ConfigRef[] {
   return files.flatMap((fileData) =>
-    fileData.configs.map((data, index) => ({
-      file: fileData.file,
-      index,
-      data,
-    })),
+    (Array.isArray(fileData.configurations) ? fileData.configurations : []).map(
+      (data, index) => ({
+        file: fileData.file,
+        index,
+        data,
+      }),
+    ),
   );
+}
+
+function validateConfigFiles(
+  configFiles: ConfigFileData[],
+  errors: ValidationError[],
+): void {
+  for (const configFile of configFiles) {
+    if (
+      Object.hasOwn(configFile, 'enabled') &&
+      configFile.enabled !== undefined &&
+      typeof configFile.enabled !== 'boolean'
+    ) {
+      errors.push(
+        createValidationError({
+          file: configFile.file,
+          field: 'enabled',
+          message: 'Config file enabled must be a boolean.',
+        }),
+      );
+    }
+
+    if (!Array.isArray(configFile.configurations)) {
+      errors.push(
+        createValidationError({
+          file: configFile.file,
+          field: 'configurations',
+          message: 'Config file configurations must be an array.',
+        }),
+      );
+    }
+  }
 }
 
 function validateTemplateEntries(
