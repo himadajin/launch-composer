@@ -191,10 +191,32 @@ export function App() {
   const templateCatalog = payload.templates.flatMap(
     (fileData) => fileData.templates,
   );
+  const sourceFile = payload.editor.file;
+  const editorEyebrow =
+    payload.editor.kind === 'template' ? 'Template' : 'Config';
+  const editorHeading = current === undefined ? sourceFile : current.name;
+  const openFileJson = () => {
+    rpc.post({
+      type: 'open-file-json',
+      payload: {
+        kind: payload.editor.kind,
+        file: payload.editor.file,
+      },
+    });
+  };
 
   return (
     <main className="settings-editor composer-shell">
       <section className="settings-body composer-body">
+        <header className="composer-editor-header">
+          <div className="composer-editor-title">
+            <p className="composer-editor-eyebrow">{editorEyebrow}</p>
+            <h1 className="settings-group-title-label composer-editor-heading">
+              {editorHeading}
+            </h1>
+            <p className="composer-editor-meta">{sourceFile}</p>
+          </div>
+        </header>
         {payload.editor.kind === 'template' ? (
           <TemplateEditor
             data={
@@ -221,22 +243,7 @@ export function App() {
                 patches,
               );
             }}
-            onOpenJson={() => {
-              rpc.post(
-                currentIssue === undefined
-                  ? {
-                      type: 'open-json',
-                      payload: payload.editor,
-                    }
-                  : {
-                      type: 'open-file-json',
-                      payload: {
-                        kind: payload.editor.kind,
-                        file: payload.editor.file,
-                      },
-                    },
-              );
-            }}
+            onOpenJson={openFileJson}
           />
         ) : (
           <ConfigEditor
@@ -270,22 +277,7 @@ export function App() {
                 patches,
               );
             }}
-            onOpenJson={() => {
-              rpc.post(
-                currentIssue === undefined
-                  ? {
-                      type: 'open-json',
-                      payload: payload.editor,
-                    }
-                  : {
-                      type: 'open-file-json',
-                      payload: {
-                        kind: payload.editor.kind,
-                        file: payload.editor.file,
-                      },
-                    },
-              );
-            }}
+            onOpenJson={openFileJson}
           />
         )}
       </section>

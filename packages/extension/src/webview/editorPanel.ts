@@ -79,6 +79,23 @@ export class EditorPanelController {
     await this.syncWithWorkspaceData();
   }
 
+  async openCurrentAsJson(): Promise<void> {
+    if (this.currentTarget === undefined) {
+      return;
+    }
+
+    const snapshot = await this.options.store.readAll();
+    if (hasInvalidFile(snapshot, this.currentTarget)) {
+      await this.options.store.openDataFileAsJson(
+        this.currentTarget.kind,
+        this.currentTarget.file,
+      );
+      return;
+    }
+
+    await this.options.store.openEntryAsJson(this.currentTarget);
+  }
+
   async syncWithWorkspaceData(data?: WorkspaceDataSnapshot): Promise<void> {
     if (this.panel === undefined || this.currentTarget === undefined) {
       return;
@@ -129,9 +146,6 @@ export class EditorPanelController {
               path: await browseFile(),
             },
           });
-          return;
-        case 'open-json':
-          await this.options.store.openEntryAsJson(message.payload);
           return;
         case 'open-file-json':
           await this.options.store.openDataFileAsJson(

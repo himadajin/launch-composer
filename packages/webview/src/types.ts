@@ -99,7 +99,6 @@ export type WebviewMessage =
   | { type: 'request-initial-data'; requestId: string }
   | { type: 'generate'; requestId: string }
   | { type: 'browse-file'; requestId: string }
-  | { type: 'open-json'; payload: EditorTarget }
   | {
       type: 'open-file-json';
       payload: { kind: 'template' | 'config'; file: string };

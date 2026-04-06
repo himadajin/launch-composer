@@ -17,6 +17,7 @@ export const COMMANDS = {
   deleteConfigFile: 'launch-composer.deleteConfigFile',
   addConfigEntry: 'launch-composer.addConfigEntry',
   editItem: 'launch-composer.editItem',
+  openActiveEditorJson: 'launch-composer.openActiveEditorJson',
   openItemJson: 'launch-composer.openItemJson',
   copyItemFilePath: 'launch-composer.copyItemFilePath',
   copyItemFileRelativePath: 'launch-composer.copyItemFileRelativePath',

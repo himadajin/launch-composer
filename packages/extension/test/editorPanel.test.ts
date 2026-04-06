@@ -145,3 +145,121 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
     },
   ]);
 });
+
+test('openCurrentAsJson opens the active entry when the file is valid', async () => {
+  let openedTarget:
+    | {
+        kind: 'template' | 'config';
+        file: string;
+        index: number;
+      }
+    | undefined;
+  const store = {
+    async readAll() {
+      return {
+        templates: [],
+        configs: [],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:2';
+    },
+    async openEntryAsJson(target) {
+      openedTarget = target;
+    },
+    async openDataFileAsJson() {
+      assert.fail('expected entry JSON to open');
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'openEntryAsJson' | 'openDataFileAsJson'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 2,
+  });
+
+  await controller.openCurrentAsJson();
+
+  assert.deepEqual(openedTarget, {
+    kind: 'config',
+    file: 'config.json',
+    index: 2,
+  });
+});
+
+test('openCurrentAsJson opens the backing file when the active file is invalid', async () => {
+  let openedFile:
+    | {
+        kind: 'template' | 'config';
+        file: string;
+      }
+    | undefined;
+  const store = {
+    async readAll() {
+      return {
+        templates: [],
+        configs: [],
+        issues: [
+          {
+            kind: 'template' as const,
+            file: 'template.json',
+            code: 'invalid-json' as const,
+            message:
+              'Invalid JSON in template.json. Open the file and fix the syntax.',
+          },
+        ],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:3';
+    },
+    async openEntryAsJson() {
+      assert.fail('expected backing file JSON to open');
+    },
+    async openDataFileAsJson(kind, file) {
+      openedFile = { kind, file };
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'openEntryAsJson' | 'openDataFileAsJson'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'template',
+    file: 'template.json',
+    index: 0,
+  });
+
+  await controller.openCurrentAsJson();
+
+  assert.deepEqual(openedFile, {
+    kind: 'template',
+    file: 'template.json',
+  });
+});

@@ -462,6 +462,13 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
+    registerCommand(COMMANDS.openActiveEditorJson, async () => {
+      try {
+        await editorPanel.openCurrentAsJson();
+      } catch (error) {
+        showError(error);
+      }
+    }),
     registerCommand(COMMANDS.openItemJson, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {

@@ -1,5 +1,4 @@
 import {
-  Button,
   Checkbox,
   FormContainer,
   FormGroup,
@@ -17,6 +16,7 @@ import {
   updateRequiredString,
   useDebouncedCommit,
 } from './editorUtils.js';
+import { EditInJsonHint } from './EditInJsonHint.js';
 
 interface TemplateEditorProps {
   data: TemplateData;
@@ -91,34 +91,25 @@ export function TemplateEditor({
 
   return (
     <div className="composer-editor">
-      <header className="composer-editor-header">
-        <div className="composer-editor-title">
-          <p className="composer-editor-eyebrow">Template</p>
-          <h1 className="settings-group-title-label composer-editor-heading">
-            {data.name}
-          </h1>
-          <p className="composer-editor-meta">{sourceFile}</p>
-        </div>
-        <Button
-          type="button"
-          variant="secondary"
-          icon="json"
-          onClick={onOpenJson}
-        >
-          Open JSON
-        </Button>
-      </header>
-
       <FormContainer className="composer-form">
         {readOnlyIssue !== undefined ? (
           <FormGroup
             label="JSON Status"
             description={readOnlyIssue.message}
             helper={
-              <FormHelper tone="warning">
-                {readOnlyIssue.details ??
-                  'Fix the JSON file to resume form editing.'}
-              </FormHelper>
+              <div className="composer-json-status">
+                <FormHelper tone="warning">
+                  {readOnlyIssue.details ??
+                    'Fix the JSON file to resume form editing.'}
+                </FormHelper>
+                <button
+                  type="button"
+                  className="composer-json-link"
+                  onClick={onOpenJson}
+                >
+                  Edit in {sourceFile}
+                </button>
+              </div>
             }
             fill
           >
@@ -219,6 +210,12 @@ export function TemplateEditor({
             />
           )}
         </FormGroup>
+
+        <EditInJsonHint
+          fileLabel={sourceFile}
+          description="Some launch.json properties are only available in JSON. Edit the source file to add or adjust unsupported fields."
+          onOpenFileJson={onOpenJson}
+        />
       </FormContainer>
     </div>
   );

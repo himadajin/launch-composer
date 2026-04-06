@@ -107,6 +107,46 @@ textarea {
   background-color: var(--vscode-settings-rowHoverBackground);
 }
 
+.composer-json-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.composer-json-hint {
+  margin-top: 8px;
+  padding: 16px 14px 18px;
+  border-top: 1px solid var(--vscode-widget-border, transparent);
+}
+
+.composer-json-hint-description {
+  margin: 0 0 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.composer-json-link {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground);
+  cursor: pointer;
+  font: inherit;
+}
+
+.composer-json-link:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+.composer-json-link:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 .composer-input-action-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
