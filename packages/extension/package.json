@@ -50,12 +50,12 @@
     "views": {
       "launchComposer": [
         {
-          "id": "launchComposer.templates",
-          "name": "TEMPLATES"
-        },
-        {
           "id": "launchComposer.configs",
           "name": "CONFIGS"
+        },
+        {
+          "id": "launchComposer.templates",
+          "name": "TEMPLATES"
         }
       ]
     },
