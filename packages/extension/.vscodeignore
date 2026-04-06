@@ -9,4 +9,6 @@ test/**
 .test-dist/**
 **/*.ts
 **/*.map
+**/*.vsix
 !dist/**
+dist/*.vsix

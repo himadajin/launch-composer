@@ -23,10 +23,11 @@
   "scripts": {
     "build": "node esbuild.mjs",
     "build:test": "node test/build-tests.mjs",
+    "install:vscode": "npm run package && code --install-extension launch-composer.vsix --force",
     "test": "npm run build && npm run build:test && node --test .test-dist/*.test.js",
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies --out launch-composer.vsix"
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1"
