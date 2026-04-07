@@ -143,11 +143,29 @@ function validateTemplateEntries(
       );
     }
 
-    if (!isDebugRequestValue(templateRef.data.request)) {
+    const templateEntry = templateRef.data.configuration;
+
+    if (
+      templateEntry !== undefined &&
+      (typeof templateEntry !== 'object' ||
+        templateEntry === null ||
+        Array.isArray(templateEntry))
+    ) {
       errors.push(
         createValidationError({
           file: templateRef.file,
-          field: 'request',
+          field: 'configuration',
+          message: 'Template configuration must be an object.',
+        }),
+      );
+      continue;
+    }
+
+    if (!isDebugRequestValue(templateEntry?.request)) {
+      errors.push(
+        createValidationError({
+          file: templateRef.file,
+          field: 'configuration.request',
           message: `Template request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
         }),
       );

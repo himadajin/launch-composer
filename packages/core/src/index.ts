@@ -12,6 +12,7 @@ export type {
   LaunchConfig,
   LaunchJson,
   TemplateData,
+  TemplateEntry,
   TemplateFileData,
   ValidationError,
 } from './types.js';

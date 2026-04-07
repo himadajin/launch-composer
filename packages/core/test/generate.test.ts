@@ -34,11 +34,13 @@ test('generate shallow-merges template and config for enabled entries only', asy
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '${workspaceFolder}/build/myapp',
-            env: { PATH: '/usr/bin' },
             args: ['--template'],
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '${workspaceFolder}/build/myapp',
+              env: { PATH: '/usr/bin' },
+            },
           },
         ],
       },
@@ -146,15 +148,19 @@ test('validateGenerateInput reports spec violations together', async () => {
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '/bin/app',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/bin/app',
+            },
           },
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '/bin/app2',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/bin/app2',
+            },
           },
         ],
       },
@@ -201,8 +207,10 @@ test('generate fails when a template request is not launch or attach', async () 
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'start',
+            configuration: {
+              type: 'cppdbg',
+              request: 'start',
+            },
           },
         ],
       },
@@ -261,10 +269,12 @@ test('generate fails when template args and config argsFile are combined', async
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '/bin/app',
             args: ['--template'],
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/bin/app',
+            },
           },
         ],
       },

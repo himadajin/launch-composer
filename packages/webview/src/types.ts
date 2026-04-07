@@ -1,7 +1,11 @@
+export interface TemplateEntry {
+  [key: string]: unknown;
+}
+
 export interface TemplateData {
   name: string;
   args?: string[];
-  [key: string]: unknown;
+  configuration?: TemplateEntry;
 }
 
 export interface ConfigEntry {

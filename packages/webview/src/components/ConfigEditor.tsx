@@ -91,10 +91,10 @@ export function ConfigEditor({
   const argsFileDisabled = currentTemplate?.args !== undefined;
   const launchFieldsInherited = extendsValue !== undefined;
   const effectiveType = launchFieldsInherited
-    ? stringOrEmpty(currentTemplate?.type)
+    ? stringOrEmpty(currentTemplate?.configuration?.type)
     : type;
   const effectiveRequest = launchFieldsInherited
-    ? normalizeDebugRequest(currentTemplate?.request)
+    ? normalizeDebugRequest(currentTemplate?.configuration?.request)
     : request;
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {

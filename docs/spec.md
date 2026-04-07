@@ -78,14 +78,18 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
   {
     // --- 拡張機能固有キー ---
     "name": "cpp", // 必須。識別子。launch.jsonには出力しない。
+    "args": [], // 省略可。launch.json の args に出力する。
 
-    // --- パススルーキー（launch.jsonの任意プロパティ） ---
-    "type": "cppdbg",
-    "request": "launch",
-    "program": "${workspaceFolder}/build/myapp",
-    "MIMode": "gdb",
-    "env": { "PATH": "/usr/bin" },
-    // ...その他 launch.json の標準プロパティ
+    // --- launch.json エントリの内容（省略可）---
+    "configuration": {
+      // パススルーキー（launch.json の任意プロパティ）
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/myapp",
+      "MIMode": "gdb",
+      "env": { "PATH": "/usr/bin" },
+      // ...その他 launch.json の標準プロパティ
+    },
   },
 ]
 ```
@@ -95,11 +99,15 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
 - `name` は必須とする。`templates/` ディレクトリ以下の全ファイルにわたって一意でなければならない。
 - GUI から `name` を変更する場合、テンプレート名の変更はそれを参照する config の `extends` を同時に更新する。
 - `args` は省略可能。値は文字列の配列でなければならない。
-- `request` は必須とする。値は `launch` または `attach` のいずれかでなければならない。
+- `configuration.request` は必須とする。値は `launch` または `attach` のいずれかでなければならない。
+- `configuration` オブジェクトは省略可能だが、存在する場合はオブジェクトでなければならない。
 - テンプレートに `args` が定義されている場合、そのテンプレートを `extends` する config エントリで `argsFile` を指定してはならない。指定されていた場合は Generate 時エラーとする（spec-core.md §3.1 参照）。
 - テンプレート間の継承（template extends template）は実装しない。将来も追加しない。
 
-拡張機能固有のキーは `name` と `args` であり、生成時に launch.json にはパススルーしない（`args` は spec-core.md §1.3 のルールで処理して出力する）。それ以外のキーはすべて launch.json にそのまま出力される。
+テンプレートエントリのキーは次の 2 種類に分けられる:
+
+- **拡張機能固有キー**: `name`、`args`。生成時に launch.json にはパススルーしない（`args` は spec-core.md §1.3 のルールで処理して出力する）。
+- **`configuration` オブジェクト**: launch.json エントリの内容をすべてパススルーキーとして格納する。launch.json にそのまま出力される（config の `configuration` で上書きされない限り）。
 
 ### 4.2 configs/\*.json
 

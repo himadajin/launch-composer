@@ -355,7 +355,7 @@ test('addTemplateEntry creates its backing file when it does not exist', async (
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": "launch"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "configuration": {\n      "type": "",\n      "request": "launch"\n    }\n  }\n]',
   );
 });
 
@@ -707,7 +707,7 @@ test('addTemplate initializes directories before listing files', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": "launch"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "configuration": {\n      "type": "",\n      "request": "launch"\n    }\n  }\n]',
   );
 });
 

@@ -275,8 +275,7 @@ export class WorkspaceStore {
     const fileData = await this.readTemplateFile(file);
     fileData.templates.push({
       name,
-      type: '',
-      request: 'launch',
+      configuration: { type: '', request: 'launch' },
     });
     await this.writeTemplateFile(fileData);
 
