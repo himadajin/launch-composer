@@ -1,16 +1,24 @@
+export interface TemplateEntry {
+  [key: string]: unknown;
+}
+
 export interface TemplateData {
   name: string;
   args?: string[];
+  configuration?: TemplateEntry;
+}
+
+export interface ConfigEntry {
   [key: string]: unknown;
 }
 
 export interface ConfigData {
   name: string;
-  extends?: string;
   enabled?: boolean;
+  extends?: string;
   argsFile?: string;
   args?: string[];
-  [key: string]: unknown;
+  configuration?: ConfigEntry;
 }
 
 export interface TemplateFileData {

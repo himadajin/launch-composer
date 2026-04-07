@@ -275,8 +275,7 @@ export class WorkspaceStore {
     const fileData = await this.readTemplateFile(file);
     fileData.templates.push({
       name,
-      type: '',
-      request: 'launch',
+      configuration: { type: '', request: 'launch' },
     });
     await this.writeTemplateFile(fileData);
 
@@ -294,17 +293,14 @@ export class WorkspaceStore {
   ): Promise<EditorTarget> {
     await this.ensureConfigDataFile(file);
     const fileData = await this.readConfigFile(file);
-    const data: ConfigData = {
-      name,
-      enabled: true,
-    };
-
-    if (extendsName !== undefined) {
-      data.extends = extendsName;
-    } else {
-      data.type = '';
-      data.request = 'launch';
-    }
+    const data: ConfigData =
+      extendsName !== undefined
+        ? { name, enabled: true, extends: extendsName }
+        : {
+            name,
+            enabled: true,
+            configuration: { type: '', request: 'launch' },
+          };
 
     fileData.configurations.push(data);
     await this.writeConfigFile(fileData);
@@ -923,10 +919,7 @@ export class WorkspaceStore {
           }
 
           changed = true;
-          return {
-            ...config,
-            extends: nextName,
-          };
+          return { ...config, extends: nextName };
         });
 
         if (!changed) {

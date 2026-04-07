@@ -14,7 +14,6 @@ import {
   DEBUG_REQUEST_OPTIONS,
   normalizeDebugRequest,
   stringOrEmpty,
-  updateOptionalArray,
   updateOptionalString,
   updateRequiredString,
   useDebouncedCommit,
@@ -42,37 +41,48 @@ export function TemplateEditor({
 }: TemplateEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
   const [name, setName] = useState(data.name);
-  const [type, setType] = useState(stringOrEmpty(data.type));
-  const [request, setRequest] = useState(normalizeDebugRequest(data.request));
-  const [program, setProgram] = useState(stringOrEmpty(data.program));
-  const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
+  const [type, setType] = useState(stringOrEmpty(data.configuration?.type));
+  const [request, setRequest] = useState(
+    normalizeDebugRequest(data.configuration?.request),
+  );
+  const [program, setProgram] = useState(
+    stringOrEmpty(data.configuration?.program),
+  );
+  const [cwd, setCwd] = useState(stringOrEmpty(data.configuration?.cwd));
 
   useEffect(() => {
     setName(data.name);
   }, [data.name]);
 
   useEffect(() => {
-    setType(stringOrEmpty(data.type));
-  }, [data.type]);
+    setType(stringOrEmpty(data.configuration?.type));
+  }, [data.configuration?.type]);
 
   useEffect(() => {
-    setRequest(normalizeDebugRequest(data.request));
-  }, [data.request]);
+    setRequest(normalizeDebugRequest(data.configuration?.request));
+  }, [data.configuration?.request]);
 
   useEffect(() => {
-    setProgram(stringOrEmpty(data.program));
-  }, [data.program]);
+    setProgram(stringOrEmpty(data.configuration?.program));
+  }, [data.configuration?.program]);
 
   useEffect(() => {
-    setCwd(stringOrEmpty(data.cwd));
-  }, [data.cwd]);
+    setCwd(stringOrEmpty(data.configuration?.cwd));
+  }, [data.configuration?.cwd]);
 
   useDebouncedCommit(program, autoSaveDelay, (value) => {
     if (readOnly) {
       return;
     }
 
-    onChange(updateOptionalString(data, 'program', value));
+    onChange({
+      ...data,
+      configuration: updateOptionalString(
+        { ...data.configuration },
+        'program',
+        value,
+      ),
+    });
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
@@ -80,7 +90,14 @@ export function TemplateEditor({
       return;
     }
 
-    onChange(updateRequiredString(data, 'type', value));
+    onChange({
+      ...data,
+      configuration: updateRequiredString(
+        { ...data.configuration },
+        'type',
+        value,
+      ),
+    });
   });
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
@@ -88,7 +105,14 @@ export function TemplateEditor({
       return;
     }
 
-    onChange(updateOptionalString(data, 'cwd', value));
+    onChange({
+      ...data,
+      configuration: updateOptionalString(
+        { ...data.configuration },
+        'cwd',
+        value,
+      ),
+    });
   });
 
   const commitName = async () => {
@@ -175,7 +199,14 @@ export function TemplateEditor({
               }
 
               setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
-              onChange(updateRequiredString(data, 'request', value));
+              onChange({
+                ...data,
+                configuration: updateRequiredString(
+                  { ...data.configuration },
+                  'request',
+                  value,
+                ),
+              });
             }}
           />
         </FormGroup>
@@ -201,13 +232,15 @@ export function TemplateEditor({
         <FormGroup
           label="Template: Stop At Entry"
           description="Pause execution immediately after the program starts."
-          modified={data.stopAtEntry === true}
+          modified={data.configuration?.stopAtEntry === true}
         >
           <Checkbox
             toggle
-            checked={data.stopAtEntry === true}
+            checked={data.configuration?.stopAtEntry === true}
             disabled={readOnly}
-            label={data.stopAtEntry === true ? 'Enabled' : 'Disabled'}
+            label={
+              data.configuration?.stopAtEntry === true ? 'Enabled' : 'Disabled'
+            }
             onChange={(checked) => {
               if (readOnly) {
                 return;
@@ -215,7 +248,7 @@ export function TemplateEditor({
 
               onChange({
                 ...data,
-                stopAtEntry: checked,
+                configuration: { ...data.configuration, stopAtEntry: checked },
               });
             }}
           />
@@ -238,7 +271,13 @@ export function TemplateEditor({
               addPlaceholder="Add argument"
               value={data.args ?? []}
               onChange={(args) => {
-                onChange(updateOptionalArray(data, 'args', args));
+                const next = { ...data };
+                if (args.length === 0) {
+                  delete next.args;
+                } else {
+                  next.args = args;
+                }
+                onChange(next);
               }}
             />
           )}

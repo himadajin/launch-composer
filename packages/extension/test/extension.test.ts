@@ -355,7 +355,7 @@ test('addTemplateEntry creates its backing file when it does not exist', async (
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": "launch"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "configuration": {\n      "type": "",\n      "request": "launch"\n    }\n  }\n]',
   );
 });
 
@@ -412,7 +412,7 @@ test('addConfig command creates enabled configs by default', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "",\n      "request": "launch"\n    }\n  ]\n}',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "",\n        "request": "launch"\n      }\n    }\n  ]\n}',
   );
 });
 
@@ -432,7 +432,7 @@ test('toggleConfigFileEnabled updates the file-level enabled flag', async () => 
 
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "",\n      "request": "launch"\n    }\n  ]\n}\n',
+    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
   );
 });
 
@@ -622,7 +622,7 @@ test('patchConfigEntry rejects name updates', async () => {
   await vscode.workspace.fs.writeFile(
     fileUri,
     new TextEncoder().encode(
-      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "cppdbg",\n      "request": "launch"\n    }\n  ]\n}\n',
+      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "cppdbg",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
     ),
   );
 
@@ -643,7 +643,7 @@ test('patchConfigEntry rejects name updates', async () => {
   const bytes = await vscode.workspace.fs.readFile(fileUri);
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "type": "cppdbg",\n      "request": "launch"\n    }\n  ]\n}\n',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "cppdbg",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
   );
 });
 
@@ -707,7 +707,7 @@ test('addTemplate initializes directories before listing files', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '[\n  {\n    "name": "cpp",\n    "type": "",\n    "request": "launch"\n  }\n]',
+    '[\n  {\n    "name": "cpp",\n    "configuration": {\n      "type": "",\n      "request": "launch"\n    }\n  }\n]',
   );
 });
 

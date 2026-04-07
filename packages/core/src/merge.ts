@@ -1,22 +1,13 @@
 import type { ConfigData, LaunchConfig, TemplateData } from './types.js';
 
-const TEMPLATE_SPECIAL_KEYS = new Set(['name', 'args']);
-const CONFIG_SPECIAL_KEYS = new Set([
-  'name',
-  'extends',
-  'enabled',
-  'argsFile',
-  'args',
-]);
-
 export function buildLaunchConfig(
   config: ConfigData,
   template?: TemplateData,
   argsFileArgs?: string[],
 ): LaunchConfig {
   const merged: LaunchConfig = {
-    ...omitKeys(template, TEMPLATE_SPECIAL_KEYS),
-    ...omitKeys(config, CONFIG_SPECIAL_KEYS),
+    ...(template?.configuration ?? {}),
+    ...(config.configuration ?? {}),
     name: config.name,
   };
 
@@ -53,24 +44,6 @@ export function buildLaunchArgs(
   return configArgs === undefined
     ? [...(argsFileArgs ?? [])]
     : [...(argsFileArgs ?? []), ...configArgs];
-}
-
-function omitKeys(
-  value: Record<string, unknown> | undefined,
-  keys: Set<string>,
-): Record<string, unknown> {
-  if (value === undefined) {
-    return {};
-  }
-
-  const result: Record<string, unknown> = {};
-  for (const [key, entryValue] of Object.entries(value)) {
-    if (!keys.has(key)) {
-      result[key] = entryValue;
-    }
-  }
-
-  return result;
 }
 
 function ensureRequiredLaunchField(value: unknown): string {

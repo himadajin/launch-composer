@@ -34,11 +34,13 @@ test('generate shallow-merges template and config for enabled entries only', asy
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '${workspaceFolder}/build/myapp',
-            env: { PATH: '/usr/bin' },
             args: ['--template'],
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '${workspaceFolder}/build/myapp',
+              env: { PATH: '/usr/bin' },
+            },
           },
         ],
       },
@@ -50,16 +52,18 @@ test('generate shallow-merges template and config for enabled entries only', asy
         configurations: [
           {
             name: 'Basic Test',
-            extends: 'cpp',
             enabled: true,
-            env: { DEBUG: '1' },
-            cwd: '${workspaceFolder}/test',
+            extends: 'cpp',
             args: ['--config'],
+            configuration: {
+              env: { DEBUG: '1' },
+              cwd: '${workspaceFolder}/test',
+            },
           },
           {
             name: 'Disabled',
-            extends: 'cpp',
             enabled: false,
+            extends: 'cpp',
           },
         ],
       },
@@ -100,9 +104,11 @@ test('generate resolves argsFile via workspaceFolder and appends config args', a
             enabled: true,
             argsFile: '${workspaceFolder}/tmp/args.json',
             args: ['--debug'],
-            type: 'cppdbg',
-            request: 'launch',
-            program: '/tmp/bin/app',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/tmp/bin/app',
+            },
           },
         ],
       },
@@ -142,15 +148,19 @@ test('validateGenerateInput reports spec violations together', async () => {
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '/bin/app',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/bin/app',
+            },
           },
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '/bin/app2',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/bin/app2',
+            },
           },
         ],
       },
@@ -162,10 +172,12 @@ test('validateGenerateInput reports spec violations together', async () => {
         configurations: [
           {
             name: 'cpp',
-            extends: 'missing',
             enabled: true,
-            program: '/override',
+            extends: 'missing',
             argsFile: 'relative/path.json',
+            configuration: {
+              program: '/override',
+            },
           },
         ],
       },
@@ -195,8 +207,10 @@ test('generate fails when a template request is not launch or attach', async () 
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'start',
+            configuration: {
+              type: 'cppdbg',
+              request: 'start',
+            },
           },
         ],
       },
@@ -226,8 +240,10 @@ test('generate fails when a standalone config request is not launch or attach', 
           {
             name: 'Draft',
             enabled: true,
-            type: 'cppdbg',
-            request: 'start',
+            configuration: {
+              type: 'cppdbg',
+              request: 'start',
+            },
           },
         ],
       },
@@ -253,10 +269,12 @@ test('generate fails when template args and config argsFile are combined', async
         templates: [
           {
             name: 'cpp',
-            type: 'cppdbg',
-            request: 'launch',
-            program: '/bin/app',
             args: ['--template'],
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/bin/app',
+            },
           },
         ],
       },
@@ -268,8 +286,8 @@ test('generate fails when template args and config argsFile are combined', async
         configurations: [
           {
             name: 'Test',
-            extends: 'cpp',
             enabled: true,
+            extends: 'cpp',
             argsFile: '/tmp/args.json',
           },
         ],
@@ -299,8 +317,10 @@ test('generate excludes all configs when the config file is disabled', async () 
           {
             name: 'Draft',
             enabled: true,
-            type: 'cppdbg',
-            request: 'launch',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+            },
           },
         ],
       },
@@ -324,8 +344,10 @@ test('generate treats omitted enabled values as enabled', async () => {
         configurations: [
           {
             name: 'Default Enabled',
-            type: 'cppdbg',
-            request: 'launch',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+            },
           },
         ],
       },

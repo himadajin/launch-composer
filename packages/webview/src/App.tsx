@@ -409,8 +409,8 @@ function createEntryPatches(
   current: EntryData,
   next: EntryData,
 ): EntryPatchOperation[] {
-  const currentRecord = current as Record<string, unknown>;
-  const nextRecord = next as Record<string, unknown>;
+  const currentRecord = current as unknown as Record<string, unknown>;
+  const nextRecord = next as unknown as Record<string, unknown>;
   const keys = new Set([
     ...Object.keys(currentRecord),
     ...Object.keys(nextRecord),
@@ -463,8 +463,7 @@ function isEqualPatchValue(left: unknown, right: unknown): boolean {
 function createPlaceholderTemplate(file: string): TemplateData {
   return {
     name: file,
-    type: '',
-    request: 'launch',
+    configuration: { type: '', request: 'launch' },
   };
 }
 
@@ -472,7 +471,9 @@ function createPlaceholderConfig(file: string): ConfigData {
   return {
     name: file,
     enabled: true,
-    type: '',
-    request: 'launch',
+    configuration: {
+      type: '',
+      request: 'launch',
+    },
   };
 }

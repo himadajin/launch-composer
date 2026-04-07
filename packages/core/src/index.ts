@@ -3,6 +3,7 @@ export type {
   ArgsFileLoadResult,
   ArgsFileReader,
   ConfigData,
+  ConfigEntry,
   ConfigFileData,
   GenerateFailure,
   GenerateInput,
@@ -11,6 +12,7 @@ export type {
   LaunchConfig,
   LaunchJson,
   TemplateData,
+  TemplateEntry,
   TemplateFileData,
   ValidationError,
 } from './types.js';

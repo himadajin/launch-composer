@@ -15,7 +15,6 @@ import {
   DEBUG_REQUEST_OPTIONS,
   normalizeDebugRequest,
   stringOrEmpty,
-  updateOptionalArray,
   updateOptionalString,
   updateRequiredString,
   useDebouncedCommit,
@@ -48,10 +47,13 @@ export function ConfigEditor({
   readOnlyIssue,
 }: ConfigEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
+  const configEntry = data.configuration ?? {};
   const [name, setName] = useState(data.name);
-  const [type, setType] = useState(stringOrEmpty(data.type));
-  const [request, setRequest] = useState(normalizeDebugRequest(data.request));
-  const [cwd, setCwd] = useState(stringOrEmpty(data.cwd));
+  const [type, setType] = useState(stringOrEmpty(configEntry.type));
+  const [request, setRequest] = useState(
+    normalizeDebugRequest(configEntry.request),
+  );
+  const [cwd, setCwd] = useState(stringOrEmpty(configEntry.cwd));
   const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
 
   useEffect(() => {
@@ -59,16 +61,16 @@ export function ConfigEditor({
   }, [data.name]);
 
   useEffect(() => {
-    setType(stringOrEmpty(data.type));
-  }, [data.type]);
+    setType(stringOrEmpty(data.configuration?.type));
+  }, [data.configuration?.type]);
 
   useEffect(() => {
-    setRequest(normalizeDebugRequest(data.request));
-  }, [data.request]);
+    setRequest(normalizeDebugRequest(data.configuration?.request));
+  }, [data.configuration?.request]);
 
   useEffect(() => {
-    setCwd(stringOrEmpty(data.cwd));
-  }, [data.cwd]);
+    setCwd(stringOrEmpty(data.configuration?.cwd));
+  }, [data.configuration?.cwd]);
 
   useEffect(() => {
     setArgsFile(stringOrEmpty(data.argsFile));
@@ -81,17 +83,18 @@ export function ConfigEditor({
     '(none)',
     ...templates.map((template) => template.name),
   ];
+  const extendsValue = data.extends;
   const selectValue =
-    data.extends !== undefined && !templateOptions.includes(data.extends)
-      ? data.extends
-      : (data.extends ?? '(none)');
+    extendsValue !== undefined && !templateOptions.includes(extendsValue)
+      ? extendsValue
+      : (extendsValue ?? '(none)');
   const argsFileDisabled = currentTemplate?.args !== undefined;
-  const launchFieldsInherited = data.extends !== undefined;
+  const launchFieldsInherited = extendsValue !== undefined;
   const effectiveType = launchFieldsInherited
-    ? stringOrEmpty(currentTemplate?.type)
+    ? stringOrEmpty(currentTemplate?.configuration?.type)
     : type;
   const effectiveRequest = launchFieldsInherited
-    ? normalizeDebugRequest(currentTemplate?.request)
+    ? normalizeDebugRequest(currentTemplate?.configuration?.request)
     : request;
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
@@ -99,7 +102,14 @@ export function ConfigEditor({
       return;
     }
 
-    onChange(updateOptionalString(data, 'cwd', value));
+    onChange({
+      ...data,
+      configuration: updateOptionalString(
+        { ...data.configuration },
+        'cwd',
+        value,
+      ),
+    });
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
@@ -107,7 +117,14 @@ export function ConfigEditor({
       return;
     }
 
-    onChange(updateRequiredString(data, 'type', value));
+    onChange({
+      ...data,
+      configuration: updateRequiredString(
+        { ...data.configuration },
+        'type',
+        value,
+      ),
+    });
   });
 
   useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
@@ -115,7 +132,14 @@ export function ConfigEditor({
       return;
     }
 
-    onChange(updateOptionalString(data, 'argsFile', value));
+    const trimmed = value.trim();
+    if (trimmed === '') {
+      const next = { ...data };
+      delete next.argsFile;
+      onChange(next);
+    } else {
+      onChange({ ...data, argsFile: trimmed });
+    }
   });
 
   const commitName = async () => {
@@ -194,17 +218,23 @@ export function ConfigEditor({
                 return;
               }
 
-              const next = { ...data };
               if (value === '(none)') {
+                const nextConfig = { ...data.configuration };
+                nextConfig.type = stringOrEmpty(nextConfig.type);
+                nextConfig.request = 'launch';
+                const next = { ...data, configuration: nextConfig };
                 delete next.extends;
-                next.type = stringOrEmpty(next.type);
-                next.request = 'launch';
+                onChange(next);
               } else {
-                next.extends = value;
-                delete next.type;
-                delete next.request;
+                const nextConfig = { ...data.configuration };
+                delete nextConfig.type;
+                delete nextConfig.request;
+                onChange({
+                  ...data,
+                  extends: value,
+                  configuration: nextConfig,
+                });
               }
-              onChange(next);
             }}
           />
         </FormGroup>
@@ -278,7 +308,14 @@ export function ConfigEditor({
               }
 
               setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
-              onChange(updateRequiredString(data, 'request', value));
+              onChange({
+                ...data,
+                configuration: updateRequiredString(
+                  { ...data.configuration },
+                  'request',
+                  value,
+                ),
+              });
             }}
           />
         </FormGroup>
@@ -293,13 +330,15 @@ export function ConfigEditor({
         <FormGroup
           label="Config: Stop At Entry"
           description="Pause execution immediately after the program starts."
-          modified={data.stopAtEntry === true}
+          modified={data.configuration?.stopAtEntry === true}
         >
           <Checkbox
             toggle
-            checked={data.stopAtEntry === true}
+            checked={data.configuration?.stopAtEntry === true}
             disabled={readOnly}
-            label={data.stopAtEntry === true ? 'Enabled' : 'Disabled'}
+            label={
+              data.configuration?.stopAtEntry === true ? 'Enabled' : 'Disabled'
+            }
             onChange={(checked) => {
               if (readOnly) {
                 return;
@@ -307,7 +346,7 @@ export function ConfigEditor({
 
               onChange({
                 ...data,
-                stopAtEntry: checked,
+                configuration: { ...data.configuration, stopAtEntry: checked },
               });
             }}
           />
@@ -348,7 +387,7 @@ export function ConfigEditor({
                 }
 
                 setArgsFile(selected);
-                onChange(updateOptionalString(data, 'argsFile', selected));
+                onChange({ ...data, argsFile: selected });
               }}
             >
               Browse
@@ -373,7 +412,13 @@ export function ConfigEditor({
               addPlaceholder="Add argument"
               value={data.args ?? []}
               onChange={(args) => {
-                onChange(updateOptionalArray(data, 'args', args));
+                const next = { ...data };
+                if (args.length === 0) {
+                  delete next.args;
+                } else {
+                  next.args = args;
+                }
+                onChange(next);
               }}
             />
           )}
