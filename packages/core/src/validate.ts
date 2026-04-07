@@ -228,15 +228,34 @@ function validateConfigEntries(
       );
     }
 
+    const configEntry = configRef.data.configuration;
+
     if (
-      configRef.data.extends === undefined &&
-      !isDebugRequestValue(configRef.data.request)
+      configEntry !== undefined &&
+      (typeof configEntry !== 'object' ||
+        configEntry === null ||
+        Array.isArray(configEntry))
     ) {
       errors.push(
         createValidationError({
           file: configRef.file,
           configName: safeConfigName(configRef.data.name),
-          field: 'request',
+          field: 'configuration',
+          message: 'Config configuration must be an object.',
+        }),
+      );
+      continue;
+    }
+
+    if (
+      configRef.data.extends === undefined &&
+      !isDebugRequestValue(configEntry?.request)
+    ) {
+      errors.push(
+        createValidationError({
+          file: configRef.file,
+          configName: safeConfigName(configRef.data.name),
+          field: 'configuration.request',
           message: `Config request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
         }),
       );
@@ -339,13 +358,14 @@ function validateConfigSemantics(
     );
   }
 
+  const configEntry = configRef.data.configuration;
   for (const key of BLOCKED_OVERRIDE_KEYS) {
-    if (Object.hasOwn(configRef.data, key)) {
+    if (configEntry !== undefined && Object.hasOwn(configEntry, key)) {
       errors.push(
         createValidationError({
           file: configRef.file,
           configName: safeConfigName(configRef.data.name),
-          field: key,
+          field: `configuration.${key}`,
           message: `Config with extends cannot override "${key}".`,
         }),
       );
@@ -380,10 +400,9 @@ async function validateArgsFile(
     return;
   }
 
+  const extendsName = configRef.data.extends;
   const templateRef =
-    configRef.data.extends === undefined
-      ? undefined
-      : templateMap.get(configRef.data.extends);
+    extendsName === undefined ? undefined : templateMap.get(extendsName);
   if (templateRef?.data.args !== undefined) {
     return;
   }

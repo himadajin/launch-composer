@@ -1,13 +1,6 @@
 import type { ConfigData, LaunchConfig, TemplateData } from './types.js';
 
 const TEMPLATE_SPECIAL_KEYS = new Set(['name', 'args']);
-const CONFIG_SPECIAL_KEYS = new Set([
-  'name',
-  'extends',
-  'enabled',
-  'argsFile',
-  'args',
-]);
 
 export function buildLaunchConfig(
   config: ConfigData,
@@ -16,7 +9,7 @@ export function buildLaunchConfig(
 ): LaunchConfig {
   const merged: LaunchConfig = {
     ...omitKeys(template, TEMPLATE_SPECIAL_KEYS),
-    ...omitKeys(config, CONFIG_SPECIAL_KEYS),
+    ...(config.configuration ?? {}),
     name: config.name,
   };
 

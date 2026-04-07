@@ -203,13 +203,17 @@ interface TemplateData {
   [key: string]: unknown; // パススルーキー
 }
 
+interface ConfigEntry {
+  [key: string]: unknown; // パススルーキーのみ
+}
+
 interface ConfigData {
   name: string;
-  extends?: string;
   enabled?: boolean;
+  extends?: string;
   argsFile?: string;
   args?: string[];
-  [key: string]: unknown; // パススルーキー
+  configuration?: ConfigEntry;
 }
 
 interface TemplateFileData {

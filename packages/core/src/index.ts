@@ -3,6 +3,7 @@ export type {
   ArgsFileLoadResult,
   ArgsFileReader,
   ConfigData,
+  ConfigEntry,
   ConfigFileData,
   GenerateFailure,
   GenerateInput,

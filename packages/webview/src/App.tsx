@@ -472,7 +472,9 @@ function createPlaceholderConfig(file: string): ConfigData {
   return {
     name: file,
     enabled: true,
-    type: '',
-    request: 'launch',
+    configuration: {
+      type: '',
+      request: 'launch',
+    },
   };
 }
