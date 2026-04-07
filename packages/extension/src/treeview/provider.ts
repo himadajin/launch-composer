@@ -33,6 +33,21 @@ type EntryNode = {
 
 export type TreeNode = FileNode | EntryNode;
 
+const DISABLED_BY_FILE_ICON = new vscode.ThemeIcon(
+  'circle-slash',
+  new vscode.ThemeColor('disabledForeground'),
+);
+
+function toCheckboxState(
+  checked: boolean,
+):
+  | vscode.TreeItemCheckboxState.Checked
+  | vscode.TreeItemCheckboxState.Unchecked {
+  return checked
+    ? vscode.TreeItemCheckboxState.Checked
+    : vscode.TreeItemCheckboxState.Unchecked;
+}
+
 export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeNode> {
   private readonly didChangeTreeDataEmitter = new vscode.EventEmitter<
     TreeNode | undefined
@@ -89,12 +104,8 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
                 index,
               },
               label: (entry as ConfigData).name,
-              enabled:
-                element.enabled !== false &&
-                (entry as ConfigData).enabled !== false,
-              inheritedDisabled:
-                element.enabled === false &&
-                (entry as ConfigData).enabled !== false,
+              enabled: (entry as ConfigData).enabled !== false,
+              inheritedDisabled: element.enabled === false,
             };
 
       this.entryNodes.set(getEntryKey(node.target), node);
@@ -110,6 +121,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
           ? vscode.TreeItemCollapsibleState.Expanded
           : vscode.TreeItemCollapsibleState.None,
       );
+      item.id = `file:${element.kind}:${element.file}`;
       item.contextValue =
         element.issue === undefined
           ? element.kind === 'template'
@@ -138,12 +150,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
           new vscode.ThemeColor('list.warningForeground'),
         );
         item.description = getIssueDescription(element.issue);
-      } else if (element.kind === 'config' && element.enabled === false) {
-        item.iconPath = new vscode.ThemeIcon(
-          'circle-slash',
-          new vscode.ThemeColor('descriptionForeground'),
-        );
-        item.description = 'disabled';
+      } else if (element.kind === 'config') {
+        item.checkboxState = toCheckboxState(element.enabled !== false);
+        if (element.enabled === false) {
+          item.description = 'disabled';
+        }
       }
 
       return item;
@@ -153,6 +164,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       element.label,
       vscode.TreeItemCollapsibleState.None,
     );
+    item.id = getEntryKey(element.target);
     item.contextValue =
       element.target.kind === 'template'
         ? 'templateEntry'
@@ -162,25 +174,23 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
             ? 'configEntryEnabled'
             : 'configEntryDisabled';
     item.command = {
-      command: 'launch-composer.openItemJson',
-      title: 'Open',
+      command: 'launch-composer.editItem',
+      title: 'Edit',
       arguments: [element],
     };
 
     if (element.target.kind === 'config') {
-      item.iconPath = element.enabled
-        ? new vscode.ThemeIcon(
-            'pass-filled',
-            new vscode.ThemeColor('testing.iconPassed'),
-          )
-        : new vscode.ThemeIcon(
-            'circle-large-outline',
-            new vscode.ThemeColor('descriptionForeground'),
-          );
-      if (!element.enabled) {
-        item.description = element.inheritedDisabled
-          ? 'disabled by file'
-          : 'disabled';
+      if (element.inheritedDisabled) {
+        item.iconPath = DISABLED_BY_FILE_ICON;
+        item.description = 'disabled by file';
+      } else {
+        item.checkboxState = {
+          state: toCheckboxState(element.enabled === true),
+          tooltip: 'Include this config when generating launch.json.',
+        };
+        if (!element.enabled) {
+          item.description = 'disabled';
+        }
       }
     }
 

@@ -255,7 +255,7 @@ export function ConfigEditor({
             toggle
             checked={data.enabled === true}
             disabled={readOnly}
-            label={data.enabled === true ? 'Enabled' : 'Disabled'}
+            label="Enabled"
             onChange={(checked) => {
               if (readOnly) {
                 return;

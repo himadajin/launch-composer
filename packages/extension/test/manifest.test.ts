@@ -109,8 +109,7 @@ test('package.json command contributions stay aligned with the extension impleme
   assert.deepEqual(inlineMenu.map((item) => item.command).sort(), [
     'launch-composer.addConfigEntry',
     'launch-composer.addTemplateEntry',
-    'launch-composer.editItem',
-    'launch-composer.toggleEnabled',
+    'launch-composer.openItemJson',
   ]);
 
   for (const command of packageJson.contributes.commands) {

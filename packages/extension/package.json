@@ -169,7 +169,8 @@
       {
         "command": "launch-composer.openItemJson",
         "title": "Open",
-        "enablement": "workspaceFolderCount == 1"
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(go-to-file)"
       },
       {
         "command": "launch-composer.copyItemFilePath",
@@ -339,12 +340,7 @@
           "group": "inline"
         },
         {
-          "command": "launch-composer.toggleEnabled",
-          "when": "viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configFile || viewItem == configFileDisabled",
-          "group": "inline"
-        },
-        {
-          "command": "launch-composer.editItem",
+          "command": "launch-composer.openItemJson",
           "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "inline"
         }
