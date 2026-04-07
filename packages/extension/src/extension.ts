@@ -40,6 +40,7 @@ export function activate(context: vscode.ExtensionContext): void {
     'launchComposer.configs',
     {
       treeDataProvider: configProvider,
+      manageCheckboxStateManually: true,
       showCollapseAll: false,
     },
   );
@@ -87,6 +88,39 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const refreshViews = (): void => {
     void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
+  };
+
+  const handleConfigCheckboxChange = async (
+    event: vscode.TreeCheckboxChangeEvent<TreeNode>,
+  ): Promise<void> => {
+    try {
+      for (const [node, checkboxState] of event.items) {
+        const enabled = checkboxState === vscode.TreeItemCheckboxState.Checked;
+
+        if (node.type === 'file' && node.kind === 'config') {
+          if (node.enabled !== enabled) {
+            await store.toggleConfigFileEnabled(node.file);
+          }
+          continue;
+        }
+
+        if (node.type !== 'entry' || node.target.kind !== 'config') {
+          continue;
+        }
+
+        if (node.inheritedDisabled) {
+          continue;
+        }
+
+        if (node.enabled !== enabled) {
+          await store.toggleConfigEnabled(node.target.file, node.target.index);
+        }
+      }
+
+      await syncUiWithWorkspace({ notifyIssues: false });
+    } catch (error) {
+      showError(error);
+    }
   };
 
   const revealTarget = async (target: EditorTarget): Promise<void> => {
@@ -187,6 +221,9 @@ export function activate(context: vscode.ExtensionContext): void {
       void syncUiWithWorkspace({ notifyIssues: true }).catch(showError);
     },
   );
+  const checkboxSubscription = configView.onDidChangeCheckboxState((event) =>
+    handleConfigCheckboxChange(event),
+  );
 
   context.subscriptions.push(
     templateView,
@@ -195,6 +232,7 @@ export function activate(context: vscode.ExtensionContext): void {
     deleteSubscription,
     textChangeSubscription,
     saveSubscription,
+    checkboxSubscription,
     registerCommand(COMMANDS.generate, async () => {
       try {
         await handleGenerate();
@@ -451,13 +489,14 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.editItem, async (target?: EditorTarget) => {
-      if (target === undefined) {
+    registerCommand(COMMANDS.editItem, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined) {
         return;
       }
 
       try {
-        await editorPanel.open(target);
+        await editorPanel.open(entryNode.target);
       } catch (error) {
         showError(error);
       }

@@ -3,18 +3,33 @@ import * as path from 'node:path';
 type CommandCallback = (...args: unknown[]) => unknown;
 
 export class Uri {
-  constructor(readonly fsPath: string) {}
+  constructor(
+    readonly fsPath: string,
+    readonly scheme = 'file',
+    readonly path = fsPath,
+  ) {}
 
   static file(fsPath: string): Uri {
-    return new Uri(path.resolve(fsPath));
+    const resolvedPath = path.resolve(fsPath);
+    return new Uri(resolvedPath, 'file', resolvedPath);
+  }
+
+  static from(components: { scheme: string; path: string }): Uri {
+    return new Uri(components.path, components.scheme, components.path);
   }
 
   static joinPath(base: Uri, ...paths: string[]): Uri {
-    return new Uri(path.join(base.fsPath, ...paths));
+    if (base.scheme === 'file') {
+      const nextPath = path.join(base.fsPath, ...paths);
+      return new Uri(nextPath, 'file', nextPath);
+    }
+
+    const nextPath = path.posix.join(base.path, ...paths);
+    return new Uri(nextPath, base.scheme, nextPath);
   }
 
   toString(): string {
-    return this.fsPath;
+    return this.scheme === 'file' ? this.fsPath : `${this.scheme}:${this.path}`;
   }
 }
 
@@ -99,6 +114,15 @@ export class ThemeIcon {
   ) {}
 }
 
+export class FileDecoration {
+  constructor(
+    readonly badge?: string,
+    readonly tooltip?: string,
+    readonly color?: ThemeColor,
+    readonly propagate?: boolean,
+  ) {}
+}
+
 export class Position {
   constructor(
     readonly line: number,
@@ -128,12 +152,23 @@ export const TreeItemCollapsibleState = {
   Expanded: 2,
 } as const;
 
+export enum TreeItemCheckboxState {
+  Unchecked = 0,
+  Checked = 1,
+}
+
 export class TreeItem {
   contextValue?: string;
   iconPath?: unknown;
   resourceUri?: Uri;
   command?: unknown;
   description?: string;
+  checkboxState?:
+    | TreeItemCheckboxState
+    | {
+        readonly state: TreeItemCheckboxState;
+        readonly tooltip?: string;
+      };
 
   constructor(
     readonly label: string,
@@ -180,6 +215,18 @@ let lastCreatedWebviewPanel:
       dispose(): void;
     }
   | undefined;
+const createdTreeViews = new Map<
+  string,
+  {
+    onDidChangeCheckboxState(listener: (event: unknown) => void): {
+      dispose(): void;
+    };
+    reveal(): Promise<void>;
+    dispose(): void;
+    fireCheckboxChange(event: unknown): Promise<void>;
+  }
+>();
+const fileDecorationProviders: unknown[] = [];
 
 type WorkspaceFolder = {
   index: number;
@@ -457,10 +504,39 @@ export const window = {
     return undefined;
   },
 
-  createTreeView() {
-    return {
+  createTreeView(id: string) {
+    const checkboxListeners = new Set<(event: unknown) => unknown>();
+    const treeView = {
+      onDidChangeCheckboxState(listener: (event: unknown) => void) {
+        checkboxListeners.add(listener);
+        return {
+          dispose() {
+            checkboxListeners.delete(listener);
+          },
+        };
+      },
       async reveal() {},
       dispose() {},
+      async fireCheckboxChange(event: unknown) {
+        await Promise.all(
+          [...checkboxListeners].map((listener) => listener(event)),
+        );
+      },
+    };
+
+    createdTreeViews.set(id, treeView);
+    return treeView;
+  },
+
+  registerFileDecorationProvider(provider: unknown) {
+    fileDecorationProviders.push(provider);
+    return {
+      dispose() {
+        const index = fileDecorationProviders.indexOf(provider);
+        if (index >= 0) {
+          fileDecorationProviders.splice(index, 1);
+        }
+      },
     };
   },
 
@@ -544,6 +620,8 @@ export const __testing = {
     didChangeTextDocumentEmitter.dispose();
     didSaveTextDocumentEmitter.dispose();
     lastCreatedWebviewPanel = undefined;
+    createdTreeViews.clear();
+    fileDecorationProviders.length = 0;
   },
 
   createExtensionContext() {
@@ -606,5 +684,13 @@ export const __testing = {
 
   getLastCreatedWebviewPanel() {
     return lastCreatedWebviewPanel;
+  },
+
+  getCreatedTreeView(id: string) {
+    return createdTreeViews.get(id);
+  },
+
+  getRegisteredFileDecorationProviders(): unknown[] {
+    return [...fileDecorationProviders];
   },
 };

@@ -35,6 +35,13 @@ const testVscode = vscode as typeof vscode & {
     getWarningMessages(): string[];
     getCreatedDirectories(): string[];
     getClipboardText(): string;
+    getCreatedTreeView(id: string):
+      | {
+          fireCheckboxChange(event: {
+            items: Array<[unknown, vscode.TreeItemCheckboxState]>;
+          }): Promise<void>;
+        }
+      | undefined;
   };
 };
 
@@ -427,6 +434,49 @@ test('toggleConfigFileEnabled updates the file-level enabled flag', async () => 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
       '/workspace/toggle-config-file-project/.vscode/launch-composer/configs/config.json',
+    ),
+  );
+
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
+  );
+});
+
+test('config tree checkbox toggles the file-level enabled flag', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/config-checkbox-view']);
+
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/config-checkbox-view'),
+  );
+  await store.addConfigEntry('config.json', 'Launch', undefined);
+
+  activate(context);
+
+  const configTreeView = testVscode.__testing.getCreatedTreeView(
+    'launchComposer.configs',
+  );
+  assert.ok(configTreeView);
+
+  await configTreeView.fireCheckboxChange({
+    items: [
+      [
+        {
+          type: 'file',
+          kind: 'config',
+          file: 'config.json',
+          enabled: true,
+        },
+        vscode.TreeItemCheckboxState.Unchecked,
+      ],
+    ],
+  });
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/config-checkbox-view/.vscode/launch-composer/configs/config.json',
     ),
   );
 
