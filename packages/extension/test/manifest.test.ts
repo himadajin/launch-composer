@@ -47,11 +47,6 @@ test('package.json command contributions stay aligned with the extension impleme
           when?: string;
           group?: string;
         }>;
-        'view/item/inline'?: Array<{
-          command: string;
-          when?: string;
-          group?: string;
-        }>;
       };
     };
   };
@@ -96,10 +91,6 @@ test('package.json command contributions stay aligned with the extension impleme
 
   const itemContextMenu = packageJson.contributes.menus?.['view/item/context'];
   assert.ok(itemContextMenu);
-  assert.equal(
-    itemContextMenu.some((item) => item.group === 'inline'),
-    false,
-  );
   assert.ok(
     itemContextMenu.some(
       (item) =>
@@ -114,11 +105,11 @@ test('package.json command contributions stay aligned with the extension impleme
         item.group === '0_state@1',
     ),
   );
-
-  const inlineMenu = packageJson.contributes.menus?.['view/item/inline'] ?? [];
+  const inlineMenu = itemContextMenu.filter((item) => item.group === 'inline');
   assert.deepEqual(inlineMenu.map((item) => item.command).sort(), [
     'launch-composer.addConfigEntry',
     'launch-composer.addTemplateEntry',
+    'launch-composer.editItem',
     'launch-composer.toggleEnabled',
   ]);
 

@@ -162,9 +162,9 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
             ? 'configEntryEnabled'
             : 'configEntryDisabled';
     item.command = {
-      command: 'launch-composer.editItem',
-      title: 'Edit',
-      arguments: [element.target],
+      command: 'launch-composer.openItemJson',
+      title: 'Open',
+      arguments: [element],
     };
 
     if (element.target.kind === 'config') {

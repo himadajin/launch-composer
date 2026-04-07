@@ -157,7 +157,8 @@
       {
         "command": "launch-composer.editItem",
         "title": "Edit",
-        "enablement": "workspaceFolderCount == 1"
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(gear)"
       },
       {
         "command": "launch-composer.openActiveEditorJson",
@@ -326,9 +327,7 @@
           "command": "launch-composer.deleteItem",
           "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "5_delete@1"
-        }
-      ],
-      "view/item/inline": [
+        },
         {
           "command": "launch-composer.addTemplateEntry",
           "when": "view == launchComposer.templates && viewItem == templateFile",
@@ -342,6 +341,11 @@
         {
           "command": "launch-composer.toggleEnabled",
           "when": "viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configFile || viewItem == configFileDisabled",
+          "group": "inline"
+        },
+        {
+          "command": "launch-composer.editItem",
+          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "inline"
         }
       ],

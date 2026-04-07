@@ -451,13 +451,14 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.editItem, async (target?: EditorTarget) => {
-      if (target === undefined) {
+    registerCommand(COMMANDS.editItem, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined) {
         return;
       }
 
       try {
-        await editorPanel.open(target);
+        await editorPanel.open(entryNode.target);
       } catch (error) {
         showError(error);
       }
