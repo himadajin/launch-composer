@@ -12,13 +12,57 @@ const testVscode = vscode as typeof vscode & {
     createExtensionContext(): unknown;
     getErrorMessages(): string[];
     getLastCreatedWebviewPanel():
-      | { disposed: boolean; postedMessages: unknown[] }
+      | { disposed: boolean; title: string; postedMessages: unknown[] }
       | undefined;
   };
 };
 
 test.beforeEach(() => {
   testVscode.__testing.reset();
+});
+
+test('open sets the panel title to the current template name', async () => {
+  const store = {
+    async readAll() {
+      return {
+        templates: [
+          {
+            file: 'abc.json',
+            templates: [{ name: 'cpp' }],
+          },
+        ],
+        configs: [],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:title-template';
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'template',
+    file: 'abc.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.equal(panel.title, 'cpp');
 });
 
 test('syncWithWorkspace closes the editor panel when the current target no longer exists', async () => {
@@ -61,6 +105,7 @@ test('syncWithWorkspace closes the editor panel when the current target no longe
 
   const panel = testVscode.__testing.getLastCreatedWebviewPanel();
   assert.ok(panel);
+  assert.equal(panel.title, 'abc.json');
   assert.equal(panel.disposed, false);
 
   exists = false;
@@ -113,6 +158,7 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
 
   const panel = testVscode.__testing.getLastCreatedWebviewPanel();
   assert.ok(panel);
+  assert.equal(panel.title, 'cpp');
 
   await controller.syncWithWorkspaceData({
     templates: [],
@@ -128,6 +174,7 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
   });
 
   assert.equal(panel.disposed, false);
+  assert.equal(panel.title, 'abc.json');
   const lastMessage = panel.postedMessages.at(-1) as
     | {
         type: 'initial-data';
@@ -266,6 +313,7 @@ test('openCurrentAsJson opens the backing file when the active file is invalid',
 });
 
 test('rename-entry message calls renameEntry and posts refreshed data', async () => {
+  let templateName = 'cpp';
   let renamed:
     | {
         target: {
@@ -283,7 +331,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
         templates: [
           {
             file: 'template.json',
-            templates: [{ name: 'cpp-renamed' }],
+            templates: [{ name: templateName }],
           },
         ],
         configs: [],
@@ -297,6 +345,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
       return true;
     },
     async renameEntry(target, name) {
+      templateName = name;
       renamed = { target, name };
     },
   } as Pick<
@@ -350,6 +399,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
 
   const panel = testVscode.__testing.getLastCreatedWebviewPanel();
   assert.ok(panel);
+  assert.equal(panel.title, 'cpp-renamed');
   assert.deepEqual(panel.postedMessages.at(-2), {
     type: 'initial-data',
     requestId: 'local',
@@ -448,4 +498,64 @@ test('rename-entry message returns an error when renameEntry fails', async () =>
   assert.deepEqual(testVscode.__testing.getErrorMessages(), [
     'Name "Launch" is already in use.',
   ]);
+});
+
+test('syncWithWorkspaceData refreshes the panel title when the current config name changes', async () => {
+  const store = {
+    async readAll() {
+      return {
+        templates: [],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch' }],
+          },
+        ],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:sync-title';
+    },
+    async hasEntry() {
+      return true;
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'hasEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.equal(panel.title, 'Launch');
+
+  await controller.syncWithWorkspaceData({
+    templates: [],
+    configs: [
+      {
+        file: 'config.json',
+        configurations: [{ name: 'Launch Server' }],
+      },
+    ],
+    issues: [],
+  });
+
+  assert.equal(panel.title, 'Launch Server');
 });

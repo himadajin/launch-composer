@@ -14,6 +14,13 @@ import {
 } from './treeview/provider.js';
 import { EditorPanelController } from './webview/editorPanel.js';
 
+const NO_TEMPLATE_LABEL = 'No template';
+
+type TemplateSelectionItem =
+  | { label: string; value: string }
+  | { label: string; value?: undefined; description?: string }
+  | { kind: vscode.QuickPickItemKind.Separator; label: string };
+
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = getWorkspaceRoot();
   if (workspaceRoot === undefined) {
@@ -479,7 +486,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const target = await store.addConfigEntry(
           fileNode.file,
           name,
-          extendsName === '(none)' ? undefined : extendsName,
+          extendsName,
         );
         await syncUiWithWorkspace();
         await editorPanel.open(target);
@@ -679,18 +686,34 @@ async function promptForTemplateSelection(
   store: WorkspaceStore,
 ): Promise<string | null | undefined> {
   const templateNames = await store.listTemplateNames();
-  const selection = await vscode.window.showQuickPick(
-    ['(none)', ...templateNames],
-    {
-      placeHolder: 'Select a template',
-    },
-  );
+  const items: TemplateSelectionItem[] = templateNames.map((name) => ({
+    label: name,
+    value: name,
+  }));
+
+  if (templateNames.length > 0) {
+    items.push({
+      kind: vscode.QuickPickItemKind.Separator,
+      label: 'Standalone',
+    });
+  }
+
+  items.push({
+    label: NO_TEMPLATE_LABEL,
+    description: 'Create a standalone config without template inheritance.',
+  });
+
+  const selection = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Select a base template',
+    prompt:
+      'Choose a template to inherit from, or select No template to create a standalone config.',
+  });
 
   if (selection === undefined) {
     return null;
   }
 
-  return selection;
+  return 'value' in selection ? selection.value : undefined;
 }
 
 async function promptForFileName(

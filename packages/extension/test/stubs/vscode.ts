@@ -152,6 +152,11 @@ export const TreeItemCollapsibleState = {
   Expanded: 2,
 } as const;
 
+export enum QuickPickItemKind {
+  Separator = -1,
+  Default = 0,
+}
+
 export enum TreeItemCheckboxState {
   Unchecked = 0,
   Checked = 1,
@@ -191,6 +196,12 @@ let clipboardText = '';
 const configuration = new Map<string, unknown>();
 const quickPickResponses: unknown[] = [];
 const inputBoxResponses: unknown[] = [];
+let lastQuickPickCall:
+  | {
+      items: unknown[];
+      options: unknown;
+    }
+  | undefined;
 const didDeleteFilesEmitter = new EventEmitter<{ files: Uri[] }>();
 const didChangeTextDocumentEmitter = new EventEmitter<{
   document: { uri: Uri };
@@ -540,7 +551,14 @@ export const window = {
     };
   },
 
-  async showQuickPick(): Promise<unknown> {
+  async showQuickPick(
+    items?: readonly unknown[],
+    options?: unknown,
+  ): Promise<unknown> {
+    lastQuickPickCall = {
+      items: items === undefined ? [] : [...items],
+      options,
+    };
     return quickPickResponses.shift();
   },
 
@@ -548,11 +566,11 @@ export const window = {
     return inputBoxResponses.shift();
   },
 
-  createWebviewPanel() {
+  createWebviewPanel(_viewType: string, title: string) {
     const didDisposeEmitter = new EventEmitter<void>();
     const panel = {
       disposed: false,
-      title: '',
+      title,
       postedMessages: [] as unknown[],
       webview: {
         html: '',
@@ -616,6 +634,7 @@ export const __testing = {
     inputBoxResponses.length = 0;
     workspaceFolders = undefined;
     missingPathErrorStyle = 'vscode';
+    lastQuickPickCall = undefined;
     didDeleteFilesEmitter.dispose();
     didChangeTextDocumentEmitter.dispose();
     didSaveTextDocumentEmitter.dispose();
@@ -688,6 +707,10 @@ export const __testing = {
 
   getCreatedTreeView(id: string) {
     return createdTreeViews.get(id);
+  },
+
+  getLastQuickPickCall() {
+    return lastQuickPickCall;
   },
 
   getRegisteredFileDecorationProviders(): unknown[] {

@@ -22,6 +22,9 @@ import {
 } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
+const NO_TEMPLATE_LABEL = 'No template';
+const NO_TEMPLATE_VALUE = '';
+
 interface ConfigEditorProps {
   data: ConfigData;
   sourceFile: string;
@@ -86,15 +89,17 @@ export function ConfigEditor({
   const currentTemplate = templates.find(
     (template) => template.name === data.extends,
   );
-  const templateOptions = [
-    '(none)',
-    ...templates.map((template) => template.name),
-  ];
+  const templateNames = templates.map((template) => template.name);
   const extendsValue = data.extends;
-  const selectValue =
-    extendsValue !== undefined && !templateOptions.includes(extendsValue)
-      ? extendsValue
-      : (extendsValue ?? '(none)');
+  const hasMissingTemplate =
+    extendsValue !== undefined && !templateNames.includes(extendsValue);
+  const templateOptions = hasMissingTemplate
+    ? [...templateNames, extendsValue, NO_TEMPLATE_VALUE]
+    : [...templateNames, NO_TEMPLATE_VALUE];
+  const templateOptionLabels = hasMissingTemplate
+    ? [...templateNames, extendsValue, NO_TEMPLATE_LABEL]
+    : [...templateNames, NO_TEMPLATE_LABEL];
+  const selectValue = extendsValue ?? NO_TEMPLATE_VALUE;
   const argsFileDisabled = currentTemplate?.args !== undefined;
   const launchFieldsInherited = extendsValue !== undefined;
   const effectiveType = launchFieldsInherited
@@ -222,13 +227,14 @@ export function ConfigEditor({
           <Select
             disabled={readOnly}
             enum={templateOptions}
+            enumItemLabels={templateOptionLabels}
             value={selectValue}
             onChange={(value) => {
               if (readOnly) {
                 return;
               }
 
-              if (value === '(none)') {
+              if (value === NO_TEMPLATE_VALUE) {
                 const nextConfig = { ...data.configuration };
                 nextConfig.type = stringOrEmpty(nextConfig.type);
                 nextConfig.request = 'launch';
@@ -334,7 +340,11 @@ export function ConfigEditor({
           label="Config: Working Directory"
           description="Working directory passed to the debug adapter."
         >
-          <TextInput disabled={readOnly} value={cwd} onChange={handleCwdChange} />
+          <TextInput
+            disabled={readOnly}
+            value={cwd}
+            onChange={handleCwdChange}
+          />
         </FormGroup>
 
         <FormGroup

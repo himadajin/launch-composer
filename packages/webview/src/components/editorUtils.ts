@@ -67,10 +67,9 @@ export function updateRequiredString<T extends Record<string, unknown>>(
   };
 }
 
-export function withConfiguration<T extends { configuration?: Record<string, unknown> }>(
-  data: T,
-  config: Record<string, unknown>,
-): T {
+export function withConfiguration<
+  T extends { configuration?: Record<string, unknown> },
+>(data: T, config: Record<string, unknown>): T {
   if (Object.keys(config).length === 0) {
     const next = { ...data };
     delete next.configuration;
