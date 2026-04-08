@@ -86,6 +86,20 @@ export class WorkspaceStore {
     );
   }
 
+  getRelativeTemplatePattern(): vscode.RelativePattern {
+    return new vscode.RelativePattern(
+      this.workspaceRoot,
+      `${TEMPLATES_DIR}/**/*.json`,
+    );
+  }
+
+  getRelativeConfigPattern(): vscode.RelativePattern {
+    return new vscode.RelativePattern(
+      this.workspaceRoot,
+      `${CONFIGS_DIR}/**/*.json`,
+    );
+  }
+
   async readAll(): Promise<WorkspaceDataSnapshot> {
     const [templatesResult, configsResult] = await Promise.all([
       this.readTemplateFiles(),
@@ -165,7 +179,7 @@ export class WorkspaceStore {
     kind: 'template' | 'config',
     rawFileName: string,
   ): Promise<string> {
-    await this.ensureInitialized();
+    await this.ensureInitializedDirectory(kind);
 
     const fileName = normalizeFileName(rawFileName);
     const targetDir =
@@ -782,7 +796,7 @@ export class WorkspaceStore {
   }
 
   private async writeTemplateFile(fileData: TemplateFileData): Promise<void> {
-    await this.ensureInitialized();
+    await this.ensureInitializedDirectory('template');
     const uri = this.getDataFileUri('template', fileData.file);
     await vscode.workspace.fs.writeFile(
       uri,
@@ -791,7 +805,7 @@ export class WorkspaceStore {
   }
 
   private async writeConfigFile(fileData: ConfigFileData): Promise<void> {
-    await this.ensureInitialized();
+    await this.ensureInitializedDirectory('config');
     const uri = this.getDataFileUri('config', fileData.file);
     await vscode.workspace.fs.writeFile(
       uri,
@@ -967,7 +981,7 @@ export class WorkspaceStore {
     kind: 'template' | 'config',
     file: string,
   ): Promise<void> {
-    await this.ensureInitialized();
+    await this.ensureInitializedDirectory(kind);
 
     const fileName = normalizeFileName(file);
     if (await this.hasDataFile(kind, fileName)) {
@@ -979,7 +993,7 @@ export class WorkspaceStore {
   }
 
   private async ensureConfigDataFile(file: string): Promise<void> {
-    await this.ensureInitialized();
+    await this.ensureInitializedDirectory('config');
 
     const fileName = normalizeFileName(file);
     if (await this.hasDataFile('config', fileName)) {

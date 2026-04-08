@@ -47,9 +47,16 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const activeIssues = new Map<string, string>();
 
-  const applySnapshot = (snapshot: WorkspaceDataSnapshot): void => {
-    templateProvider.refresh(snapshot);
-    configProvider.refresh(snapshot);
+  const applySnapshot = (
+    snapshot: WorkspaceDataSnapshot,
+    kind: 'template' | 'config' | 'both' = 'both',
+  ): void => {
+    if (kind === 'both' || kind === 'template') {
+      templateProvider.refresh(snapshot);
+    }
+    if (kind === 'both' || kind === 'config') {
+      configProvider.refresh(snapshot);
+    }
   };
 
   const reportIssues = (issues: ComposerDataIssue[]): void => {
@@ -77,12 +84,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const syncUiWithWorkspace = async (options?: {
     notifyIssues?: boolean;
+    kind?: 'template' | 'config' | 'both';
   }): Promise<void> => {
     const snapshot = await store.readAll();
     if (options?.notifyIssues !== false) {
       reportIssues(snapshot.issues);
     }
-    applySnapshot(snapshot);
+    applySnapshot(snapshot, options?.kind ?? 'both');
     await editorPanel.syncWithWorkspaceData(snapshot);
   };
 
@@ -116,8 +124,6 @@ export function activate(context: vscode.ExtensionContext): void {
           await store.toggleConfigEnabled(node.target.file, node.target.index);
         }
       }
-
-      await syncUiWithWorkspace({ notifyIssues: false });
     } catch (error) {
       showError(error);
     }
@@ -181,46 +187,40 @@ export function activate(context: vscode.ExtensionContext): void {
     onDidGenerate: handleGenerate,
   });
 
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    store.getRelativeComposerPattern(),
+  const templateWatcher = vscode.workspace.createFileSystemWatcher(
+    store.getRelativeTemplatePattern(),
   );
-  watcher.onDidCreate(() => {
-    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
+  templateWatcher.onDidCreate(() => {
+    void syncUiWithWorkspace({ notifyIssues: false, kind: 'template' }).catch(
+      showError,
+    );
   });
-  watcher.onDidChange(() => {
-    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
+  templateWatcher.onDidChange(() => {
+    void syncUiWithWorkspace({ notifyIssues: true, kind: 'template' }).catch(
+      showError,
+    );
   });
-  watcher.onDidDelete(() => {
-    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
-  });
-
-  const deleteSubscription = vscode.workspace.onDidDeleteFiles((event) => {
-    if (!event.files.some((uri) => store.isComposerDataFile(uri))) {
-      return;
-    }
-
-    void syncUiWithWorkspace().catch(showError);
+  templateWatcher.onDidDelete(() => {
+    void syncUiWithWorkspace({ kind: 'template' }).catch(showError);
   });
 
-  const textChangeSubscription = vscode.workspace.onDidChangeTextDocument(
-    (event) => {
-      if (!store.isComposerDataFile(event.document.uri)) {
-        return;
-      }
-
-      void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
-    },
+  const configWatcher = vscode.workspace.createFileSystemWatcher(
+    store.getRelativeConfigPattern(),
   );
+  configWatcher.onDidCreate(() => {
+    void syncUiWithWorkspace({ notifyIssues: false, kind: 'config' }).catch(
+      showError,
+    );
+  });
+  configWatcher.onDidChange(() => {
+    void syncUiWithWorkspace({ notifyIssues: true, kind: 'config' }).catch(
+      showError,
+    );
+  });
+  configWatcher.onDidDelete(() => {
+    void syncUiWithWorkspace({ kind: 'config' }).catch(showError);
+  });
 
-  const saveSubscription = vscode.workspace.onDidSaveTextDocument(
-    (document) => {
-      if (!store.isComposerDataFile(document.uri)) {
-        return;
-      }
-
-      void syncUiWithWorkspace({ notifyIssues: true }).catch(showError);
-    },
-  );
   const checkboxSubscription = configView.onDidChangeCheckboxState((event) =>
     handleConfigCheckboxChange(event),
   );
@@ -228,10 +228,8 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     templateView,
     configView,
-    watcher,
-    deleteSubscription,
-    textChangeSubscription,
-    saveSubscription,
+    templateWatcher,
+    configWatcher,
     checkboxSubscription,
     registerCommand(COMMANDS.generate, async () => {
       try {
@@ -592,10 +590,10 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     registerCommand(COMMANDS.enableConfig, async (node?: TreeNode) => {
-      await setConfigEnabled(node, true, store, syncUiWithWorkspace);
+      await setConfigEnabled(node, true, store);
     }),
     registerCommand(COMMANDS.disableConfig, async (node?: TreeNode) => {
-      await setConfigEnabled(node, false, store, syncUiWithWorkspace);
+      await setConfigEnabled(node, false, store);
     }),
     registerCommand(COMMANDS.toggleEnabled, async (node?: TreeNode) => {
       try {
@@ -603,11 +601,7 @@ export function activate(context: vscode.ExtensionContext): void {
           await store.toggleConfigEnabled(node.target.file, node.target.index);
         } else if (node?.type === 'file' && node.kind === 'config') {
           await store.toggleConfigFileEnabled(node.file);
-        } else {
-          return;
         }
-
-        await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
@@ -837,7 +831,6 @@ async function setConfigEnabled(
   node: TreeNode | undefined,
   enabled: boolean,
   store: WorkspaceStore,
-  refresh: () => Promise<void>,
 ): Promise<void> {
   if (node?.type === 'file' && node.kind === 'config') {
     if (node.enabled === enabled) {
@@ -846,7 +839,6 @@ async function setConfigEnabled(
 
     try {
       await store.toggleConfigFileEnabled(node.file);
-      await refresh();
     } catch (error) {
       showError(error);
     }
@@ -867,7 +859,6 @@ async function setConfigEnabled(
       entryNode.target.file,
       entryNode.target.index,
     );
-    await refresh();
   } catch (error) {
     showError(error);
   }

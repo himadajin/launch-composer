@@ -7,7 +7,7 @@ import {
   Select,
   TextInput,
 } from '@himadajin/vscode-components';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ComposerDataIssue, TemplateData } from '../types.js';
 import {
@@ -17,6 +17,7 @@ import {
   updateOptionalString,
   updateRequiredString,
   useDebouncedCommit,
+  withConfiguration,
 } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
@@ -49,12 +50,20 @@ export function TemplateEditor({
     stringOrEmpty(data.configuration?.program),
   );
   const [cwd, setCwd] = useState(stringOrEmpty(data.configuration?.cwd));
+  // Tracks whether each text field was changed by the user (vs. synced from
+  // data prop). Reset to false on external data sync; set to true on user
+  // input. Mirrors VS Code's "clear handler → set value → re-register handler"
+  // pattern so that opening the editor never causes spurious file writes.
+  const typeChangedByUserRef = useRef(false);
+  const programChangedByUserRef = useRef(false);
+  const cwdChangedByUserRef = useRef(false);
 
   useEffect(() => {
     setName(data.name);
   }, [data.name]);
 
   useEffect(() => {
+    typeChangedByUserRef.current = false;
     setType(stringOrEmpty(data.configuration?.type));
   }, [data.configuration?.type]);
 
@@ -63,30 +72,45 @@ export function TemplateEditor({
   }, [data.configuration?.request]);
 
   useEffect(() => {
+    programChangedByUserRef.current = false;
     setProgram(stringOrEmpty(data.configuration?.program));
   }, [data.configuration?.program]);
 
   useEffect(() => {
+    cwdChangedByUserRef.current = false;
     setCwd(stringOrEmpty(data.configuration?.cwd));
   }, [data.configuration?.cwd]);
 
+  const handleTypeChange = (value: string) => {
+    typeChangedByUserRef.current = true;
+    setType(value);
+  };
+
+  const handleProgramChange = (value: string) => {
+    programChangedByUserRef.current = true;
+    setProgram(value);
+  };
+
+  const handleCwdChange = (value: string) => {
+    cwdChangedByUserRef.current = true;
+    setCwd(value);
+  };
+
   useDebouncedCommit(program, autoSaveDelay, (value) => {
-    if (readOnly) {
+    if (readOnly || !programChangedByUserRef.current) {
       return;
     }
 
-    onChange({
-      ...data,
-      configuration: updateOptionalString(
-        { ...data.configuration },
-        'program',
-        value,
+    onChange(
+      withConfiguration(
+        data,
+        updateOptionalString({ ...data.configuration }, 'program', value),
       ),
-    });
+    );
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
-    if (readOnly) {
+    if (readOnly || !typeChangedByUserRef.current) {
       return;
     }
 
@@ -101,18 +125,16 @@ export function TemplateEditor({
   });
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
-    if (readOnly) {
+    if (readOnly || !cwdChangedByUserRef.current) {
       return;
     }
 
-    onChange({
-      ...data,
-      configuration: updateOptionalString(
-        { ...data.configuration },
-        'cwd',
-        value,
+    onChange(
+      withConfiguration(
+        data,
+        updateOptionalString({ ...data.configuration }, 'cwd', value),
       ),
-    });
+    );
   });
 
   const commitName = async () => {
@@ -182,7 +204,7 @@ export function TemplateEditor({
           label="Template: Type"
           description="Debugger type written to the generated launch.json entry."
         >
-          <TextInput disabled={readOnly} value={type} onChange={setType} />
+          <TextInput disabled={readOnly} value={type} onChange={handleTypeChange} />
         </FormGroup>
 
         <FormGroup
@@ -218,7 +240,7 @@ export function TemplateEditor({
           <TextInput
             disabled={readOnly}
             value={program}
-            onChange={setProgram}
+            onChange={handleProgramChange}
           />
         </FormGroup>
 
@@ -226,7 +248,7 @@ export function TemplateEditor({
           label="Template: Working Directory"
           description="Working directory passed to the debug adapter."
         >
-          <TextInput disabled={readOnly} value={cwd} onChange={setCwd} />
+          <TextInput disabled={readOnly} value={cwd} onChange={handleCwdChange} />
         </FormGroup>
 
         <FormGroup

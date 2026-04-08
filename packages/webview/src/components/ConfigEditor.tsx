@@ -8,7 +8,7 @@ import {
   Select,
   TextInput,
 } from '@himadajin/vscode-components';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ComposerDataIssue, ConfigData, TemplateData } from '../types.js';
 import {
@@ -18,6 +18,7 @@ import {
   updateOptionalString,
   updateRequiredString,
   useDebouncedCommit,
+  withConfiguration,
 } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
@@ -55,6 +56,11 @@ export function ConfigEditor({
   );
   const [cwd, setCwd] = useState(stringOrEmpty(configEntry.cwd));
   const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
+  // Tracks whether cwd was changed by the user (vs. synced from data prop).
+  // Reset to false on external data sync; set to true on user input.
+  // This mirrors VS Code's "clear handler → set value → re-register handler"
+  // pattern, so that opening the editor never causes spurious file writes.
+  const cwdChangedByUserRef = useRef(false);
 
   useEffect(() => {
     setName(data.name);
@@ -69,6 +75,7 @@ export function ConfigEditor({
   }, [data.configuration?.request]);
 
   useEffect(() => {
+    cwdChangedByUserRef.current = false;
     setCwd(stringOrEmpty(data.configuration?.cwd));
   }, [data.configuration?.cwd]);
 
@@ -97,19 +104,22 @@ export function ConfigEditor({
     ? normalizeDebugRequest(currentTemplate?.configuration?.request)
     : request;
 
+  const handleCwdChange = (value: string) => {
+    cwdChangedByUserRef.current = true;
+    setCwd(value);
+  };
+
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
-    if (readOnly) {
+    if (readOnly || !cwdChangedByUserRef.current) {
       return;
     }
 
-    onChange({
-      ...data,
-      configuration: updateOptionalString(
-        { ...data.configuration },
-        'cwd',
-        value,
+    onChange(
+      withConfiguration(
+        data,
+        updateOptionalString({ ...data.configuration }, 'cwd', value),
       ),
-    });
+    );
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
@@ -324,7 +334,7 @@ export function ConfigEditor({
           label="Config: Working Directory"
           description="Working directory passed to the debug adapter."
         >
-          <TextInput disabled={readOnly} value={cwd} onChange={setCwd} />
+          <TextInput disabled={readOnly} value={cwd} onChange={handleCwdChange} />
         </FormGroup>
 
         <FormGroup

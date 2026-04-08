@@ -100,7 +100,7 @@ launch.json の生成はユーザーが GUI のボタンを押した時のみ行
 - GUI から `name` を変更する場合、テンプレート名の変更はそれを参照する config の `extends` を同時に更新する。
 - `args` は省略可能。値は文字列の配列でなければならない。
 - `configuration.request` は必須とする。値は `launch` または `attach` のいずれかでなければならない。
-- `configuration` オブジェクトは省略可能だが、存在する場合はオブジェクトでなければならない。
+- `configuration` オブジェクトは省略可能だが、存在する場合はオブジェクトでなければならない。空オブジェクト `{}` は書き込まない（省略と同義として扱い、キーごと削除する）。
 - テンプレートに `args` が定義されている場合、そのテンプレートを `extends` する config エントリで `argsFile` を指定してはならない。指定されていた場合は Generate 時エラーとする（spec-core.md §3.1 参照）。
 - テンプレート間の継承（template extends template）は実装しない。将来も追加しない。
 
@@ -146,6 +146,8 @@ config エントリのキーは次の 2 種類に分けられる:
 - **`configuration` オブジェクト**: launch.json エントリの内容をすべてパススルーキーとして格納する。launch.json にそのまま出力される。
 
 `extends` を使う config では、`type` と `request` は参照先テンプレートで管理する。`extends` を使わない config では、`configuration` オブジェクト自身が `type` と `request` を持つ。`request` は `launch` または `attach` のいずれかでなければならない。
+
+`configuration` オブジェクトは省略可能だが、存在する場合はオブジェクトでなければならない。空オブジェクト `{}` は書き込まない（省略と同義として扱い、キーごと削除する）。
 
 GUI から `name` を変更する場合、config の `name` はそのエントリ自身だけを更新する。template の `name` はそれを参照する config の `extends` を同時に更新する。
 

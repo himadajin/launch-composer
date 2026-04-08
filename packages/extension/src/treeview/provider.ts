@@ -220,10 +220,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
   private async loadRootNodes(): Promise<TreeNode[]> {
     const data = this.snapshot ?? (await this.store.readAll());
-    const [files, fileNames] =
-      this.kind === 'template'
-        ? [data.templates, await this.store.listFiles('template')]
-        : [data.configs, await this.store.listFiles('config')];
+    const files = this.kind === 'template' ? data.templates : data.configs;
+    const fileNames = [
+      ...files.map((f) => f.file),
+      ...data.issues.filter((i) => i.kind === this.kind).map((i) => i.file),
+    ].sort((a, b) => a.localeCompare(b));
 
     this.fileNodes.clear();
     this.entryNodes.clear();
