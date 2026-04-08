@@ -86,6 +86,20 @@ export class WorkspaceStore {
     );
   }
 
+  getRelativeTemplatePattern(): vscode.RelativePattern {
+    return new vscode.RelativePattern(
+      this.workspaceRoot,
+      `${TEMPLATES_DIR}/**/*.json`,
+    );
+  }
+
+  getRelativeConfigPattern(): vscode.RelativePattern {
+    return new vscode.RelativePattern(
+      this.workspaceRoot,
+      `${CONFIGS_DIR}/**/*.json`,
+    );
+  }
+
   async readAll(): Promise<WorkspaceDataSnapshot> {
     const [templatesResult, configsResult] = await Promise.all([
       this.readTemplateFiles(),
