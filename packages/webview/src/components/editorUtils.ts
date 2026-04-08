@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export const DEBUG_REQUEST_OPTIONS = ['launch', 'attach'] as const;
 
@@ -7,15 +7,23 @@ export function useDebouncedCommit(
   delay: number,
   onCommit: (value: string) => void,
 ) {
+  // Keep onCommit in a ref so the timer always calls the latest version
+  // without needing it in the effect's dependency array. This mirrors
+  // VS Code's "register handler after value is set" pattern: programmatic
+  // value updates (useEffect syncs from data props) don't restart the timer.
+  const onCommitRef = useRef(onCommit);
+  onCommitRef.current = onCommit;
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      onCommit(value);
+      onCommitRef.current(value);
     }, delay);
 
     return () => {
       window.clearTimeout(timer);
     };
-  }, [delay, onCommit, value]);
+    // onCommit is intentionally excluded — always current via ref above
+  }, [delay, value]);
 }
 
 export function updateOptionalString<T extends Record<string, unknown>>(
@@ -57,6 +65,18 @@ export function updateRequiredString<T extends Record<string, unknown>>(
     ...data,
     [key]: value,
   };
+}
+
+export function withConfiguration<T extends { configuration?: Record<string, unknown> }>(
+  data: T,
+  config: Record<string, unknown>,
+): T {
+  if (Object.keys(config).length === 0) {
+    const next = { ...data };
+    delete next.configuration;
+    return next;
+  }
+  return { ...data, configuration: config } as T;
 }
 
 export function stringOrEmpty(value: unknown): string {
