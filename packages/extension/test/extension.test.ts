@@ -35,6 +35,12 @@ const testVscode = vscode as typeof vscode & {
     getWarningMessages(): string[];
     getCreatedDirectories(): string[];
     getClipboardText(): string;
+    getLastQuickPickCall():
+      | {
+          items: unknown[];
+          options: unknown;
+        }
+      | undefined;
     getCreatedTreeView(id: string):
       | {
           fireCheckboxChange(event: {
@@ -399,7 +405,7 @@ test('addConfig command creates enabled configs by default', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders(['/workspace/add-config-project']);
-  testVscode.__testing.setQuickPickResponses(['(none)']);
+  testVscode.__testing.setQuickPickResponses([{ label: 'No template' }]);
   testVscode.__testing.setInputBoxResponses(['Launch']);
 
   activate(context);
@@ -410,6 +416,19 @@ test('addConfig command creates enabled configs by default', async () => {
   });
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getLastQuickPickCall(), {
+    items: [
+      {
+        label: 'No template',
+        description: 'Create a standalone config without template inheritance.',
+      },
+    ],
+    options: {
+      placeHolder: 'Select a base template',
+      prompt:
+        'Choose a template to inherit from, or select No template to create a standalone config.',
+    },
+  });
 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
@@ -421,6 +440,54 @@ test('addConfig command creates enabled configs by default', async () => {
     new TextDecoder().decode(bytes).trim(),
     '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "",\n        "request": "launch"\n      }\n    }\n  ]\n}',
   );
+});
+
+test('addConfig command shows templates first and No template last', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/add-config-picker-project',
+  ]);
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/add-config-picker-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      '/workspace/add-config-picker-project/.vscode/launch-composer/templates/template.json',
+    ),
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "cpp"\n  },\n  {\n    "name": "python"\n  }\n]\n',
+    ),
+  );
+
+  testVscode.__testing.setQuickPickResponses([undefined]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.addConfigEntry, {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+  });
+
+  const quickPickCall = testVscode.__testing.getLastQuickPickCall();
+  assert.ok(quickPickCall !== undefined);
+  assert.deepEqual(quickPickCall.items, [
+    { label: 'cpp', value: 'cpp' },
+    { label: 'python', value: 'python' },
+    { kind: vscode.QuickPickItemKind.Separator, label: 'Standalone' },
+    {
+      label: 'No template',
+      description: 'Create a standalone config without template inheritance.',
+    },
+  ]);
+  assert.deepEqual(quickPickCall.options, {
+    placeHolder: 'Select a base template',
+    prompt:
+      'Choose a template to inherit from, or select No template to create a standalone config.',
+  });
 });
 
 test('toggleConfigFileEnabled updates the file-level enabled flag', async () => {

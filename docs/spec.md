@@ -145,7 +145,7 @@ config エントリのキーは次の 2 種類に分けられる:
 - **拡張機能固有キー**: `name`、`extends`、`enabled`、`argsFile`、`args`。launch.json にはパススルーしない（`args` は argsFile との合成結果を launch.json に出力する）。
 - **`configuration` オブジェクト**: launch.json エントリの内容をすべてパススルーキーとして格納する。launch.json にそのまま出力される。
 
-`extends` を使う config では、`type` と `request` は参照先テンプレートで管理する。`extends` を使わない config では、`configuration` オブジェクト自身が `type` と `request` を持つ。`request` は `launch` または `attach` のいずれかでなければならない。
+`extends` を使う config では、`type` と `request` は参照先テンプレートで管理する。`extends` を使わない config では、`configuration` オブジェクト自身が `type` と `request` を持つ。`request` は `launch` または `attach` のいずれかでなければならない。UI 上では `extends` 未設定の状態を `No template` と表示するが、JSON 上の表現は `extends` キーを省略することだけであり、新しい値は追加しない。
 
 `configuration` オブジェクトは省略可能だが、存在する場合はオブジェクトでなければならない。空オブジェクト `{}` は書き込まない（省略と同義として扱い、キーごと削除する）。
 
