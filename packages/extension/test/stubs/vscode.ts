@@ -548,11 +548,11 @@ export const window = {
     return inputBoxResponses.shift();
   },
 
-  createWebviewPanel() {
+  createWebviewPanel(_viewType: string, title: string) {
     const didDisposeEmitter = new EventEmitter<void>();
     const panel = {
       disposed: false,
-      title: '',
+      title,
       postedMessages: [] as unknown[],
       webview: {
         html: '',

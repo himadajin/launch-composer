@@ -35,6 +35,7 @@ export class EditorPanelController {
 
   async open(target: EditorTarget): Promise<void> {
     this.currentTarget = target;
+    const snapshot = await this.options.store.readAll();
     const webviewRoot = vscode.Uri.joinPath(
       this.options.context.extensionUri,
       'dist',
@@ -44,7 +45,7 @@ export class EditorPanelController {
     if (this.panel === undefined) {
       this.panel = vscode.window.createWebviewPanel(
         'launchComposer.editor',
-        getTitle(target),
+        getTitle(target, snapshot),
         vscode.ViewColumn.Active,
         {
           enableScripts: true,
@@ -68,11 +69,11 @@ export class EditorPanelController {
       );
     } else {
       this.panel.reveal(vscode.ViewColumn.Active);
-      this.panel.title = getTitle(target);
+      this.panel.title = getTitle(target, snapshot);
     }
 
     await this.options.onDidReveal(target);
-    await this.postInitialData('local');
+    await this.postInitialData('local', snapshot);
   }
 
   async syncWithWorkspace(): Promise<void> {
@@ -102,6 +103,7 @@ export class EditorPanelController {
     }
 
     const snapshot = data ?? (await this.options.store.readAll());
+    this.panel.title = getTitle(this.currentTarget, snapshot);
     if (hasInvalidFile(snapshot, this.currentTarget)) {
       await this.postInitialData('local', snapshot);
       return;
@@ -403,8 +405,27 @@ function getAutoSaveDelay(): number {
     .get<number>('autoSaveDelay', 1000);
 }
 
-function getTitle(target: EditorTarget): string {
-  return target.kind === 'template' ? 'Edit Template' : 'Edit Config';
+function getTitle(target: EditorTarget, data: WorkspaceDataSnapshot): string {
+  const entryName = resolveEntryName(target, data);
+  return entryName !== undefined ? entryName : path.basename(target.file);
+}
+
+function resolveEntryName(
+  target: EditorTarget,
+  data: WorkspaceDataSnapshot,
+): string | undefined {
+  const name =
+    target.kind === 'template'
+      ? data.templates.find((fileData) => fileData.file === target.file)
+          ?.templates[target.index]?.name
+      : data.configs.find((fileData) => fileData.file === target.file)
+          ?.configurations[target.index]?.name;
+
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    return undefined;
+  }
+
+  return name;
 }
 
 function hasInvalidFile(

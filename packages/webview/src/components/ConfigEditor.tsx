@@ -334,7 +334,11 @@ export function ConfigEditor({
           label="Config: Working Directory"
           description="Working directory passed to the debug adapter."
         >
-          <TextInput disabled={readOnly} value={cwd} onChange={handleCwdChange} />
+          <TextInput
+            disabled={readOnly}
+            value={cwd}
+            onChange={handleCwdChange}
+          />
         </FormGroup>
 
         <FormGroup

@@ -204,7 +204,11 @@ export function TemplateEditor({
           label="Template: Type"
           description="Debugger type written to the generated launch.json entry."
         >
-          <TextInput disabled={readOnly} value={type} onChange={handleTypeChange} />
+          <TextInput
+            disabled={readOnly}
+            value={type}
+            onChange={handleTypeChange}
+          />
         </FormGroup>
 
         <FormGroup
@@ -248,7 +252,11 @@ export function TemplateEditor({
           label="Template: Working Directory"
           description="Working directory passed to the debug adapter."
         >
-          <TextInput disabled={readOnly} value={cwd} onChange={handleCwdChange} />
+          <TextInput
+            disabled={readOnly}
+            value={cwd}
+            onChange={handleCwdChange}
+          />
         </FormGroup>
 
         <FormGroup
