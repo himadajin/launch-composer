@@ -571,7 +571,7 @@ test('update-config message refreshes only config views through onDidMutate', as
       patches: [
         {
           type: 'set',
-          key: 'enabled',
+          path: ['enabled'],
           value: false,
         },
       ],

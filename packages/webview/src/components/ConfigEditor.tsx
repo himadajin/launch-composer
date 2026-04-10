@@ -11,14 +11,22 @@ import {
 import { useEffect, useRef, useState } from 'react';
 
 import type { ComposerDataIssue, ConfigData, TemplateData } from '../types.js';
+import type { EntryChange } from './entryChanges.js';
+import {
+  updateConfigArgs,
+  updateConfigArgsFile,
+  updateConfigCwd,
+  updateConfigEnabled,
+  updateConfigExtends,
+  updateConfigRequest,
+  updateConfigStopAtEntry,
+  updateConfigType,
+} from './entryChanges.js';
 import {
   DEBUG_REQUEST_OPTIONS,
   normalizeDebugRequest,
   stringOrEmpty,
-  updateOptionalString,
-  updateRequiredString,
   useDebouncedCommit,
-  withConfiguration,
 } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
@@ -32,7 +40,7 @@ interface ConfigEditorProps {
   templates: TemplateData[];
   autoSaveDelay: number;
   onBrowseFile: () => Promise<string | null>;
-  onChange: (data: ConfigData) => void;
+  onChange: (change: EntryChange<ConfigData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
   readOnlyIssue?: ComposerDataIssue;
@@ -119,12 +127,7 @@ export function ConfigEditor({
       return;
     }
 
-    onChange(
-      withConfiguration(
-        data,
-        updateOptionalString({ ...data.configuration }, 'cwd', value),
-      ),
-    );
+    onChange(updateConfigCwd(data, value));
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
@@ -132,14 +135,7 @@ export function ConfigEditor({
       return;
     }
 
-    onChange({
-      ...data,
-      configuration: updateRequiredString(
-        { ...data.configuration },
-        'type',
-        value,
-      ),
-    });
+    onChange(updateConfigType(data, value));
   });
 
   useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
@@ -147,14 +143,7 @@ export function ConfigEditor({
       return;
     }
 
-    const trimmed = value.trim();
-    if (trimmed === '') {
-      const next = { ...data };
-      delete next.argsFile;
-      onChange(next);
-    } else {
-      onChange({ ...data, argsFile: trimmed });
-    }
+    onChange(updateConfigArgsFile(data, value));
   });
 
   const commitName = async () => {
@@ -235,21 +224,9 @@ export function ConfigEditor({
               }
 
               if (value === NO_TEMPLATE_VALUE) {
-                const nextConfig = { ...data.configuration };
-                nextConfig.type = stringOrEmpty(nextConfig.type);
-                nextConfig.request = 'launch';
-                const next = { ...data, configuration: nextConfig };
-                delete next.extends;
-                onChange(next);
+                onChange(updateConfigExtends(data, undefined));
               } else {
-                const nextConfig = { ...data.configuration };
-                delete nextConfig.type;
-                delete nextConfig.request;
-                onChange({
-                  ...data,
-                  extends: value,
-                  configuration: nextConfig,
-                });
+                onChange(updateConfigExtends(data, value));
               }
             }}
           />
@@ -277,10 +254,7 @@ export function ConfigEditor({
                 return;
               }
 
-              onChange({
-                ...data,
-                enabled: checked,
-              });
+              onChange(updateConfigEnabled(data, checked));
             }}
           />
         </FormGroup>
@@ -324,14 +298,7 @@ export function ConfigEditor({
               }
 
               setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
-              onChange({
-                ...data,
-                configuration: updateRequiredString(
-                  { ...data.configuration },
-                  'request',
-                  value,
-                ),
-              });
+              onChange(updateConfigRequest(data, value));
             }}
           />
         </FormGroup>
@@ -364,10 +331,7 @@ export function ConfigEditor({
                 return;
               }
 
-              onChange({
-                ...data,
-                configuration: { ...data.configuration, stopAtEntry: checked },
-              });
+              onChange(updateConfigStopAtEntry(data, checked));
             }}
           />
         </FormGroup>
@@ -407,7 +371,7 @@ export function ConfigEditor({
                 }
 
                 setArgsFile(selected);
-                onChange({ ...data, argsFile: selected });
+                onChange(updateConfigArgsFile(data, selected));
               }}
             >
               Browse
@@ -432,13 +396,7 @@ export function ConfigEditor({
               addPlaceholder="Add argument"
               value={data.args ?? []}
               onChange={(args) => {
-                const next = { ...data };
-                if (args.length === 0) {
-                  delete next.args;
-                } else {
-                  next.args = args;
-                }
-                onChange(next);
+                onChange(updateConfigArgs(data, args));
               }}
             />
           )}

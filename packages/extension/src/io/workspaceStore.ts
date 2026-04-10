@@ -10,9 +10,11 @@ import * as vscode from 'vscode';
 
 import type { EditorTarget } from '../messages.js';
 import {
-  applyArrayObjectPatch,
+  appendJsonArrayValue,
+  applyJsonDocumentPatches,
   createTextRevision,
   findArrayEntryOffset,
+  joinJsonPatchPath,
   parseJsonc,
   parseJsoncDocument,
   type JsonObjectPatchOperation,
@@ -221,7 +223,7 @@ export class WorkspaceStore {
       encodeText(
         kind === 'template'
           ? '[]\n'
-          : stringifyJsonFile(createEmptyConfigFile(fileName)),
+          : stringifyJsonFile(createEmptyConfigFile()),
       ),
     );
     return fileName;
@@ -312,17 +314,18 @@ export class WorkspaceStore {
 
   async addTemplateEntry(file: string, name: string): Promise<EditorTarget> {
     await this.ensureArrayDataFile('template', file);
-    const fileData = await this.readTemplateFile(file);
-    fileData.templates.push({
+    const text = await this.readRequiredDataFileText('template', file);
+    const entries = this.parseTemplateEntries(file, text);
+    const nextText = appendJsonArrayValue(text, [], {
       name,
       configuration: { type: '', request: 'launch' },
     });
-    await this.writeTemplateFile(fileData);
+    await this.writeDataFileText('template', file, nextText);
 
     return {
       kind: 'template',
       file,
-      index: fileData.templates.length - 1,
+      index: entries.length,
     };
   }
 
@@ -332,7 +335,8 @@ export class WorkspaceStore {
     extendsName: string | undefined,
   ): Promise<EditorTarget> {
     await this.ensureConfigDataFile(file);
-    const fileData = await this.readConfigFile(file);
+    const text = await this.readRequiredDataFileText('config', file);
+    const configFile = this.parseConfigFileContent(file, text);
     const data: ConfigData =
       extendsName !== undefined
         ? { name, enabled: true, extends: extendsName }
@@ -342,13 +346,13 @@ export class WorkspaceStore {
             configuration: { type: '', request: 'launch' },
           };
 
-    fileData.configurations.push(data);
-    await this.writeConfigFile(fileData);
+    const nextText = appendJsonArrayValue(text, ['configurations'], data);
+    await this.writeDataFileText('config', file, nextText);
 
     return {
       kind: 'config',
       file,
-      index: fileData.configurations.length - 1,
+      index: configFile.configurations.length,
     };
   }
 
@@ -371,27 +375,39 @@ export class WorkspaceStore {
   }
 
   async toggleConfigEnabled(file: string, index: number): Promise<void> {
-    const fileData = await this.readConfigFile(file);
+    const text = await this.readRequiredDataFileText('config', file);
+    const fileData = this.parseConfigFileContent(file, text);
     assertIndex(fileData.configurations, index, file);
     const current = fileData.configurations[index]!;
-    fileData.configurations[index] = {
-      ...current,
-      enabled: current.enabled === false,
-    };
-    await this.writeConfigFile(fileData);
+    const nextText = applyJsonDocumentPatches(text, [
+      {
+        type: 'set',
+        path: ['configurations', index, 'enabled'],
+        value: current.enabled === false,
+      },
+    ]);
+    await this.writeDataFileText('config', file, nextText);
   }
 
   async toggleConfigFileEnabled(file: string): Promise<void> {
-    const fileData = await this.readConfigFile(file);
-    fileData.enabled = fileData.enabled === false;
-    await this.writeConfigFile(fileData);
+    const text = await this.readRequiredDataFileText('config', file);
+    const fileData = this.parseConfigFileContent(file, text);
+    const nextText = applyJsonDocumentPatches(text, [
+      {
+        type: 'set',
+        path: ['enabled'],
+        value: fileData.enabled === false,
+      },
+    ]);
+    await this.writeDataFileText('config', file, nextText);
   }
 
   async deleteEntry(target: EditorTarget): Promise<void> {
     if (target.kind === 'template') {
-      const templateFile = await this.readTemplateFile(target.file);
-      assertIndex(templateFile.templates, target.index, target.file);
-      const template = templateFile.templates[target.index]!;
+      const text = await this.readRequiredDataFileText('template', target.file);
+      const templates = this.parseTemplateEntries(target.file, text);
+      assertIndex(templates, target.index, target.file);
+      const template = templates[target.index]!;
       const references = await this.findConfigReferences(template.name);
 
       if (references.length > 0) {
@@ -400,15 +416,26 @@ export class WorkspaceStore {
         );
       }
 
-      templateFile.templates.splice(target.index, 1);
-      await this.writeTemplateFile(templateFile);
+      const nextText = applyJsonDocumentPatches(text, [
+        {
+          type: 'delete',
+          path: [target.index],
+        },
+      ]);
+      await this.writeDataFileText('template', target.file, nextText);
       return;
     }
 
-    const configFile = await this.readConfigFile(target.file);
-    assertIndex(configFile.configurations, target.index, target.file);
-    configFile.configurations.splice(target.index, 1);
-    await this.writeConfigFile(configFile);
+    const text = await this.readRequiredDataFileText('config', target.file);
+    const fileData = this.parseConfigFileContent(target.file, text);
+    assertIndex(fileData.configurations, target.index, target.file);
+    const nextText = applyJsonDocumentPatches(text, [
+      {
+        type: 'delete',
+        path: ['configurations', target.index],
+      },
+    ]);
+    await this.writeDataFileText('config', target.file, nextText);
   }
 
   async renameEntry(target: EditorTarget, rawName: string): Promise<void> {
@@ -416,34 +443,42 @@ export class WorkspaceStore {
     await this.assertUniqueEntryName(nextName, target);
 
     if (target.kind === 'template') {
-      const templateFile = await this.readTemplateFile(target.file);
-      assertIndex(templateFile.templates, target.index, target.file);
-      const current = templateFile.templates[target.index]!;
+      const text = await this.readRequiredDataFileText('template', target.file);
+      const templates = this.parseTemplateEntries(target.file, text);
+      assertIndex(templates, target.index, target.file);
+      const current = templates[target.index]!;
       if (current.name === nextName) {
         return;
       }
 
-      templateFile.templates[target.index] = {
-        ...current,
-        name: nextName,
-      };
-      await this.writeTemplateFile(templateFile);
+      const nextText = applyJsonDocumentPatches(text, [
+        {
+          type: 'set',
+          path: [target.index, 'name'],
+          value: nextName,
+        },
+      ]);
+      await this.writeDataFileText('template', target.file, nextText);
       await this.updateTemplateReferences(current.name, nextName);
       return;
     }
 
-    const configFile = await this.readConfigFile(target.file);
-    assertIndex(configFile.configurations, target.index, target.file);
-    const current = configFile.configurations[target.index]!;
+    const text = await this.readRequiredDataFileText('config', target.file);
+    const fileData = this.parseConfigFileContent(target.file, text);
+    assertIndex(fileData.configurations, target.index, target.file);
+    const current = fileData.configurations[target.index]!;
     if (current.name === nextName) {
       return;
     }
 
-    configFile.configurations[target.index] = {
-      ...current,
-      name: nextName,
-    };
-    await this.writeConfigFile(configFile);
+    const nextText = applyJsonDocumentPatches(text, [
+      {
+        type: 'set',
+        path: ['configurations', target.index, 'name'],
+        value: nextName,
+      },
+    ]);
+    await this.writeDataFileText('config', target.file, nextText);
   }
 
   async openDataFileAsJson(
@@ -694,6 +729,51 @@ export class WorkspaceStore {
     };
   }
 
+  private parseTemplateEntries(file: string, text: string): TemplateData[] {
+    const parsed = parseJsoncDocument<unknown>(text);
+    if (parsed.issues.length > 0) {
+      throw new Error(
+        this.createParseIssue('template', file, text, parsed.issues).message,
+      );
+    }
+
+    if (!Array.isArray(parsed.value)) {
+      throw new Error(`${file} must contain a JSON array.`);
+    }
+
+    return parsed.value as TemplateData[];
+  }
+
+  private parseConfigFileContent(
+    file: string,
+    text: string,
+  ): Omit<ConfigFileData, 'file'> {
+    const parsed = parseJsoncDocument<unknown>(text);
+    if (parsed.issues.length > 0) {
+      throw new Error(
+        this.createParseIssue('config', file, text, parsed.issues).message,
+      );
+    }
+
+    if (
+      !isRecord(parsed.value) ||
+      !Array.isArray(parsed.value.configurations)
+    ) {
+      throw new Error(
+        `${file} must contain an object with a "configurations" array.`,
+      );
+    }
+
+    return {
+      ...(Object.hasOwn(parsed.value, 'enabled')
+        ? {
+            enabled: parsed.value.enabled as boolean,
+          }
+        : {}),
+      configurations: parsed.value.configurations as ConfigData[],
+    };
+  }
+
   private async readArrayFile<T>(
     kind: 'template' | 'config',
     file: string,
@@ -735,6 +815,34 @@ export class WorkspaceStore {
     return { status: 'ok', data: parsed.value as T[] };
   }
 
+  private async readRequiredDataFileText(
+    kind: 'template' | 'config',
+    file: string,
+  ): Promise<string> {
+    const uri = this.getDataFileUri(kind, file);
+
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      return decodeText(bytes);
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        throw new Error(`File not found: ${file}`);
+      }
+
+      throw error;
+    }
+  }
+
+  private async writeDataFileText(
+    kind: 'template' | 'config',
+    file: string,
+    text: string,
+  ): Promise<void> {
+    await this.ensureInitializedDirectory(kind);
+    const uri = this.getDataFileUri(kind, file);
+    await vscode.workspace.fs.writeFile(uri, encodeText(text));
+  }
+
   private async patchArrayEntry(
     kind: 'template' | 'config',
     file: string,
@@ -742,7 +850,7 @@ export class WorkspaceStore {
     baseRevision: string | null,
     patches: JsonObjectPatchOperation[],
   ): Promise<EntryPatchResult> {
-    if (patches.some((patch) => patch.key === 'name')) {
+    if (patches.some((patch) => patch.path[0] === 'name')) {
       throw new Error('Entry name changes must use the rename entry flow.');
     }
 
@@ -776,29 +884,10 @@ export class WorkspaceStore {
       };
     }
 
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      throw new Error(
-        this.createParseIssue(kind, file, text, parsed.issues).message,
-      );
-    }
-
-    const entryPath = kind === 'template' ? [index] : ['configurations', index];
     const entries =
       kind === 'template'
-        ? Array.isArray(parsed.value)
-          ? parsed.value
-          : undefined
-        : isRecord(parsed.value) && Array.isArray(parsed.value.configurations)
-          ? parsed.value.configurations
-          : undefined;
-    if (entries === undefined) {
-      throw new Error(
-        kind === 'template'
-          ? `${file} must contain a JSON array.`
-          : `${file} must contain an object with a "configurations" array.`,
-      );
-    }
+        ? this.parseTemplateEntries(file, text)
+        : this.parseConfigFileContent(file, text).configurations;
 
     assertIndex(entries, index, file);
     const entry = entries[index];
@@ -806,7 +895,11 @@ export class WorkspaceStore {
       throw new Error(`Entry index ${index} in ${file} must be a JSON object.`);
     }
 
-    const nextText = applyArrayObjectPatch(text, entryPath, patches);
+    const entryPath = kind === 'template' ? [index] : ['configurations', index];
+    const nextText = applyJsonDocumentPatches(
+      text,
+      joinJsonPatchPath(entryPath, patches),
+    );
     if (nextText === text) {
       return {
         status: 'ok',
@@ -819,29 +912,6 @@ export class WorkspaceStore {
       status: 'ok',
       revision: createTextRevision(nextText),
     };
-  }
-
-  private async writeTemplateFile(fileData: TemplateFileData): Promise<void> {
-    await this.ensureInitializedDirectory('template');
-    const uri = this.getDataFileUri('template', fileData.file);
-    await vscode.workspace.fs.writeFile(
-      uri,
-      encodeText(stringifyJsonFile(fileData.templates)),
-    );
-  }
-
-  private async writeConfigFile(fileData: ConfigFileData): Promise<void> {
-    await this.ensureInitializedDirectory('config');
-    const uri = this.getDataFileUri('config', fileData.file);
-    await vscode.workspace.fs.writeFile(
-      uri,
-      encodeText(
-        stringifyJsonFile({
-          enabled: fileData.enabled ?? true,
-          configurations: fileData.configurations,
-        }),
-      ),
-    );
   }
 
   private async findConfigReferences(templateName: string): Promise<string[]> {
@@ -952,24 +1022,28 @@ export class WorkspaceStore {
 
     await Promise.all(
       configFiles.data.map(async (fileData) => {
-        let changed = false;
-        const nextConfigurations = fileData.configurations.map((config) => {
-          if (config.extends !== currentName) {
-            return config;
-          }
+        const patches = fileData.configurations.flatMap((config, index) =>
+          config.extends === currentName
+            ? ([
+                {
+                  type: 'set',
+                  path: ['configurations', index, 'extends'],
+                  value: nextName,
+                },
+              ] satisfies JsonObjectPatchOperation[])
+            : [],
+        );
 
-          changed = true;
-          return { ...config, extends: nextName };
-        });
-
-        if (!changed) {
+        if (patches.length === 0) {
           return;
         }
 
-        await this.writeConfigFile({
-          ...fileData,
-          configurations: nextConfigurations,
-        });
+        const text = await this.readRequiredDataFileText(
+          'config',
+          fileData.file,
+        );
+        const nextText = applyJsonDocumentPatches(text, patches);
+        await this.writeDataFileText('config', fileData.file, nextText);
       }),
     );
   }
@@ -1029,7 +1103,7 @@ export class WorkspaceStore {
     const uri = this.getDataFileUri('config', fileName);
     await vscode.workspace.fs.writeFile(
       uri,
-      encodeText(stringifyJsonFile(createEmptyConfigFile(fileName))),
+      encodeText(stringifyJsonFile(createEmptyConfigFile())),
     );
   }
 
@@ -1150,9 +1224,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function createEmptyConfigFile(file: string): ConfigFileData {
+function createEmptyConfigFile(): Omit<ConfigFileData, 'file'> {
   return {
-    file,
     enabled: true,
     configurations: [],
   };

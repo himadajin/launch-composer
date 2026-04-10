@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:test": "node test/build-tests.mjs",
+    "test": "npm run build:test && node --test .test-dist/*.test.js",
     "watch": "vite build --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

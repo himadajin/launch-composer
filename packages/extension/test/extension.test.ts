@@ -580,6 +580,187 @@ test('toggleConfigFileEnabled updates the file-level enabled flag', async () => 
   );
 });
 
+test('addTemplateEntry preserves existing JSONC comments', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/comment-add-template-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/comment-add-template-project/.vscode/launch-composer/templates/template.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-add-template-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '// template file comment\n' +
+        '[\n' +
+        '  // keep template comment\n' +
+        '  {\n' +
+        '    "name": "cpp",\n' +
+        '    "configuration": {\n' +
+        '      "type": "cppdbg",\n' +
+        '      "request": "launch"\n' +
+        '    }\n' +
+        '  }\n' +
+        ']\n',
+    ),
+  );
+
+  await store.addTemplateEntry('template.json', 'node');
+
+  const text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.match(text, /\/\/ template file comment/);
+  assert.match(text, /\/\/ keep template comment/);
+  assert.match(text, /"name": "node"/);
+});
+
+test('addConfigEntry preserves existing JSONC comments', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/comment-add-config-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/comment-add-config-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-add-config-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '{\n' +
+        '  // keep file comment\n' +
+        '  "enabled": true,\n' +
+        '  "configurations": [\n' +
+        '    // keep config comment\n' +
+        '    {\n' +
+        '      "name": "Launch",\n' +
+        '      "enabled": true,\n' +
+        '      "extends": "cpp"\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n',
+    ),
+  );
+
+  await store.addConfigEntry('config.json', 'Attach', undefined);
+
+  const text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.match(text, /\/\/ keep file comment/);
+  assert.match(text, /\/\/ keep config comment/);
+  assert.match(text, /"name": "Attach"/);
+});
+
+test('deleteEntry preserves comments around remaining entries', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/comment-delete-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/comment-delete-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-delete-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '{\n' +
+        '  "enabled": true,\n' +
+        '  "configurations": [\n' +
+        '    {\n' +
+        '      "name": "Delete Me",\n' +
+        '      "enabled": true,\n' +
+        '      "configuration": {\n' +
+        '        "type": "node",\n' +
+        '        "request": "launch"\n' +
+        '      }\n' +
+        '    },\n' +
+        '    {\n' +
+        '      "name": "Keep Me",\n' +
+        '      // keep surviving comment\n' +
+        '      "enabled": true,\n' +
+        '      "configuration": {\n' +
+        '        "type": "node",\n' +
+        '        "request": "launch"\n' +
+        '      }\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n',
+    ),
+  );
+
+  await store.deleteEntry({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  const text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.doesNotMatch(text, /Delete Me/);
+  assert.match(text, /\/\/ keep surviving comment/);
+  assert.match(text, /Keep Me/);
+});
+
+test('toggle config flags preserve unrelated comments', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/comment-toggle-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/comment-toggle-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-toggle-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '{\n' +
+        '  // keep file enabled comment\n' +
+        '  "enabled": true,\n' +
+        '  "configurations": [\n' +
+        '    {\n' +
+        '      "name": "Launch",\n' +
+        '      // keep entry enabled comment\n' +
+        '      "enabled": true,\n' +
+        '      "configuration": {\n' +
+        '        "type": "node",\n' +
+        '        "request": "launch"\n' +
+        '      }\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n',
+    ),
+  );
+
+  await store.toggleConfigEnabled('config.json', 0);
+  await store.toggleConfigFileEnabled('config.json');
+
+  const text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.match(text, /\/\/ keep file enabled comment/);
+  assert.match(text, /\/\/ keep entry enabled comment/);
+  assert.match(text, /"enabled": false/);
+});
+
 test('config tree checkbox toggles the file-level enabled flag', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
@@ -752,6 +933,175 @@ test('renameEntry updates template references in configs', async () => {
   );
 });
 
+test('renameEntry preserves template and config comments while updating extends', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/comment-rename-entry-project'),
+  );
+  const templateUri = vscode.Uri.file(
+    '/workspace/comment-rename-entry-project/.vscode/launch-composer/templates/template.json',
+  );
+  const configUri = vscode.Uri.file(
+    '/workspace/comment-rename-entry-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-rename-entry-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-rename-entry-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    templateUri,
+    new TextEncoder().encode(
+      '[\n' +
+        '  {\n' +
+        '    // keep template name comment\n' +
+        '    "name": "cpp",\n' +
+        '    "configuration": {\n' +
+        '      "type": "cppdbg",\n' +
+        '      "request": "launch"\n' +
+        '    }\n' +
+        '  }\n' +
+        ']\n',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    configUri,
+    new TextEncoder().encode(
+      '{\n' +
+        '  "enabled": true,\n' +
+        '  "configurations": [\n' +
+        '    {\n' +
+        '      "name": "Launch",\n' +
+        '      // keep extends comment\n' +
+        '      "extends": "cpp"\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n',
+    ),
+  );
+
+  await store.renameEntry(
+    {
+      kind: 'template',
+      file: 'template.json',
+      index: 0,
+    },
+    'cpp-renamed',
+  );
+
+  const templateText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(templateUri),
+  );
+  const configText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(configUri),
+  );
+
+  assert.match(templateText, /\/\/ keep template name comment/);
+  assert.match(configText, /\/\/ keep extends comment/);
+  assert.match(templateText, /"name": "cpp-renamed"/);
+  assert.match(configText, /"extends": "cpp-renamed"/);
+});
+
+test('patch entry updates preserve comments around edited fields', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/comment-patch-project'),
+  );
+  const templateUri = vscode.Uri.file(
+    '/workspace/comment-patch-project/.vscode/launch-composer/templates/template.json',
+  );
+  const configUri = vscode.Uri.file(
+    '/workspace/comment-patch-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-patch-project/.vscode/launch-composer/templates',
+    ),
+  );
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/comment-patch-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    templateUri,
+    new TextEncoder().encode(
+      '[\n' +
+        '  {\n' +
+        '    "name": "node",\n' +
+        '    "configuration": {\n' +
+        '      "type": "node",\n' +
+        '      "request": "launch",\n' +
+        '      // keep template program comment\n' +
+        '      "program": "${workspaceFolder}/old.js"\n' +
+        '    }\n' +
+        '  }\n' +
+        ']\n',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    configUri,
+    new TextEncoder().encode(
+      '{\n' +
+        '  "enabled": true,\n' +
+        '  "configurations": [\n' +
+        '    {\n' +
+        '      "name": "Launch",\n' +
+        '      "enabled": true,\n' +
+        '      "configuration": {\n' +
+        '        "type": "node",\n' +
+        '        "request": "launch",\n' +
+        '        // keep config cwd comment\n' +
+        '        "cwd": "${workspaceFolder}"\n' +
+        '      }\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n',
+    ),
+  );
+
+  const templateRevision = await store.getDataFileRevision(
+    'template',
+    'template.json',
+  );
+  const configRevision = await store.getDataFileRevision(
+    'config',
+    'config.json',
+  );
+
+  await store.patchTemplateEntry('template.json', 0, templateRevision, [
+    {
+      type: 'set',
+      path: ['configuration', 'program'],
+      value: '${workspaceFolder}/server.js',
+    },
+  ]);
+  await store.patchConfigEntry('config.json', 0, configRevision, [
+    {
+      type: 'set',
+      path: ['configuration', 'cwd'],
+      value: '${workspaceFolder}/dist',
+    },
+  ]);
+
+  const templateText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(templateUri),
+  );
+  const configText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(configUri),
+  );
+
+  assert.match(templateText, /\/\/ keep template program comment/);
+  assert.match(configText, /\/\/ keep config cwd comment/);
+  assert.match(templateText, /"program": "\$\{workspaceFolder\}\/server\.js"/);
+  assert.match(configText, /"cwd": "\$\{workspaceFolder\}\/dist"/);
+});
+
 test('patchTemplateEntry rejects name updates', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/patch-template-name-project'),
@@ -779,7 +1129,7 @@ test('patchTemplateEntry rejects name updates', async () => {
       store.patchTemplateEntry('template.json', 0, revision, [
         {
           type: 'set',
-          key: 'name',
+          path: ['name'],
           value: 'cpp-renamed',
         },
       ]),
@@ -820,7 +1170,7 @@ test('patchConfigEntry rejects name updates', async () => {
       store.patchConfigEntry('config.json', 0, revision, [
         {
           type: 'set',
-          key: 'name',
+          path: ['name'],
           value: 'Launch Renamed',
         },
       ]),

@@ -10,12 +10,12 @@
     "build:extension": "npm run build -w launch-composer",
     "install:vscode": "npm run install:vscode -w launch-composer",
     "build": "npm run build:core && npm run build:webview && npm run build:extension",
-    "lint": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/extension/src packages/extension/test packages/extension/esbuild.mjs",
-    "lint:fix": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/extension/src packages/extension/test packages/extension/esbuild.mjs --fix",
+    "lint": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/webview/test packages/extension/src packages/extension/test packages/extension/esbuild.mjs",
+    "lint:fix": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/webview/test packages/extension/src packages/extension/test packages/extension/esbuild.mjs --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck -w @launch-composer/core && npm run typecheck -w @launch-composer/webview && npm run typecheck -w launch-composer",
-    "test": "npm run test -w @launch-composer/core && npm run test -w launch-composer"
+    "test": "npm run test -w @launch-composer/core && npm run test -w @launch-composer/webview && npm run test -w launch-composer"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
