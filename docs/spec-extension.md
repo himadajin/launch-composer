@@ -100,7 +100,7 @@ Extension Host は `templates/*.json` および `configs/*.json` の各ファイ
 | 空ファイル                   | issue として扱う。他の正常ファイルの読み込みは継続する |
 | invalid JSON / JSONC         | issue として扱う。他の正常ファイルの読み込みは継続する |
 | ルート形状が仕様と一致しない | issue として扱う。他の正常ファイルの読み込みは継続する |
-| JSONC コメント / 末尾カンマ  | 有効な入力として受理する                               |
+| JSONC コメント / 末尾カンマ  | 有効な入力として受理し、書き込み時も保持する           |
 
 issue は少なくとも `kind`, `file`, `code`, `message` を持つ。空ファイルは `empty`、構文エラーは `invalid-json`、仕様と一致しないルート形状は `invalid-shape` とする。
 
