@@ -2,6 +2,7 @@ import {
   startTransition,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type Dispatch,
@@ -16,6 +17,7 @@ import type {
   HostMessage,
   InitialDataPayload,
   TemplateData,
+  WorkspaceUpdatePayload,
 } from './types.js';
 import { RpcClient } from './utils/rpc.js';
 import { vscode } from './utils/vscode.js';
@@ -144,12 +146,21 @@ export function App() {
       }
 
       const message = event.data;
-      if (message.type !== 'initial-data') {
+      if (message.type === 'initial-data') {
+        startTransition(() => {
+          setPayload(message.payload);
+        });
+        return;
+      }
+
+      if (message.type !== 'workspace-update') {
         return;
       }
 
       startTransition(() => {
-        setPayload(message.payload);
+        setPayload((currentPayload) =>
+          mergeWorkspaceUpdate(currentPayload, message.payload),
+        );
       });
     }
 
@@ -174,6 +185,11 @@ export function App() {
       vscode.setState(payload);
     }
   }, [payload]);
+
+  const templateCatalog = useMemo(
+    () => payload?.templates.flatMap((fileData) => fileData.templates) ?? [],
+    [payload?.templates],
+  );
 
   if (payload === null) {
     return (
@@ -215,9 +231,6 @@ export function App() {
     );
   }
 
-  const templateCatalog = payload.templates.flatMap(
-    (fileData) => fileData.templates,
-  );
   const sourceFile = payload.editor.file;
   const editorEyebrow =
     payload.editor.kind === 'template' ? 'Template' : 'Config';
@@ -373,6 +386,30 @@ function updatePayload(
 
 function isInitialDataPayload(value: unknown): value is InitialDataPayload {
   return typeof value === 'object' && value !== null && 'editor' in value;
+}
+
+function mergeWorkspaceUpdate(
+  currentPayload: InitialDataPayload | null,
+  update: WorkspaceUpdatePayload,
+): InitialDataPayload | null {
+  if (currentPayload === null) {
+    return currentPayload;
+  }
+
+  const nextIssues = [
+    ...currentPayload.issues.filter((issue) => issue.kind !== update.kind),
+    ...update.issues,
+  ];
+
+  return {
+    ...currentPayload,
+    ...(update.templates === undefined ? {} : { templates: update.templates }),
+    ...(update.configs === undefined ? {} : { configs: update.configs }),
+    issues: nextIssues,
+    ...(update.editorRevision === undefined
+      ? {}
+      : { editorRevision: update.editorRevision }),
+  };
 }
 
 function isFileSelected(value: unknown): value is { path: string | null } {

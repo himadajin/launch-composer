@@ -655,3 +655,253 @@ test('syncWithWorkspaceData refreshes the panel title when the current config na
 
   assert.equal(panel.title, 'Launch Server');
 });
+
+test('syncWithWorkspaceData sends a config workspace update for an open config editor', async () => {
+  const store = {
+    async readAll() {
+      return {
+        templates: [],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch Server', enabled: false }],
+          },
+        ],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:config-update';
+    },
+    async hasEntry() {
+      return true;
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'hasEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+
+  await controller.syncWithWorkspaceData(
+    {
+      templates: [],
+      configs: [
+        {
+          file: 'config.json',
+          configurations: [{ name: 'Launch Server', enabled: false }],
+        },
+      ],
+      issues: [
+        {
+          kind: 'config',
+          file: 'other.json',
+          code: 'invalid-shape',
+          message:
+            'other.json must contain an object with a "configurations" array.',
+        },
+      ],
+    },
+    { kind: 'config' },
+  );
+
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'workspace-update',
+    requestId: 'local',
+    payload: {
+      kind: 'config',
+      configs: [
+        {
+          file: 'config.json',
+          configurations: [{ name: 'Launch Server', enabled: false }],
+        },
+      ],
+      issues: [
+        {
+          kind: 'config',
+          file: 'other.json',
+          code: 'invalid-shape',
+          message:
+            'other.json must contain an object with a "configurations" array.',
+        },
+      ],
+      editorRevision: 'rev:config-update',
+    },
+  });
+});
+
+test('syncWithWorkspaceData sends template workspace updates to an open config editor', async () => {
+  const store = {
+    async readAll() {
+      return {
+        templates: [
+          {
+            file: 'template.json',
+            templates: [{ name: 'node' }],
+          },
+        ],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch', extends: 'node' }],
+          },
+        ],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:template-update';
+    },
+    async hasEntry() {
+      return true;
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'hasEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+
+  await controller.syncWithWorkspaceData(
+    {
+      templates: [
+        {
+          file: 'template.json',
+          templates: [{ name: 'node-18' }],
+        },
+      ],
+      configs: [
+        {
+          file: 'config.json',
+          configurations: [{ name: 'Launch', extends: 'node-18' }],
+        },
+      ],
+      issues: [],
+    },
+    { kind: 'template' },
+  );
+
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'workspace-update',
+    requestId: 'local',
+    payload: {
+      kind: 'template',
+      templates: [
+        {
+          file: 'template.json',
+          templates: [{ name: 'node-18' }],
+        },
+      ],
+      issues: [],
+    },
+  });
+});
+
+test('syncWithWorkspaceData skips config-only editor updates when a template editor is open', async () => {
+  const store = {
+    async readAll() {
+      return {
+        templates: [
+          {
+            file: 'template.json',
+            templates: [{ name: 'cpp' }],
+          },
+        ],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch', enabled: false }],
+          },
+        ],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:skip-config';
+    },
+    async hasEntry() {
+      return true;
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'hasEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'template',
+    file: 'template.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  const messageCount = panel.postedMessages.length;
+
+  await controller.syncWithWorkspaceData(
+    {
+      templates: [
+        {
+          file: 'template.json',
+          templates: [{ name: 'cpp' }],
+        },
+      ],
+      configs: [
+        {
+          file: 'config.json',
+          configurations: [{ name: 'Launch', enabled: false }],
+        },
+      ],
+      issues: [],
+    },
+    { kind: 'config' },
+  );
+
+  assert.equal(panel.postedMessages.length, messageCount);
+});

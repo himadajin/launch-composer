@@ -20,6 +20,14 @@ export interface InitialDataPayload {
   autoSaveDelay: number;
 }
 
+export interface WorkspaceUpdatePayload {
+  kind: 'template' | 'config';
+  templates?: TemplateFileData[];
+  configs?: ConfigFileData[];
+  issues: ComposerDataIssue[];
+  editorRevision?: string | null;
+}
+
 export type EntryPatchOperation =
   | {
       type: 'set';
@@ -85,6 +93,11 @@ export type HostMessage =
       type: 'initial-data';
       requestId: string;
       payload: InitialDataPayload;
+    }
+  | {
+      type: 'workspace-update';
+      requestId: string;
+      payload: WorkspaceUpdatePayload;
     }
   | {
       type: 'update-result';

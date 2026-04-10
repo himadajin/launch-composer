@@ -57,6 +57,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const activeIssues = new Map<string, string>();
   const pendingWatcherEvents = new Map<string, number>();
+  const snapshotCache: {
+    templates?: WorkspaceDataSnapshot['templates'];
+    configs?: WorkspaceDataSnapshot['configs'];
+    templateIssues?: ComposerDataIssue[];
+    configIssues?: ComposerDataIssue[];
+  } = {};
+  let syncQueue = Promise.resolve();
 
   const queueWatcherEvent = (
     kind: 'template' | 'config',
@@ -120,19 +127,76 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
+  const cacheSnapshot = (snapshot: WorkspaceDataSnapshot): void => {
+    snapshotCache.templates = snapshot.templates;
+    snapshotCache.configs = snapshot.configs;
+    snapshotCache.templateIssues = snapshot.issues.filter(
+      (issue) => issue.kind === 'template',
+    );
+    snapshotCache.configIssues = snapshot.issues.filter(
+      (issue) => issue.kind === 'config',
+    );
+  };
+
+  const getCachedSnapshot = (): WorkspaceDataSnapshot | undefined => {
+    if (
+      snapshotCache.templates === undefined ||
+      snapshotCache.configs === undefined ||
+      snapshotCache.templateIssues === undefined ||
+      snapshotCache.configIssues === undefined
+    ) {
+      return undefined;
+    }
+
+    return {
+      templates: snapshotCache.templates,
+      configs: snapshotCache.configs,
+      issues: [...snapshotCache.templateIssues, ...snapshotCache.configIssues],
+    };
+  };
+
+  const readSnapshotForKind = async (
+    kind: SnapshotKind,
+  ): Promise<WorkspaceDataSnapshot> => {
+    const cachedSnapshot = getCachedSnapshot();
+    if (kind === 'both' || cachedSnapshot === undefined) {
+      const snapshot = await store.readAll();
+      cacheSnapshot(snapshot);
+      return snapshot;
+    }
+
+    if (kind === 'template') {
+      const templateData = await store.readTemplatesWithIssues();
+      snapshotCache.templates = templateData.templates;
+      snapshotCache.templateIssues = templateData.issues;
+    } else {
+      const configData = await store.readConfigsWithIssues();
+      snapshotCache.configs = configData.configs;
+      snapshotCache.configIssues = configData.issues;
+    }
+
+    return getCachedSnapshot() ?? cachedSnapshot;
+  };
+
   const syncUiWithWorkspace = async (options?: {
     notifyIssues?: boolean;
     kind?: SnapshotKind;
     syncEditor?: boolean;
   }): Promise<void> => {
-    const snapshot = await store.readAll();
-    if (options?.notifyIssues !== false) {
-      reportIssues(snapshot.issues);
-    }
-    applySnapshot(snapshot, options?.kind ?? 'both');
-    if (options?.syncEditor !== false) {
-      await editorPanel.syncWithWorkspaceData(snapshot);
-    }
+    const nextSync = syncQueue.then(async () => {
+      const kind = options?.kind ?? 'both';
+      const snapshot = await readSnapshotForKind(kind);
+      if (options?.notifyIssues !== false) {
+        reportIssues(snapshot.issues);
+      }
+      applySnapshot(snapshot, kind);
+      if (options?.syncEditor !== false) {
+        await editorPanel.syncWithWorkspaceData(snapshot, { kind });
+      }
+    });
+
+    syncQueue = nextSync.catch(() => undefined);
+    await nextSync;
   };
 
   const refreshViews = (options?: {
