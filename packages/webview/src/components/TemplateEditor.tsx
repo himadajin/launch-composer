@@ -10,14 +10,20 @@ import {
 import { useEffect, useRef, useState } from 'react';
 
 import type { ComposerDataIssue, TemplateData } from '../types.js';
+import type { EntryChange } from './entryChanges.js';
+import {
+  updateTemplateArgs,
+  updateTemplateCwd,
+  updateTemplateProgram,
+  updateTemplateRequest,
+  updateTemplateStopAtEntry,
+  updateTemplateType,
+} from './entryChanges.js';
 import {
   DEBUG_REQUEST_OPTIONS,
   normalizeDebugRequest,
   stringOrEmpty,
-  updateOptionalString,
-  updateRequiredString,
   useDebouncedCommit,
-  withConfiguration,
 } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
@@ -25,7 +31,7 @@ interface TemplateEditorProps {
   data: TemplateData;
   sourceFile: string;
   autoSaveDelay: number;
-  onChange: (data: TemplateData) => void;
+  onChange: (change: EntryChange<TemplateData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
   readOnlyIssue?: ComposerDataIssue;
@@ -101,12 +107,7 @@ export function TemplateEditor({
       return;
     }
 
-    onChange(
-      withConfiguration(
-        data,
-        updateOptionalString({ ...data.configuration }, 'program', value),
-      ),
-    );
+    onChange(updateTemplateProgram(data, value));
   });
 
   useDebouncedCommit(type, autoSaveDelay, (value) => {
@@ -114,14 +115,7 @@ export function TemplateEditor({
       return;
     }
 
-    onChange({
-      ...data,
-      configuration: updateRequiredString(
-        { ...data.configuration },
-        'type',
-        value,
-      ),
-    });
+    onChange(updateTemplateType(data, value));
   });
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
@@ -129,12 +123,7 @@ export function TemplateEditor({
       return;
     }
 
-    onChange(
-      withConfiguration(
-        data,
-        updateOptionalString({ ...data.configuration }, 'cwd', value),
-      ),
-    );
+    onChange(updateTemplateCwd(data, value));
   });
 
   const commitName = async () => {
@@ -225,14 +214,7 @@ export function TemplateEditor({
               }
 
               setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
-              onChange({
-                ...data,
-                configuration: updateRequiredString(
-                  { ...data.configuration },
-                  'request',
-                  value,
-                ),
-              });
+              onChange(updateTemplateRequest(data, value));
             }}
           />
         </FormGroup>
@@ -276,10 +258,7 @@ export function TemplateEditor({
                 return;
               }
 
-              onChange({
-                ...data,
-                configuration: { ...data.configuration, stopAtEntry: checked },
-              });
+              onChange(updateTemplateStopAtEntry(data, checked));
             }}
           />
         </FormGroup>
@@ -301,13 +280,7 @@ export function TemplateEditor({
               addPlaceholder="Add argument"
               value={data.args ?? []}
               onChange={(args) => {
-                const next = { ...data };
-                if (args.length === 0) {
-                  delete next.args;
-                } else {
-                  next.args = args;
-                }
-                onChange(next);
+                onChange(updateTemplateArgs(data, args));
               }}
             />
           )}

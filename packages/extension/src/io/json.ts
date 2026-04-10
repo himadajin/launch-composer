@@ -15,13 +15,19 @@ export interface JsonParseIssue {
 export type JsonObjectPatchOperation =
   | {
       type: 'set';
-      key: string;
+      path: (string | number)[];
       value: unknown;
     }
   | {
       type: 'delete';
-      key: string;
+      path: (string | number)[];
     };
+
+const JSON_FORMATTING_OPTIONS = {
+  insertSpaces: true,
+  tabSize: 2,
+  eol: '\n',
+} as const;
 
 export function parseJsoncDocument<T>(text: string): {
   value: T;
@@ -59,31 +65,68 @@ export function stringifyJsonFile(value: unknown): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
-export function applyArrayObjectPatch(
+export function applyJsonDocumentPatches(
   text: string,
-  path: (string | number)[],
   patches: JsonObjectPatchOperation[],
 ): string {
   let nextText = text;
+  const hadTrailingNewline = text.endsWith('\n');
 
   for (const patch of patches) {
     const edits = modify(
       nextText,
-      [...path, patch.key],
+      patch.path,
       patch.type === 'set' ? patch.value : undefined,
       {
-        formattingOptions: {
-          insertSpaces: true,
-          tabSize: 2,
-          eol: '\n',
-        },
+        formattingOptions: JSON_FORMATTING_OPTIONS,
       },
     );
 
     nextText = applyEdits(nextText, edits);
   }
 
-  return nextText.endsWith('\n') ? nextText : `${nextText}\n`;
+  if (hadTrailingNewline) {
+    return nextText.endsWith('\n') ? nextText : `${nextText}\n`;
+  }
+
+  return nextText.endsWith('\n') ? nextText.slice(0, -1) : nextText;
+}
+
+export function appendJsonArrayValue(
+  text: string,
+  path: (string | number)[],
+  value: unknown,
+): string {
+  const parsed = parseJsoncDocument<unknown>(text);
+  if (parsed.issues.length > 0) {
+    const details = parsed.issues
+      .map((issue) => `${issue.code} at ${issue.offset}`)
+      .join(', ');
+    throw new Error(`Failed to append array value: ${details}`);
+  }
+
+  const array = getJsonPathValue(parsed.value, path);
+  if (!Array.isArray(array)) {
+    throw new Error('Target path must resolve to a JSON array.');
+  }
+
+  return applyJsonDocumentPatches(text, [
+    {
+      type: 'set',
+      path: [...path, array.length],
+      value,
+    },
+  ]);
+}
+
+export function joinJsonPatchPath(
+  prefix: (string | number)[],
+  patches: JsonObjectPatchOperation[],
+): JsonObjectPatchOperation[] {
+  return patches.map((patch) => ({
+    ...patch,
+    path: [...prefix, ...patch.path],
+  }));
 }
 
 export function findArrayEntryOffset(
@@ -131,4 +174,27 @@ export function createTextRevision(text: string): string {
   }
 
   return `${(hash >>> 0).toString(16)}:${text.length}`;
+}
+
+function getJsonPathValue(value: unknown, path: (string | number)[]): unknown {
+  let current = value;
+
+  for (const segment of path) {
+    if (typeof segment === 'number') {
+      if (!Array.isArray(current)) {
+        return undefined;
+      }
+
+      current = current[segment];
+      continue;
+    }
+
+    if (typeof current !== 'object' || current === null) {
+      return undefined;
+    }
+
+    current = (current as Record<string, unknown>)[segment];
+  }
+
+  return current;
 }

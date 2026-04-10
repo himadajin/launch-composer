@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 import { ConfigEditor } from './components/ConfigEditor.js';
+import type { EntryChange } from './components/entryChanges.js';
 import { TemplateEditor } from './components/TemplateEditor.js';
 import type {
   ConfigData,
@@ -23,8 +24,6 @@ import { RpcClient } from './utils/rpc.js';
 import { vscode } from './utils/vscode.js';
 
 const rpc = new RpcClient();
-
-type EntryData = TemplateData | ConfigData;
 
 export function App() {
   const [payload, setPayload] = useState<InitialDataPayload | null>(
@@ -270,11 +269,10 @@ export function App() {
               : {
                   readOnlyIssue: currentIssue,
                 })}
-            onChange={(nextData) => {
-              const currentData =
-                (current as TemplateData | undefined) ??
-                createPlaceholderTemplate(payload.editor.file);
-              const patches = createEntryPatches(currentData, nextData);
+            onChange={({
+              data: nextData,
+              patches,
+            }: EntryChange<TemplateData>) => {
               updatePayload(payload, setPayload, payload.editor, nextData);
               enqueueUpdate(
                 'template',
@@ -312,11 +310,10 @@ export function App() {
               const result = await rpc.sendRequest({ type: 'browse-file' });
               return isFileSelected(result) ? result.path : null;
             }}
-            onChange={(nextData) => {
-              const currentData =
-                (current as ConfigData | undefined) ??
-                createPlaceholderConfig(payload.editor.file);
-              const patches = createEntryPatches(currentData, nextData);
+            onChange={({
+              data: nextData,
+              patches,
+            }: EntryChange<ConfigData>) => {
               updatePayload(payload, setPayload, payload.editor, nextData);
               enqueueUpdate(
                 'config',
@@ -440,61 +437,6 @@ function isRenameResult(value: unknown): value is {
     'success' in value &&
     typeof (value as { success: unknown }).success === 'boolean'
   );
-}
-
-function createEntryPatches(
-  current: EntryData,
-  next: EntryData,
-): EntryPatchOperation[] {
-  const currentRecord = current as unknown as Record<string, unknown>;
-  const nextRecord = next as unknown as Record<string, unknown>;
-  const keys = new Set([
-    ...Object.keys(currentRecord),
-    ...Object.keys(nextRecord),
-  ]);
-
-  const patches: EntryPatchOperation[] = [];
-  for (const key of [...keys].sort((left, right) =>
-    left.localeCompare(right),
-  )) {
-    const hasCurrent = Object.hasOwn(currentRecord, key);
-    const hasNext = Object.hasOwn(nextRecord, key);
-
-    if (hasCurrent && !hasNext) {
-      patches.push({
-        type: 'delete',
-        key,
-      });
-      continue;
-    }
-
-    if (!hasNext) {
-      continue;
-    }
-
-    const nextValue = nextRecord[key];
-    if (!hasCurrent || !isEqualPatchValue(currentRecord[key], nextValue)) {
-      patches.push({
-        type: 'set',
-        key,
-        value: nextValue,
-      });
-    }
-  }
-
-  return patches;
-}
-
-function isEqualPatchValue(left: unknown, right: unknown): boolean {
-  if (Array.isArray(left) && Array.isArray(right)) {
-    if (left.length !== right.length) {
-      return false;
-    }
-
-    return left.every((entry, index) => entry === right[index]);
-  }
-
-  return left === right;
 }
 
 function createPlaceholderTemplate(file: string): TemplateData {

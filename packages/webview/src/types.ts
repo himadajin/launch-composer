@@ -73,12 +73,12 @@ export interface WorkspaceUpdatePayload {
 export type EntryPatchOperation =
   | {
       type: 'set';
-      key: string;
+      path: (string | number)[];
       value: unknown;
     }
   | {
       type: 'delete';
-      key: string;
+      path: (string | number)[];
     };
 
 export type WebviewMessage =
