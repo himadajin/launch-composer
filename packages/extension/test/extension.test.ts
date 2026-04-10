@@ -316,6 +316,76 @@ test('readAll keeps valid files and reports invalid files as issues', async () =
   ]);
 });
 
+test('readTemplatesWithIssues reads template data without requiring config directories', async () => {
+  const workspaceUri = vscode.Uri.file('/workspace/templates-only-project');
+  const store = new WorkspaceStore(workspaceUri);
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.joinPath(
+      workspaceUri,
+      '.vscode',
+      'launch-composer',
+      'templates',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(
+      workspaceUri,
+      '.vscode',
+      'launch-composer',
+      'templates',
+      'template.json',
+    ),
+    new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
+  );
+
+  const data = await store.readTemplatesWithIssues();
+
+  assert.deepEqual(data, {
+    templates: [
+      {
+        file: 'template.json',
+        templates: [{ name: 'cpp' }],
+      },
+    ],
+    issues: [],
+  });
+});
+
+test('readConfigsWithIssues reads config data without requiring template directories', async () => {
+  const workspaceUri = vscode.Uri.file('/workspace/configs-only-project');
+  const store = new WorkspaceStore(workspaceUri);
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.joinPath(workspaceUri, '.vscode', 'launch-composer', 'configs'),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(
+      workspaceUri,
+      '.vscode',
+      'launch-composer',
+      'configs',
+      'config.json',
+    ),
+    new TextEncoder().encode(
+      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch"\n    }\n  ]\n}\n',
+    ),
+  );
+
+  const data = await store.readConfigsWithIssues();
+
+  assert.deepEqual(data, {
+    configs: [
+      {
+        file: 'config.json',
+        enabled: true,
+        configurations: [{ name: 'Launch' }],
+      },
+    ],
+    issues: [],
+  });
+});
+
 test('generateLaunchJson returns validation-style errors for invalid files', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/generate-invalid-project'),

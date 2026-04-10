@@ -9,6 +9,7 @@ import type {
   EditorTarget,
   HostMessage,
   InitialDataPayload,
+  WorkspaceUpdatePayload,
   WebviewMessage,
 } from '../messages.js';
 import type {
@@ -19,7 +20,14 @@ import type {
 interface EditorPanelOptions {
   context: vscode.ExtensionContext;
   store: WorkspaceStore;
-  onDidMutate: () => void;
+  onDidMutate: (mutation: {
+    kind: 'template' | 'config' | 'both';
+    expectedWatchers?: ReadonlyArray<{
+      kind: 'template' | 'config';
+      file: string;
+    }>;
+    syncEditor?: boolean;
+  }) => void;
   onDidReveal: (target: EditorTarget) => Promise<void>;
   onDidGenerate: () => Promise<{
     success: boolean;
@@ -97,13 +105,21 @@ export class EditorPanelController {
     await this.options.store.openEntryAsJson(this.currentTarget);
   }
 
-  async syncWithWorkspaceData(data?: WorkspaceDataSnapshot): Promise<void> {
+  async syncWithWorkspaceData(
+    data?: WorkspaceDataSnapshot,
+    options?: { kind?: 'template' | 'config' | 'both' },
+  ): Promise<void> {
     if (this.panel === undefined || this.currentTarget === undefined) {
       return;
     }
 
+    const syncKind = options?.kind ?? 'both';
     const snapshot = data ?? (await this.options.store.readAll());
     this.panel.title = getTitle(this.currentTarget, snapshot);
+    if (!this.shouldSyncCurrentEditor(syncKind)) {
+      return;
+    }
+
     if (hasInvalidFile(snapshot, this.currentTarget)) {
       await this.postInitialData('local', snapshot);
       return;
@@ -112,6 +128,11 @@ export class EditorPanelController {
     if (!(await this.options.store.hasEntry(this.currentTarget))) {
       this.currentTarget = undefined;
       this.panel.dispose();
+      return;
+    }
+
+    if (syncKind !== 'both' && this.shouldPostWorkspaceUpdate(syncKind)) {
+      await this.postWorkspaceUpdate('local', snapshot, syncKind);
       return;
     }
 
@@ -201,7 +222,11 @@ export class EditorPanelController {
   ): Promise<void> {
     try {
       await this.options.store.deleteEntry(target);
-      this.options.onDidMutate();
+      this.options.onDidMutate({
+        kind: target.kind,
+        expectedWatchers: [{ kind: target.kind, file: target.file }],
+        syncEditor: false,
+      });
       await this.syncWithWorkspace();
       await this.respond(requestId, {
         type: 'delete-result',
@@ -228,7 +253,11 @@ export class EditorPanelController {
   ): Promise<void> {
     try {
       await this.options.store.renameEntry(target, name);
-      this.options.onDidMutate();
+      this.options.onDidMutate({
+        kind: target.kind === 'template' ? 'both' : 'config',
+        expectedWatchers: [{ kind: target.kind, file: target.file }],
+        syncEditor: false,
+      });
       await this.syncWithWorkspace();
       await this.respond(requestId, {
         type: 'rename-result',
@@ -289,7 +318,11 @@ export class EditorPanelController {
         return;
       }
 
-      this.options.onDidMutate();
+      this.options.onDidMutate({
+        kind,
+        expectedWatchers: [{ kind, file: payload.file }],
+        syncEditor: false,
+      });
       await this.respond(requestId, {
         type: 'update-result',
         requestId,
@@ -333,6 +366,64 @@ export class EditorPanelController {
 
     await this.respond(requestId, {
       type: 'initial-data',
+      requestId,
+      payload,
+    });
+  }
+
+  private shouldPostWorkspaceUpdate(
+    kind: 'template' | 'config' | 'both',
+  ): boolean {
+    if (kind === 'both' || this.currentTarget === undefined) {
+      return false;
+    }
+
+    return (
+      this.currentTarget.kind === kind ||
+      (kind === 'template' && this.currentTarget.kind === 'config')
+    );
+  }
+
+  private shouldSyncCurrentEditor(
+    kind: 'template' | 'config' | 'both',
+  ): boolean {
+    if (kind === 'both' || this.currentTarget === undefined) {
+      return true;
+    }
+
+    return (
+      this.currentTarget.kind === kind ||
+      (kind === 'template' && this.currentTarget.kind === 'config')
+    );
+  }
+
+  private async postWorkspaceUpdate(
+    requestId: string,
+    data: WorkspaceDataSnapshot,
+    kind: 'template' | 'config',
+  ): Promise<void> {
+    if (this.currentTarget === undefined) {
+      return;
+    }
+
+    const payload: WorkspaceUpdatePayload = {
+      kind,
+      ...(kind === 'template'
+        ? { templates: data.templates }
+        : { configs: data.configs }),
+      issues: data.issues.filter((issue) => issue.kind === kind),
+      ...(this.currentTarget.kind === kind
+        ? {
+            editorRevision: await this.options.store.getDataFileRevision(
+              this.currentTarget.kind,
+              this.currentTarget.file,
+            ),
+          }
+        : {}),
+    };
+
+    await this.respond(requestId, {
+      type: 'workspace-update',
       requestId,
       payload,
     });

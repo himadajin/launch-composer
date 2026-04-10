@@ -52,6 +52,16 @@ export interface WorkspaceDataSnapshot {
   issues: ComposerDataIssue[];
 }
 
+export interface TemplateWorkspaceData {
+  templates: TemplateFileData[];
+  issues: ComposerDataIssue[];
+}
+
+export interface ConfigWorkspaceData {
+  configs: ConfigFileData[];
+  issues: ComposerDataIssue[];
+}
+
 type ArrayFileReadResult<T> =
   | { status: 'ok'; data: T[] }
   | { status: 'missing' }
@@ -102,14 +112,30 @@ export class WorkspaceStore {
 
   async readAll(): Promise<WorkspaceDataSnapshot> {
     const [templatesResult, configsResult] = await Promise.all([
-      this.readTemplateFiles(),
-      this.readConfigFiles(),
+      this.readTemplatesWithIssues(),
+      this.readConfigsWithIssues(),
     ]);
 
     return {
-      templates: templatesResult.data,
-      configs: configsResult.data,
+      templates: templatesResult.templates,
+      configs: configsResult.configs,
       issues: [...templatesResult.issues, ...configsResult.issues],
+    };
+  }
+
+  async readTemplatesWithIssues(): Promise<TemplateWorkspaceData> {
+    const result = await this.readTemplateFiles();
+    return {
+      templates: result.data,
+      issues: result.issues,
+    };
+  }
+
+  async readConfigsWithIssues(): Promise<ConfigWorkspaceData> {
+    const result = await this.readConfigFiles();
+    return {
+      configs: result.data,
+      issues: result.issues,
     };
   }
 
