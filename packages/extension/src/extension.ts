@@ -1,3 +1,5 @@
+import * as path from 'node:path';
+
 import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
@@ -20,6 +22,7 @@ type TemplateSelectionItem =
   | { label: string; value: string }
   | { label: string; value?: undefined; description?: string }
   | { kind: vscode.QuickPickItemKind.Separator; label: string };
+type SnapshotKind = 'template' | 'config' | 'both';
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = getWorkspaceRoot();
@@ -53,10 +56,38 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   const activeIssues = new Map<string, string>();
+  const pendingWatcherEvents = new Map<string, number>();
+
+  const queueWatcherEvent = (
+    kind: 'template' | 'config',
+    file: string,
+  ): void => {
+    const key = `${kind}:${file}`;
+    pendingWatcherEvents.set(key, (pendingWatcherEvents.get(key) ?? 0) + 1);
+  };
+
+  const shouldIgnoreWatcherEvent = (
+    kind: 'template' | 'config',
+    uri: vscode.Uri,
+  ): boolean => {
+    const key = `${kind}:${path.basename(uri.fsPath)}`;
+    const remaining = pendingWatcherEvents.get(key);
+    if (remaining === undefined) {
+      return false;
+    }
+
+    if (remaining <= 1) {
+      pendingWatcherEvents.delete(key);
+    } else {
+      pendingWatcherEvents.set(key, remaining - 1);
+    }
+
+    return true;
+  };
 
   const applySnapshot = (
     snapshot: WorkspaceDataSnapshot,
-    kind: 'template' | 'config' | 'both' = 'both',
+    kind: SnapshotKind = 'both',
   ): void => {
     if (kind === 'both' || kind === 'template') {
       templateProvider.refresh(snapshot);
@@ -91,30 +122,60 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const syncUiWithWorkspace = async (options?: {
     notifyIssues?: boolean;
-    kind?: 'template' | 'config' | 'both';
+    kind?: SnapshotKind;
+    syncEditor?: boolean;
   }): Promise<void> => {
     const snapshot = await store.readAll();
     if (options?.notifyIssues !== false) {
       reportIssues(snapshot.issues);
     }
     applySnapshot(snapshot, options?.kind ?? 'both');
-    await editorPanel.syncWithWorkspaceData(snapshot);
+    if (options?.syncEditor !== false) {
+      await editorPanel.syncWithWorkspaceData(snapshot);
+    }
   };
 
-  const refreshViews = (): void => {
-    void syncUiWithWorkspace({ notifyIssues: false }).catch(showError);
+  const refreshViews = (options?: {
+    kind?: SnapshotKind;
+    expectedWatchers?: ReadonlyArray<{
+      kind: 'template' | 'config';
+      file: string;
+    }>;
+    syncEditor?: boolean;
+  }): void => {
+    options?.expectedWatchers?.forEach(({ kind, file }) =>
+      queueWatcherEvent(kind, file),
+    );
+    const syncOptions: {
+      notifyIssues: boolean;
+      kind?: SnapshotKind;
+      syncEditor?: boolean;
+    } = {
+      notifyIssues: false,
+    };
+    if (options?.kind !== undefined) {
+      syncOptions.kind = options.kind;
+    }
+    if (options?.syncEditor !== undefined) {
+      syncOptions.syncEditor = options.syncEditor;
+    }
+
+    void syncUiWithWorkspace(syncOptions).catch(showError);
   };
 
   const handleConfigCheckboxChange = async (
     event: vscode.TreeCheckboxChangeEvent<TreeNode>,
   ): Promise<void> => {
     try {
+      const changedFiles = new Set<string>();
+
       for (const [node, checkboxState] of event.items) {
         const enabled = checkboxState === vscode.TreeItemCheckboxState.Checked;
 
         if (node.type === 'file' && node.kind === 'config') {
           if (node.enabled !== enabled) {
             await store.toggleConfigFileEnabled(node.file);
+            changedFiles.add(node.file);
           }
           continue;
         }
@@ -129,7 +190,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
         if (node.enabled !== enabled) {
           await store.toggleConfigEnabled(node.target.file, node.target.index);
+          changedFiles.add(node.target.file);
         }
+      }
+
+      if (changedFiles.size > 0) {
+        changedFiles.forEach((file) => queueWatcherEvent('config', file));
+        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
       }
     } catch (error) {
       showError(error);
@@ -197,34 +264,52 @@ export function activate(context: vscode.ExtensionContext): void {
   const templateWatcher = vscode.workspace.createFileSystemWatcher(
     store.getRelativeTemplatePattern(),
   );
-  templateWatcher.onDidCreate(() => {
+  templateWatcher.onDidCreate((uri) => {
+    if (shouldIgnoreWatcherEvent('template', uri)) {
+      return;
+    }
     void syncUiWithWorkspace({ notifyIssues: false, kind: 'template' }).catch(
       showError,
     );
   });
-  templateWatcher.onDidChange(() => {
+  templateWatcher.onDidChange((uri) => {
+    if (shouldIgnoreWatcherEvent('template', uri)) {
+      return;
+    }
     void syncUiWithWorkspace({ notifyIssues: true, kind: 'template' }).catch(
       showError,
     );
   });
-  templateWatcher.onDidDelete(() => {
+  templateWatcher.onDidDelete((uri) => {
+    if (shouldIgnoreWatcherEvent('template', uri)) {
+      return;
+    }
     void syncUiWithWorkspace({ kind: 'template' }).catch(showError);
   });
 
   const configWatcher = vscode.workspace.createFileSystemWatcher(
     store.getRelativeConfigPattern(),
   );
-  configWatcher.onDidCreate(() => {
+  configWatcher.onDidCreate((uri) => {
+    if (shouldIgnoreWatcherEvent('config', uri)) {
+      return;
+    }
     void syncUiWithWorkspace({ notifyIssues: false, kind: 'config' }).catch(
       showError,
     );
   });
-  configWatcher.onDidChange(() => {
+  configWatcher.onDidChange((uri) => {
+    if (shouldIgnoreWatcherEvent('config', uri)) {
+      return;
+    }
     void syncUiWithWorkspace({ notifyIssues: true, kind: 'config' }).catch(
       showError,
     );
   });
-  configWatcher.onDidDelete(() => {
+  configWatcher.onDidDelete((uri) => {
+    if (shouldIgnoreWatcherEvent('config', uri)) {
+      return;
+    }
     void syncUiWithWorkspace({ kind: 'config' }).catch(showError);
   });
 
@@ -597,17 +682,27 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     registerCommand(COMMANDS.enableConfig, async (node?: TreeNode) => {
-      await setConfigEnabled(node, true, store);
+      await setConfigEnabled(node, true, store, async (file) => {
+        queueWatcherEvent('config', file);
+        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
+      });
     }),
     registerCommand(COMMANDS.disableConfig, async (node?: TreeNode) => {
-      await setConfigEnabled(node, false, store);
+      await setConfigEnabled(node, false, store, async (file) => {
+        queueWatcherEvent('config', file);
+        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
+      });
     }),
     registerCommand(COMMANDS.toggleEnabled, async (node?: TreeNode) => {
       try {
         if (node?.type === 'entry' && node.target.kind === 'config') {
           await store.toggleConfigEnabled(node.target.file, node.target.index);
+          queueWatcherEvent('config', node.target.file);
+          await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
         } else if (node?.type === 'file' && node.kind === 'config') {
           await store.toggleConfigFileEnabled(node.file);
+          queueWatcherEvent('config', node.file);
+          await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
         }
       } catch (error) {
         showError(error);
@@ -854,6 +949,7 @@ async function setConfigEnabled(
   node: TreeNode | undefined,
   enabled: boolean,
   store: WorkspaceStore,
+  onDidChange: (file: string) => Promise<void>,
 ): Promise<void> {
   if (node?.type === 'file' && node.kind === 'config') {
     if (node.enabled === enabled) {
@@ -862,6 +958,7 @@ async function setConfigEnabled(
 
     try {
       await store.toggleConfigFileEnabled(node.file);
+      await onDidChange(node.file);
     } catch (error) {
       showError(error);
     }
@@ -882,6 +979,7 @@ async function setConfigEnabled(
       entryNode.target.file,
       entryNode.target.index,
     );
+    await onDidChange(entryNode.target.file);
   } catch (error) {
     showError(error);
   }

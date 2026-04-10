@@ -19,7 +19,14 @@ import type {
 interface EditorPanelOptions {
   context: vscode.ExtensionContext;
   store: WorkspaceStore;
-  onDidMutate: () => void;
+  onDidMutate: (mutation: {
+    kind: 'template' | 'config' | 'both';
+    expectedWatchers?: ReadonlyArray<{
+      kind: 'template' | 'config';
+      file: string;
+    }>;
+    syncEditor?: boolean;
+  }) => void;
   onDidReveal: (target: EditorTarget) => Promise<void>;
   onDidGenerate: () => Promise<{
     success: boolean;
@@ -201,7 +208,11 @@ export class EditorPanelController {
   ): Promise<void> {
     try {
       await this.options.store.deleteEntry(target);
-      this.options.onDidMutate();
+      this.options.onDidMutate({
+        kind: target.kind,
+        expectedWatchers: [{ kind: target.kind, file: target.file }],
+        syncEditor: false,
+      });
       await this.syncWithWorkspace();
       await this.respond(requestId, {
         type: 'delete-result',
@@ -228,7 +239,11 @@ export class EditorPanelController {
   ): Promise<void> {
     try {
       await this.options.store.renameEntry(target, name);
-      this.options.onDidMutate();
+      this.options.onDidMutate({
+        kind: target.kind === 'template' ? 'both' : 'config',
+        expectedWatchers: [{ kind: target.kind, file: target.file }],
+        syncEditor: false,
+      });
       await this.syncWithWorkspace();
       await this.respond(requestId, {
         type: 'rename-result',
@@ -289,7 +304,11 @@ export class EditorPanelController {
         return;
       }
 
-      this.options.onDidMutate();
+      this.options.onDidMutate({
+        kind,
+        expectedWatchers: [{ kind, file: payload.file }],
+        syncEditor: false,
+      });
       await this.respond(requestId, {
         type: 'update-result',
         requestId,

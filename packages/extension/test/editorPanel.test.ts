@@ -500,6 +500,102 @@ test('rename-entry message returns an error when renameEntry fails', async () =>
   ]);
 });
 
+test('update-config message refreshes only config views through onDidMutate', async () => {
+  let mutation:
+    | {
+        kind: 'template' | 'config' | 'both';
+        expectedWatchers?: ReadonlyArray<{
+          kind: 'template' | 'config';
+          file: string;
+        }>;
+        syncEditor?: boolean;
+      }
+    | undefined;
+  const store = {
+    async readAll() {
+      return {
+        templates: [],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch', enabled: true }],
+          },
+        ],
+        issues: [],
+      };
+    },
+    async getDataFileRevision() {
+      return 'rev:6';
+    },
+    async patchConfigEntry() {
+      return {
+        status: 'ok' as const,
+        revision: 'rev:7',
+      };
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'patchConfigEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate(nextMutation) {
+      mutation = nextMutation;
+    },
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  await (
+    controller as unknown as {
+      handleMessage(message: unknown): Promise<void>;
+    }
+  ).handleMessage({
+    type: 'update-config',
+    requestId: 'update-1',
+    payload: {
+      file: 'config.json',
+      index: 0,
+      baseRevision: 'rev:6',
+      patches: [
+        {
+          type: 'set',
+          key: 'enabled',
+          value: false,
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(mutation, {
+    kind: 'config',
+    expectedWatchers: [{ kind: 'config', file: 'config.json' }],
+    syncEditor: false,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'update-result',
+    requestId: 'update-1',
+    payload: {
+      success: true,
+      revision: 'rev:7',
+    },
+  });
+});
+
 test('syncWithWorkspaceData refreshes the panel title when the current config name changes', async () => {
   const store = {
     async readAll() {
