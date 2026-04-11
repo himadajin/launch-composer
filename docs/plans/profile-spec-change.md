@@ -48,6 +48,15 @@ Expose only these fields:
 
 Remove `Type` and `Request` completely, including inherited read-only display.
 
+### Config Profile Edge Cases
+
+- The profile selector must never render an unlabeled blank option.
+- If one or more profiles exist and `config.profile` is missing, empty, or not a string, show a placeholder option labeled `Select a profile...` and a warning that the config is invalid until a profile is chosen.
+- If `config.profile` is a non-empty string that does not match an existing profile, keep that raw value visible in the selector as `<name> (missing)` so the broken reference is explicit and repairable from the GUI.
+- If no profiles exist, disable the profile selector and show `No profiles available` instead of an empty option.
+- If no profiles exist and the config still contains a non-empty unknown profile string, keep that value visible as `<name> (missing)` and disable the selector until at least one profile exists.
+- Files with invalid JSON or invalid top-level shape remain read-only in the form editor, but the profile field still follows the same non-blank labeling rules when rendered from placeholder data.
+
 ## Add Config With Zero Profiles
 
 When `Add Config` runs, the extension must first load the available profiles.

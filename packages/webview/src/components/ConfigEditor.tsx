@@ -22,6 +22,10 @@ import {
 } from './entryChanges.js';
 import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
+import {
+  isInternalProfileSelectValue,
+  resolveConfigProfileSelectState,
+} from './profileSelect.js';
 
 interface ConfigEditorProps {
   data: ConfigData;
@@ -75,16 +79,7 @@ export function ConfigEditor({
   const currentProfile = profiles.find(
     (profile) => profile.name === data.profile,
   );
-  const profileNames = profiles.map((profile) => profile.name);
-  const profileValue = data.profile;
-  const hasMissingProfile = !profileNames.includes(profileValue);
-  const profileOptions = hasMissingProfile
-    ? [...profileNames, profileValue]
-    : profileNames;
-  const profileOptionLabels = hasMissingProfile
-    ? [...profileNames, profileValue]
-    : profileNames;
-  const selectValue = profileValue;
+  const profileSelect = resolveConfigProfileSelectState(profiles, data.profile);
   const argsFileDisabled = currentProfile?.args !== undefined;
 
   const handleCwdChange = (value: string) => {
@@ -174,14 +169,21 @@ export function ConfigEditor({
         <FormGroup
           label="Config: Profile"
           description="Profile used as the base for this config."
+          helper={
+            profileSelect.helperMessage === undefined ? undefined : (
+              <FormHelper tone="warning">
+                {profileSelect.helperMessage}
+              </FormHelper>
+            )
+          }
         >
           <Select
-            disabled={readOnly}
-            enum={profileOptions}
-            enumItemLabels={profileOptionLabels}
-            value={selectValue}
+            disabled={readOnly || profileSelect.disabled}
+            enum={profileSelect.options}
+            enumItemLabels={profileSelect.optionLabels}
+            value={profileSelect.value}
             onChange={(value) => {
-              if (readOnly) {
+              if (readOnly || isInternalProfileSelectValue(value)) {
                 return;
               }
 
