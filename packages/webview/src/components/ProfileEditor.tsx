@@ -4,40 +4,32 @@ import {
   FormGroup,
   FormHelper,
   ListEditor,
-  Select,
   TextInput,
 } from '@himadajin/vscode-components';
 import { useEffect, useRef, useState } from 'react';
 
-import type { ComposerDataIssue, TemplateData } from '../types.js';
+import type { ComposerDataIssue, ProfileData } from '../types.js';
 import type { EntryChange } from './entryChanges.js';
 import {
-  updateTemplateArgs,
-  updateTemplateCwd,
-  updateTemplateProgram,
-  updateTemplateRequest,
-  updateTemplateStopAtEntry,
-  updateTemplateType,
+  updateProfileArgs,
+  updateProfileCwd,
+  updateProfileProgram,
+  updateProfileStopAtEntry,
 } from './entryChanges.js';
-import {
-  DEBUG_REQUEST_OPTIONS,
-  normalizeDebugRequest,
-  stringOrEmpty,
-  useDebouncedCommit,
-} from './editorUtils.js';
+import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
-interface TemplateEditorProps {
-  data: TemplateData;
+interface ProfileEditorProps {
+  data: ProfileData;
   sourceFile: string;
   autoSaveDelay: number;
-  onChange: (change: EntryChange<TemplateData>) => void;
+  onChange: (change: EntryChange<ProfileData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
   readOnlyIssue?: ComposerDataIssue;
 }
 
-export function TemplateEditor({
+export function ProfileEditor({
   data,
   sourceFile,
   autoSaveDelay,
@@ -45,13 +37,9 @@ export function TemplateEditor({
   onRename,
   onOpenJson,
   readOnlyIssue,
-}: TemplateEditorProps) {
+}: ProfileEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
   const [name, setName] = useState(data.name);
-  const [type, setType] = useState(stringOrEmpty(data.configuration?.type));
-  const [request, setRequest] = useState(
-    normalizeDebugRequest(data.configuration?.request),
-  );
   const [program, setProgram] = useState(
     stringOrEmpty(data.configuration?.program),
   );
@@ -60,22 +48,12 @@ export function TemplateEditor({
   // data prop). Reset to false on external data sync; set to true on user
   // input. Mirrors VS Code's "clear handler → set value → re-register handler"
   // pattern so that opening the editor never causes spurious file writes.
-  const typeChangedByUserRef = useRef(false);
   const programChangedByUserRef = useRef(false);
   const cwdChangedByUserRef = useRef(false);
 
   useEffect(() => {
     setName(data.name);
   }, [data.name]);
-
-  useEffect(() => {
-    typeChangedByUserRef.current = false;
-    setType(stringOrEmpty(data.configuration?.type));
-  }, [data.configuration?.type]);
-
-  useEffect(() => {
-    setRequest(normalizeDebugRequest(data.configuration?.request));
-  }, [data.configuration?.request]);
 
   useEffect(() => {
     programChangedByUserRef.current = false;
@@ -86,11 +64,6 @@ export function TemplateEditor({
     cwdChangedByUserRef.current = false;
     setCwd(stringOrEmpty(data.configuration?.cwd));
   }, [data.configuration?.cwd]);
-
-  const handleTypeChange = (value: string) => {
-    typeChangedByUserRef.current = true;
-    setType(value);
-  };
 
   const handleProgramChange = (value: string) => {
     programChangedByUserRef.current = true;
@@ -107,15 +80,7 @@ export function TemplateEditor({
       return;
     }
 
-    onChange(updateTemplateProgram(data, value));
-  });
-
-  useDebouncedCommit(type, autoSaveDelay, (value) => {
-    if (readOnly || !typeChangedByUserRef.current) {
-      return;
-    }
-
-    onChange(updateTemplateType(data, value));
+    onChange(updateProfileProgram(data, value));
   });
 
   useDebouncedCommit(cwd, autoSaveDelay, (value) => {
@@ -123,7 +88,7 @@ export function TemplateEditor({
       return;
     }
 
-    onChange(updateTemplateCwd(data, value));
+    onChange(updateProfileCwd(data, value));
   });
 
   const commitName = async () => {
@@ -168,8 +133,8 @@ export function TemplateEditor({
 
         <FormGroup
           category="Launch Composer"
-          label="Template: Name"
-          description="Template identifier. Config extends references this value."
+          label="Profile: Name"
+          description="Profile identifier. Config profile references this value."
         >
           <TextInput
             disabled={readOnly}
@@ -190,37 +155,7 @@ export function TemplateEditor({
         </FormGroup>
 
         <FormGroup
-          label="Template: Type"
-          description="Debugger type written to the generated launch.json entry."
-        >
-          <TextInput
-            disabled={readOnly}
-            value={type}
-            onChange={handleTypeChange}
-          />
-        </FormGroup>
-
-        <FormGroup
-          label="Template: Request"
-          description="Debugger request written to the generated launch.json entry."
-        >
-          <Select
-            disabled={readOnly}
-            enum={[...DEBUG_REQUEST_OPTIONS]}
-            value={request}
-            onChange={(value) => {
-              if (readOnly) {
-                return;
-              }
-
-              setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
-              onChange(updateTemplateRequest(data, value));
-            }}
-          />
-        </FormGroup>
-
-        <FormGroup
-          label="Template: Program"
+          label="Profile: Program"
           description="Program path or expression used by the debugger."
         >
           <TextInput
@@ -231,7 +166,7 @@ export function TemplateEditor({
         </FormGroup>
 
         <FormGroup
-          label="Template: Working Directory"
+          label="Profile: Working Directory"
           description="Working directory passed to the debug adapter."
         >
           <TextInput
@@ -242,7 +177,7 @@ export function TemplateEditor({
         </FormGroup>
 
         <FormGroup
-          label="Template: Stop At Entry"
+          label="Profile: Stop At Entry"
           description="Pause execution immediately after the program starts."
           modified={data.configuration?.stopAtEntry === true}
         >
@@ -258,13 +193,13 @@ export function TemplateEditor({
                 return;
               }
 
-              onChange(updateTemplateStopAtEntry(data, checked));
+              onChange(updateProfileStopAtEntry(data, checked));
             }}
           />
         </FormGroup>
 
         <FormGroup
-          label="Template: Args"
+          label="Profile: Args"
           description="Arguments appended to the debug configuration."
           fill
         >
@@ -280,7 +215,7 @@ export function TemplateEditor({
               addPlaceholder="Add argument"
               value={data.args ?? []}
               onChange={(args) => {
-                onChange(updateTemplateArgs(data, args));
+                onChange(updateProfileArgs(data, args));
               }}
             />
           )}
@@ -288,7 +223,7 @@ export function TemplateEditor({
 
         <EditInJsonHint
           fileLabel={sourceFile}
-          description="Some launch.json properties are only available in JSON. Edit the source file to add or adjust unsupported fields."
+          description='Edit the source file to change JSON-only fields such as "type" and "request", or to add unsupported properties.'
           onOpenFileJson={onOpenJson}
         />
       </FormContainer>

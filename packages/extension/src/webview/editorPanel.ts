@@ -21,9 +21,9 @@ interface EditorPanelOptions {
   context: vscode.ExtensionContext;
   store: WorkspaceStore;
   onDidMutate: (mutation: {
-    kind: 'template' | 'config' | 'both';
+    kind: 'profile' | 'config' | 'both';
     expectedWatchers?: ReadonlyArray<{
-      kind: 'template' | 'config';
+      kind: 'profile' | 'config';
       file: string;
     }>;
     syncEditor?: boolean;
@@ -107,7 +107,7 @@ export class EditorPanelController {
 
   async syncWithWorkspaceData(
     data?: WorkspaceDataSnapshot,
-    options?: { kind?: 'template' | 'config' | 'both' },
+    options?: { kind?: 'profile' | 'config' | 'both' },
   ): Promise<void> {
     if (this.panel === undefined || this.currentTarget === undefined) {
       return;
@@ -145,8 +145,8 @@ export class EditorPanelController {
         case 'request-initial-data':
           await this.postInitialData(message.requestId);
           return;
-        case 'update-template':
-          await this.applyEntryPatch(message.requestId, 'template', {
+        case 'update-profile':
+          await this.applyEntryPatch(message.requestId, 'profile', {
             file: message.payload.file,
             index: message.payload.index,
             baseRevision: message.payload.baseRevision,
@@ -187,9 +187,9 @@ export class EditorPanelController {
             message.payload.file,
           );
           return;
-        case 'delete-template':
+        case 'delete-profile':
           await this.deleteEntry(message.requestId, {
-            kind: 'template',
+            kind: 'profile',
             file: message.payload.file,
             index: message.payload.index,
           });
@@ -254,7 +254,7 @@ export class EditorPanelController {
     try {
       await this.options.store.renameEntry(target, name);
       this.options.onDidMutate({
-        kind: target.kind === 'template' ? 'both' : 'config',
+        kind: target.kind === 'profile' ? 'both' : 'config',
         expectedWatchers: [{ kind: target.kind, file: target.file }],
         syncEditor: false,
       });
@@ -280,7 +280,7 @@ export class EditorPanelController {
 
   private async applyEntryPatch(
     requestId: string,
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     payload: {
       file: string;
       index: number;
@@ -290,8 +290,8 @@ export class EditorPanelController {
   ): Promise<void> {
     try {
       const result =
-        kind === 'template'
-          ? await this.options.store.patchTemplateEntry(
+        kind === 'profile'
+          ? await this.options.store.patchProfileEntry(
               payload.file,
               payload.index,
               payload.baseRevision,
@@ -372,7 +372,7 @@ export class EditorPanelController {
   }
 
   private shouldPostWorkspaceUpdate(
-    kind: 'template' | 'config' | 'both',
+    kind: 'profile' | 'config' | 'both',
   ): boolean {
     if (kind === 'both' || this.currentTarget === undefined) {
       return false;
@@ -380,12 +380,12 @@ export class EditorPanelController {
 
     return (
       this.currentTarget.kind === kind ||
-      (kind === 'template' && this.currentTarget.kind === 'config')
+      (kind === 'profile' && this.currentTarget.kind === 'config')
     );
   }
 
   private shouldSyncCurrentEditor(
-    kind: 'template' | 'config' | 'both',
+    kind: 'profile' | 'config' | 'both',
   ): boolean {
     if (kind === 'both' || this.currentTarget === undefined) {
       return true;
@@ -393,14 +393,14 @@ export class EditorPanelController {
 
     return (
       this.currentTarget.kind === kind ||
-      (kind === 'template' && this.currentTarget.kind === 'config')
+      (kind === 'profile' && this.currentTarget.kind === 'config')
     );
   }
 
   private async postWorkspaceUpdate(
     requestId: string,
     data: WorkspaceDataSnapshot,
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
   ): Promise<void> {
     if (this.currentTarget === undefined) {
       return;
@@ -408,8 +408,8 @@ export class EditorPanelController {
 
     const payload: WorkspaceUpdatePayload = {
       kind,
-      ...(kind === 'template'
-        ? { templates: data.templates }
+      ...(kind === 'profile'
+        ? { profiles: data.profiles }
         : { configs: data.configs }),
       issues: data.issues.filter((issue) => issue.kind === kind),
       ...(this.currentTarget.kind === kind
@@ -506,9 +506,9 @@ function resolveEntryName(
   data: WorkspaceDataSnapshot,
 ): string | undefined {
   const name =
-    target.kind === 'template'
-      ? data.templates.find((fileData) => fileData.file === target.file)
-          ?.templates[target.index]?.name
+    target.kind === 'profile'
+      ? data.profiles.find((fileData) => fileData.file === target.file)
+          ?.profiles[target.index]?.name
       : data.configs.find((fileData) => fileData.file === target.file)
           ?.configurations[target.index]?.name;
 

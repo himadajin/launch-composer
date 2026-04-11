@@ -21,14 +21,14 @@ test.beforeEach(() => {
   testVscode.__testing.reset();
 });
 
-test('open sets the panel title to the current template name', async () => {
+test('open sets the panel title to the current profile name', async () => {
   const store = {
     async readAll() {
       return {
-        templates: [
+        profiles: [
           {
             file: 'abc.json',
-            templates: [{ name: 'cpp' }],
+            profiles: [{ name: 'cpp' }],
           },
         ],
         configs: [],
@@ -36,7 +36,7 @@ test('open sets the panel title to the current template name', async () => {
       };
     },
     async getDataFileRevision() {
-      return 'rev:title-template';
+      return 'rev:title-profile';
     },
   } as Pick<
     WorkspaceStore,
@@ -55,7 +55,7 @@ test('open sets the panel title to the current template name', async () => {
   });
 
   await controller.open({
-    kind: 'template',
+    kind: 'profile',
     file: 'abc.json',
     index: 0,
   });
@@ -70,7 +70,7 @@ test('syncWithWorkspace closes the editor panel when the current target no longe
   const store = {
     async readAll() {
       return {
-        templates: [],
+        profiles: [],
         configs: [],
         issues: [],
       };
@@ -118,10 +118,10 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
   const store = {
     async readAll() {
       return {
-        templates: [
+        profiles: [
           {
             file: 'abc.json',
-            templates: [{ name: 'cpp' }],
+            profiles: [{ name: 'cpp' }],
           },
         ],
         configs: [],
@@ -151,7 +151,7 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
   });
 
   await controller.open({
-    kind: 'template',
+    kind: 'profile',
     file: 'abc.json',
     index: 0,
   });
@@ -161,11 +161,11 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
   assert.equal(panel.title, 'cpp');
 
   await controller.syncWithWorkspaceData({
-    templates: [],
+    profiles: [],
     configs: [],
     issues: [
       {
-        kind: 'template',
+        kind: 'profile',
         file: 'abc.json',
         code: 'invalid-json',
         message: 'Invalid JSON in abc.json. Open the file and fix the syntax.',
@@ -187,7 +187,7 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
   assert.deepEqual(lastMessage?.payload.issues, [
     {
       file: 'abc.json',
-      kind: 'template',
+      kind: 'profile',
       code: 'invalid-json',
       message: 'Invalid JSON in abc.json. Open the file and fix the syntax.',
     },
@@ -197,7 +197,7 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
 test('openCurrentAsJson opens the active entry when the file is valid', async () => {
   let openedTarget:
     | {
-        kind: 'template' | 'config';
+        kind: 'profile' | 'config';
         file: string;
         index: number;
       }
@@ -205,7 +205,7 @@ test('openCurrentAsJson opens the active entry when the file is valid', async ()
   const store = {
     async readAll() {
       return {
-        templates: [],
+        profiles: [],
         configs: [],
         issues: [],
       };
@@ -253,22 +253,22 @@ test('openCurrentAsJson opens the active entry when the file is valid', async ()
 test('openCurrentAsJson opens the backing file when the active file is invalid', async () => {
   let openedFile:
     | {
-        kind: 'template' | 'config';
+        kind: 'profile' | 'config';
         file: string;
       }
     | undefined;
   const store = {
     async readAll() {
       return {
-        templates: [],
+        profiles: [],
         configs: [],
         issues: [
           {
-            kind: 'template' as const,
-            file: 'template.json',
+            kind: 'profile' as const,
+            file: 'profile.json',
             code: 'invalid-json' as const,
             message:
-              'Invalid JSON in template.json. Open the file and fix the syntax.',
+              'Invalid JSON in profile.json. Open the file and fix the syntax.',
           },
         ],
       };
@@ -299,25 +299,25 @@ test('openCurrentAsJson opens the backing file when the active file is invalid',
   });
 
   await controller.open({
-    kind: 'template',
-    file: 'template.json',
+    kind: 'profile',
+    file: 'profile.json',
     index: 0,
   });
 
   await controller.openCurrentAsJson();
 
   assert.deepEqual(openedFile, {
-    kind: 'template',
-    file: 'template.json',
+    kind: 'profile',
+    file: 'profile.json',
   });
 });
 
 test('rename-entry message calls renameEntry and posts refreshed data', async () => {
-  let templateName = 'cpp';
+  let profileName = 'cpp';
   let renamed:
     | {
         target: {
-          kind: 'template' | 'config';
+          kind: 'profile' | 'config';
           file: string;
           index: number;
         };
@@ -328,10 +328,10 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
   const store = {
     async readAll() {
       return {
-        templates: [
+        profiles: [
           {
-            file: 'template.json',
-            templates: [{ name: templateName }],
+            file: 'profile.json',
+            profiles: [{ name: profileName }],
           },
         ],
         configs: [],
@@ -345,7 +345,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
       return true;
     },
     async renameEntry(target, name) {
-      templateName = name;
+      profileName = name;
       renamed = { target, name };
     },
   } as Pick<
@@ -367,8 +367,8 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
   });
 
   await controller.open({
-    kind: 'template',
-    file: 'template.json',
+    kind: 'profile',
+    file: 'profile.json',
     index: 0,
   });
 
@@ -380,8 +380,8 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
     type: 'rename-entry',
     requestId: 'rename-1',
     payload: {
-      kind: 'template',
-      file: 'template.json',
+      kind: 'profile',
+      file: 'profile.json',
       index: 0,
       name: 'cpp-renamed',
     },
@@ -389,8 +389,8 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
 
   assert.deepEqual(renamed, {
     target: {
-      kind: 'template',
-      file: 'template.json',
+      kind: 'profile',
+      file: 'profile.json',
       index: 0,
     },
     name: 'cpp-renamed',
@@ -404,17 +404,17 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
     type: 'initial-data',
     requestId: 'local',
     payload: {
-      templates: [
+      profiles: [
         {
-          file: 'template.json',
-          templates: [{ name: 'cpp-renamed' }],
+          file: 'profile.json',
+          profiles: [{ name: 'cpp-renamed' }],
         },
       ],
       configs: [],
       issues: [],
       editor: {
-        kind: 'template',
-        file: 'template.json',
+        kind: 'profile',
+        file: 'profile.json',
         index: 0,
       },
       editorRevision: 'rev:4',
@@ -432,11 +432,11 @@ test('rename-entry message returns an error when renameEntry fails', async () =>
   const store = {
     async readAll() {
       return {
-        templates: [],
+        profiles: [],
         configs: [
           {
             file: 'config.json',
-            configurations: [{ name: 'Launch' }],
+            configurations: [{ name: 'Launch', profile: 'cpp' }],
           },
         ],
         issues: [],
@@ -503,9 +503,9 @@ test('rename-entry message returns an error when renameEntry fails', async () =>
 test('update-config message refreshes only config views through onDidMutate', async () => {
   let mutation:
     | {
-        kind: 'template' | 'config' | 'both';
+        kind: 'profile' | 'config' | 'both';
         expectedWatchers?: ReadonlyArray<{
-          kind: 'template' | 'config';
+          kind: 'profile' | 'config';
           file: string;
         }>;
         syncEditor?: boolean;
@@ -514,11 +514,11 @@ test('update-config message refreshes only config views through onDidMutate', as
   const store = {
     async readAll() {
       return {
-        templates: [],
+        profiles: [],
         configs: [
           {
             file: 'config.json',
-            configurations: [{ name: 'Launch', enabled: true }],
+            configurations: [{ name: 'Launch', enabled: true, profile: 'cpp' }],
           },
         ],
         issues: [],
@@ -600,11 +600,11 @@ test('syncWithWorkspaceData refreshes the panel title when the current config na
   const store = {
     async readAll() {
       return {
-        templates: [],
+        profiles: [],
         configs: [
           {
             file: 'config.json',
-            configurations: [{ name: 'Launch' }],
+            configurations: [{ name: 'Launch', profile: 'cpp' }],
           },
         ],
         issues: [],
@@ -643,11 +643,11 @@ test('syncWithWorkspaceData refreshes the panel title when the current config na
   assert.equal(panel.title, 'Launch');
 
   await controller.syncWithWorkspaceData({
-    templates: [],
+    profiles: [],
     configs: [
       {
         file: 'config.json',
-        configurations: [{ name: 'Launch Server' }],
+        configurations: [{ name: 'Launch Server', profile: 'cpp' }],
       },
     ],
     issues: [],
@@ -660,11 +660,13 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
   const store = {
     async readAll() {
       return {
-        templates: [],
+        profiles: [],
         configs: [
           {
             file: 'config.json',
-            configurations: [{ name: 'Launch Server', enabled: false }],
+            configurations: [
+              { name: 'Launch Server', enabled: false, profile: 'cpp' },
+            ],
           },
         ],
         issues: [],
@@ -703,11 +705,13 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
 
   await controller.syncWithWorkspaceData(
     {
-      templates: [],
+      profiles: [],
       configs: [
         {
           file: 'config.json',
-          configurations: [{ name: 'Launch Server', enabled: false }],
+          configurations: [
+            { name: 'Launch Server', enabled: false, profile: 'cpp' },
+          ],
         },
       ],
       issues: [
@@ -731,7 +735,9 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
       configs: [
         {
           file: 'config.json',
-          configurations: [{ name: 'Launch Server', enabled: false }],
+          configurations: [
+            { name: 'Launch Server', enabled: false, profile: 'cpp' },
+          ],
         },
       ],
       issues: [
@@ -748,27 +754,27 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
   });
 });
 
-test('syncWithWorkspaceData sends template workspace updates to an open config editor', async () => {
+test('syncWithWorkspaceData sends profile workspace updates to an open config editor', async () => {
   const store = {
     async readAll() {
       return {
-        templates: [
+        profiles: [
           {
-            file: 'template.json',
-            templates: [{ name: 'node' }],
+            file: 'profile.json',
+            profiles: [{ name: 'node' }],
           },
         ],
         configs: [
           {
             file: 'config.json',
-            configurations: [{ name: 'Launch', extends: 'node' }],
+            configurations: [{ name: 'Launch', profile: 'node' }],
           },
         ],
         issues: [],
       };
     },
     async getDataFileRevision() {
-      return 'rev:template-update';
+      return 'rev:profile-update';
     },
     async hasEntry() {
       return true;
@@ -800,32 +806,32 @@ test('syncWithWorkspaceData sends template workspace updates to an open config e
 
   await controller.syncWithWorkspaceData(
     {
-      templates: [
+      profiles: [
         {
-          file: 'template.json',
-          templates: [{ name: 'node-18' }],
+          file: 'profile.json',
+          profiles: [{ name: 'node-18' }],
         },
       ],
       configs: [
         {
           file: 'config.json',
-          configurations: [{ name: 'Launch', extends: 'node-18' }],
+          configurations: [{ name: 'Launch', profile: 'node-18' }],
         },
       ],
       issues: [],
     },
-    { kind: 'template' },
+    { kind: 'profile' },
   );
 
   assert.deepEqual(panel.postedMessages.at(-1), {
     type: 'workspace-update',
     requestId: 'local',
     payload: {
-      kind: 'template',
-      templates: [
+      kind: 'profile',
+      profiles: [
         {
-          file: 'template.json',
-          templates: [{ name: 'node-18' }],
+          file: 'profile.json',
+          profiles: [{ name: 'node-18' }],
         },
       ],
       issues: [],
@@ -833,20 +839,22 @@ test('syncWithWorkspaceData sends template workspace updates to an open config e
   });
 });
 
-test('syncWithWorkspaceData skips config-only editor updates when a template editor is open', async () => {
+test('syncWithWorkspaceData skips config-only editor updates when a profile editor is open', async () => {
   const store = {
     async readAll() {
       return {
-        templates: [
+        profiles: [
           {
-            file: 'template.json',
-            templates: [{ name: 'cpp' }],
+            file: 'profile.json',
+            profiles: [{ name: 'cpp' }],
           },
         ],
         configs: [
           {
             file: 'config.json',
-            configurations: [{ name: 'Launch', enabled: false }],
+            configurations: [
+              { name: 'Launch', enabled: false, profile: 'cpp' },
+            ],
           },
         ],
         issues: [],
@@ -875,8 +883,8 @@ test('syncWithWorkspaceData skips config-only editor updates when a template edi
   });
 
   await controller.open({
-    kind: 'template',
-    file: 'template.json',
+    kind: 'profile',
+    file: 'profile.json',
     index: 0,
   });
 
@@ -886,16 +894,16 @@ test('syncWithWorkspaceData skips config-only editor updates when a template edi
 
   await controller.syncWithWorkspaceData(
     {
-      templates: [
+      profiles: [
         {
-          file: 'template.json',
-          templates: [{ name: 'cpp' }],
+          file: 'profile.json',
+          profiles: [{ name: 'cpp' }],
         },
       ],
       configs: [
         {
           file: 'config.json',
-          configurations: [{ name: 'Launch', enabled: false }],
+          configurations: [{ name: 'Launch', enabled: false, profile: 'cpp' }],
         },
       ],
       issues: [],

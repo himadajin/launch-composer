@@ -3,12 +3,12 @@ import test from 'node:test';
 
 import {
   updateConfigArgsFile,
-  updateConfigExtends,
-  updateTemplateProgram,
+  updateConfigProfile,
+  updateProfileProgram,
 } from '../src/components/entryChanges.js';
 
-test('updateTemplateProgram emits a leaf configuration patch', () => {
-  const change = updateTemplateProgram(
+test('updateProfileProgram emits a leaf configuration patch', () => {
+  const change = updateProfileProgram(
     {
       name: 'node',
       configuration: {
@@ -37,8 +37,8 @@ test('updateTemplateProgram emits a leaf configuration patch', () => {
   ]);
 });
 
-test('updateTemplateProgram skips patches when the value is unchanged', () => {
-  const change = updateTemplateProgram(
+test('updateProfileProgram skips patches when the value is unchanged', () => {
+  const change = updateProfileProgram(
     {
       name: 'node',
       configuration: {
@@ -53,24 +53,23 @@ test('updateTemplateProgram skips patches when the value is unchanged', () => {
   assert.deepEqual(change.patches, []);
 });
 
-test('updateConfigExtends emits explicit path patches when enabling inheritance', () => {
-  const change = updateConfigExtends(
+test('updateConfigProfile emits a direct profile patch', () => {
+  const change = updateConfigProfile(
     {
       name: 'Launch',
       enabled: true,
+      profile: 'old-profile',
       configuration: {
-        type: 'node',
-        request: 'launch',
         cwd: '${workspaceFolder}',
       },
     },
-    'base-template',
+    'base-profile',
   );
 
   assert.deepEqual(change.data, {
     name: 'Launch',
     enabled: true,
-    extends: 'base-template',
+    profile: 'base-profile',
     configuration: {
       cwd: '${workspaceFolder}',
     },
@@ -78,16 +77,8 @@ test('updateConfigExtends emits explicit path patches when enabling inheritance'
   assert.deepEqual(change.patches, [
     {
       type: 'set',
-      path: ['extends'],
-      value: 'base-template',
-    },
-    {
-      type: 'delete',
-      path: ['configuration', 'type'],
-    },
-    {
-      type: 'delete',
-      path: ['configuration', 'request'],
+      path: ['profile'],
+      value: 'base-profile',
     },
   ]);
   assert.equal(
@@ -96,42 +87,26 @@ test('updateConfigExtends emits explicit path patches when enabling inheritance'
   );
 });
 
-test('updateConfigExtends restores standalone launch fields with explicit patches', () => {
-  const change = updateConfigExtends(
+test('updateConfigProfile omits patches when the selected profile is unchanged', () => {
+  const change = updateConfigProfile(
     {
       name: 'Launch',
-      extends: 'base-template',
+      profile: 'base-profile',
       configuration: {
         cwd: '${workspaceFolder}',
       },
     },
-    undefined,
+    'base-profile',
   );
 
   assert.deepEqual(change.data, {
     name: 'Launch',
+    profile: 'base-profile',
     configuration: {
       cwd: '${workspaceFolder}',
-      type: '',
-      request: 'launch',
     },
   });
-  assert.deepEqual(change.patches, [
-    {
-      type: 'delete',
-      path: ['extends'],
-    },
-    {
-      type: 'set',
-      path: ['configuration', 'type'],
-      value: '',
-    },
-    {
-      type: 'set',
-      path: ['configuration', 'request'],
-      value: 'launch',
-    },
-  ]);
+  assert.deepEqual(change.patches, []);
 });
 
 test('updateConfigArgsFile omits patches when clearing an already-empty value', () => {
@@ -139,6 +114,7 @@ test('updateConfigArgsFile omits patches when clearing an already-empty value', 
     {
       name: 'Launch',
       enabled: true,
+      profile: 'cpp',
     },
     '   ',
   );
@@ -146,6 +122,7 @@ test('updateConfigArgsFile omits patches when clearing an already-empty value', 
   assert.deepEqual(change.data, {
     name: 'Launch',
     enabled: true,
+    profile: 'cpp',
   });
   assert.deepEqual(change.patches, []);
 });

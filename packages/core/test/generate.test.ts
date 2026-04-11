@@ -26,15 +26,15 @@ test('buildLaunchArgs follows the specified precedence rules', () => {
   ]);
 });
 
-test('generate shallow-merges template and config for enabled entries only', async () => {
+test('generate shallow-merges profile and config for enabled entries only', async () => {
   const result = await generate({
-    templates: [
+    profiles: [
       {
         file: 'cpp.json',
-        templates: [
+        profiles: [
           {
             name: 'cpp',
-            args: ['--template'],
+            args: ['--profile'],
             configuration: {
               type: 'cppdbg',
               request: 'launch',
@@ -53,7 +53,7 @@ test('generate shallow-merges template and config for enabled entries only', asy
           {
             name: 'Basic Test',
             enabled: true,
-            extends: 'cpp',
+            profile: 'cpp',
             args: ['--config'],
             configuration: {
               env: { DEBUG: '1' },
@@ -63,7 +63,7 @@ test('generate shallow-merges template and config for enabled entries only', asy
           {
             name: 'Disabled',
             enabled: false,
-            extends: 'cpp',
+            profile: 'cpp',
           },
         ],
       },
@@ -85,7 +85,7 @@ test('generate shallow-merges template and config for enabled entries only', asy
         program: '${workspaceFolder}/build/myapp',
         env: { DEBUG: '1' },
         cwd: '${workspaceFolder}/test',
-        args: ['--template', '--config'],
+        args: ['--profile', '--config'],
       },
     ],
   });
@@ -93,7 +93,21 @@ test('generate shallow-merges template and config for enabled entries only', asy
 
 test('generate resolves argsFile via workspaceFolder and appends config args', async () => {
   const result = await generate({
-    templates: [],
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [
+          {
+            name: 'cpp',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+              program: '/tmp/bin/app',
+            },
+          },
+        ],
+      },
+    ],
     configs: [
       {
         file: 'configs.json',
@@ -102,13 +116,9 @@ test('generate resolves argsFile via workspaceFolder and appends config args', a
           {
             name: 'Replay',
             enabled: true,
+            profile: 'cpp',
             argsFile: '${workspaceFolder}/tmp/args.json',
             args: ['--debug'],
-            configuration: {
-              type: 'cppdbg',
-              request: 'launch',
-              program: '/tmp/bin/app',
-            },
           },
         ],
       },
@@ -142,10 +152,10 @@ test('generate resolves argsFile via workspaceFolder and appends config args', a
 
 test('validateGenerateInput reports spec violations together', async () => {
   const errors = await validateGenerateInput({
-    templates: [
+    profiles: [
       {
         file: 'cpp.json',
-        templates: [
+        profiles: [
           {
             name: 'cpp',
             configuration: {
@@ -173,7 +183,7 @@ test('validateGenerateInput reports spec violations together', async () => {
           {
             name: 'cpp',
             enabled: true,
-            extends: 'missing',
+            profile: 'missing',
             argsFile: 'relative/path.json',
             configuration: {
               program: '/override',
@@ -187,11 +197,11 @@ test('validateGenerateInput reports spec violations together', async () => {
   assert.equal(errors.length, 4);
   assert.match(
     errors.map((error) => error.message).join('\n'),
-    /Name "cpp" is used by multiple templates\/configs/,
+    /Name "cpp" is used by multiple profiles\/configs/,
   );
   assert.match(
     errors.map((error) => error.message).join('\n'),
-    /unknown template/,
+    /unknown profile/,
   );
   assert.match(
     errors.map((error) => error.message).join('\n'),
@@ -199,12 +209,12 @@ test('validateGenerateInput reports spec violations together', async () => {
   );
 });
 
-test('generate fails when a template request is not launch or attach', async () => {
+test('generate fails when a profile request is not launch or attach', async () => {
   const result = await generate({
-    templates: [
+    profiles: [
       {
-        file: 'template.json',
-        templates: [
+        file: 'profile.json',
+        profiles: [
           {
             name: 'cpp',
             configuration: {
@@ -225,13 +235,13 @@ test('generate fails when a template request is not launch or attach', async () 
 
   assert.match(
     result.errors[0]?.message ?? '',
-    /Template request must be one of/,
+    /Profile request must be one of/,
   );
 });
 
-test('generate fails when a standalone config request is not launch or attach', async () => {
+test('generate fails when config.profile is missing', async () => {
   const result = await generate({
-    templates: [],
+    profiles: [],
     configs: [
       {
         file: 'config.json',
@@ -240,10 +250,7 @@ test('generate fails when a standalone config request is not launch or attach', 
           {
             name: 'Draft',
             enabled: true,
-            configuration: {
-              type: 'cppdbg',
-              request: 'start',
-            },
+            profile: '',
           },
         ],
       },
@@ -255,21 +262,18 @@ test('generate fails when a standalone config request is not launch or attach', 
     throw new Error('Expected failure');
   }
 
-  assert.match(
-    result.errors[0]?.message ?? '',
-    /Config request must be one of/,
-  );
+  assert.match(result.errors[0]?.message ?? '', /Config profile is required/);
 });
 
-test('generate fails when template args and config argsFile are combined', async () => {
+test('generate fails when profile args and config argsFile are combined', async () => {
   const result = await generate({
-    templates: [
+    profiles: [
       {
-        file: 'template.json',
-        templates: [
+        file: 'profile.json',
+        profiles: [
           {
             name: 'cpp',
-            args: ['--template'],
+            args: ['--profile'],
             configuration: {
               type: 'cppdbg',
               request: 'launch',
@@ -287,7 +291,7 @@ test('generate fails when template args and config argsFile are combined', async
           {
             name: 'Test',
             enabled: true,
-            extends: 'cpp',
+            profile: 'cpp',
             argsFile: '/tmp/args.json',
           },
         ],
@@ -308,7 +312,20 @@ test('generate fails when template args and config argsFile are combined', async
 
 test('generate excludes all configs when the config file is disabled', async () => {
   const result = await generate({
-    templates: [],
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [
+          {
+            name: 'cpp',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+            },
+          },
+        ],
+      },
+    ],
     configs: [
       {
         file: 'config.json',
@@ -317,10 +334,7 @@ test('generate excludes all configs when the config file is disabled', async () 
           {
             name: 'Draft',
             enabled: true,
-            configuration: {
-              type: 'cppdbg',
-              request: 'launch',
-            },
+            profile: 'cpp',
           },
         ],
       },
@@ -337,17 +351,27 @@ test('generate excludes all configs when the config file is disabled', async () 
 
 test('generate treats omitted enabled values as enabled', async () => {
   const result = await generate({
-    templates: [],
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [
+          {
+            name: 'cpp',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+            },
+          },
+        ],
+      },
+    ],
     configs: [
       {
         file: 'config.json',
         configurations: [
           {
             name: 'Default Enabled',
-            configuration: {
-              type: 'cppdbg',
-              request: 'launch',
-            },
+            profile: 'cpp',
           },
         ],
       },
@@ -387,7 +411,7 @@ test('resolveArgsFilePath supports Unix and Windows absolute paths', () => {
 
 test('validateGenerateInput rejects legacy config array files', async () => {
   const errors = await validateGenerateInput({
-    templates: [],
+    profiles: [],
     configs: [
       {
         file: 'legacy.json',

@@ -11,13 +11,13 @@ import {
 
 import { ConfigEditor } from './components/ConfigEditor.js';
 import type { EntryChange } from './components/entryChanges.js';
-import { TemplateEditor } from './components/TemplateEditor.js';
+import { ProfileEditor } from './components/ProfileEditor.js';
 import type {
   ConfigData,
   EntryPatchOperation,
   HostMessage,
   InitialDataPayload,
-  TemplateData,
+  ProfileData,
   WorkspaceUpdatePayload,
 } from './types.js';
 import { RpcClient } from './utils/rpc.js';
@@ -49,7 +49,7 @@ export function App() {
 
   const renameEntry = useCallback(
     async (
-      kind: 'template' | 'config',
+      kind: 'profile' | 'config',
       file: string,
       index: number,
       name: string,
@@ -76,7 +76,7 @@ export function App() {
 
   const enqueueUpdate = useCallback(
     (
-      kind: 'template' | 'config',
+      kind: 'profile' | 'config',
       file: string,
       index: number,
       patches: EntryPatchOperation[],
@@ -89,9 +89,9 @@ export function App() {
         .then(async () => {
           const baseRevision = revisionRef.current;
           const result = await rpc.sendRequest(
-            kind === 'template'
+            kind === 'profile'
               ? {
-                  type: 'update-template',
+                  type: 'update-profile',
                   payload: {
                     file,
                     index,
@@ -185,9 +185,9 @@ export function App() {
     }
   }, [payload]);
 
-  const templateCatalog = useMemo(
-    () => payload?.templates.flatMap((fileData) => fileData.templates) ?? [],
-    [payload?.templates],
+  const profileCatalog = useMemo(
+    () => payload?.profiles.flatMap((fileData) => fileData.profiles) ?? [],
+    [payload?.profiles],
   );
 
   if (payload === null) {
@@ -201,10 +201,10 @@ export function App() {
   }
 
   const current =
-    payload.editor.kind === 'template'
-      ? payload.templates.find(
+    payload.editor.kind === 'profile'
+      ? payload.profiles.find(
           (fileData) => fileData.file === payload.editor.file,
-        )?.templates[payload.editor.index]
+        )?.profiles[payload.editor.index]
       : payload.configs.find(
           (fileData) => fileData.file === payload.editor.file,
         )?.configurations[payload.editor.index];
@@ -232,7 +232,7 @@ export function App() {
 
   const sourceFile = payload.editor.file;
   const editorEyebrow =
-    payload.editor.kind === 'template' ? 'Template' : 'Config';
+    payload.editor.kind === 'profile' ? 'Profile' : 'Config';
   const editorHeading = current === undefined ? sourceFile : current.name;
   const openFileJson = () => {
     rpc.post({
@@ -256,11 +256,11 @@ export function App() {
             <p className="composer-editor-meta">{sourceFile}</p>
           </div>
         </header>
-        {payload.editor.kind === 'template' ? (
-          <TemplateEditor
+        {payload.editor.kind === 'profile' ? (
+          <ProfileEditor
             data={
-              (current as TemplateData | undefined) ??
-              createPlaceholderTemplate(payload.editor.file)
+              (current as ProfileData | undefined) ??
+              createPlaceholderProfile(payload.editor.file)
             }
             sourceFile={payload.editor.file}
             autoSaveDelay={payload.autoSaveDelay}
@@ -272,10 +272,10 @@ export function App() {
             onChange={({
               data: nextData,
               patches,
-            }: EntryChange<TemplateData>) => {
+            }: EntryChange<ProfileData>) => {
               updatePayload(payload, setPayload, payload.editor, nextData);
               enqueueUpdate(
-                'template',
+                'profile',
                 payload.editor.file,
                 payload.editor.index,
                 patches,
@@ -283,7 +283,7 @@ export function App() {
             }}
             onRename={async (name) => {
               await renameEntry(
-                'template',
+                'profile',
                 payload.editor.file,
                 payload.editor.index,
                 name,
@@ -299,7 +299,7 @@ export function App() {
             }
             sourceFile={payload.editor.file}
             fileEnabled={currentConfigFile?.enabled !== false}
-            templates={templateCatalog}
+            profiles={profileCatalog}
             autoSaveDelay={payload.autoSaveDelay}
             {...(currentIssue === undefined
               ? {}
@@ -342,21 +342,21 @@ function updatePayload(
   payload: InitialDataPayload,
   setPayload: Dispatch<SetStateAction<InitialDataPayload | null>>,
   editor: InitialDataPayload['editor'],
-  nextData: TemplateData | ConfigData,
+  nextData: ProfileData | ConfigData,
 ) {
   const nextPayload: InitialDataPayload =
-    editor.kind === 'template'
+    editor.kind === 'profile'
       ? {
           ...payload,
-          templates: payload.templates.map((fileData) =>
+          profiles: payload.profiles.map((fileData) =>
             fileData.file !== editor.file
               ? fileData
               : {
                   ...fileData,
-                  templates: fileData.templates.map((template, index) =>
+                  profiles: fileData.profiles.map((profile, index) =>
                     index === editor.index
-                      ? (nextData as TemplateData)
-                      : template,
+                      ? (nextData as ProfileData)
+                      : profile,
                   ),
                 },
           ),
@@ -400,7 +400,7 @@ function mergeWorkspaceUpdate(
 
   return {
     ...currentPayload,
-    ...(update.templates === undefined ? {} : { templates: update.templates }),
+    ...(update.profiles === undefined ? {} : { profiles: update.profiles }),
     ...(update.configs === undefined ? {} : { configs: update.configs }),
     issues: nextIssues,
     ...(update.editorRevision === undefined
@@ -439,7 +439,7 @@ function isRenameResult(value: unknown): value is {
   );
 }
 
-function createPlaceholderTemplate(file: string): TemplateData {
+function createPlaceholderProfile(file: string): ProfileData {
   return {
     name: file,
     configuration: { type: '', request: 'launch' },
@@ -450,9 +450,6 @@ function createPlaceholderConfig(file: string): ConfigData {
   return {
     name: file,
     enabled: true,
-    configuration: {
-      type: '',
-      request: 'launch',
-    },
+    profile: '',
   };
 }

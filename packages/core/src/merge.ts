@@ -1,17 +1,17 @@
-import type { ConfigData, LaunchConfig, TemplateData } from './types.js';
+import type { ConfigData, LaunchConfig, ProfileData } from './types.js';
 
 export function buildLaunchConfig(
   config: ConfigData,
-  template?: TemplateData,
+  profile: ProfileData,
   argsFileArgs?: string[],
 ): LaunchConfig {
   const merged: LaunchConfig = {
-    ...(template?.configuration ?? {}),
+    ...(profile.configuration ?? {}),
     ...(config.configuration ?? {}),
     name: config.name,
   };
 
-  const args = buildLaunchArgs(template?.args, argsFileArgs, config.args);
+  const args = buildLaunchArgs(profile.args, argsFileArgs, config.args);
   if (args !== undefined) {
     merged.args = args;
   }
@@ -23,22 +23,22 @@ export function buildLaunchConfig(
 }
 
 export function buildLaunchArgs(
-  templateArgs?: string[],
+  profileArgs?: string[],
   argsFileArgs?: string[],
   configArgs?: string[],
 ): string[] | undefined {
-  if (templateArgs !== undefined && argsFileArgs !== undefined) {
-    throw new Error('template.args and argsFile cannot be used together.');
+  if (profileArgs !== undefined && argsFileArgs !== undefined) {
+    throw new Error('profile.args and argsFile cannot be used together.');
   }
 
-  if (templateArgs === undefined && argsFileArgs === undefined) {
+  if (profileArgs === undefined && argsFileArgs === undefined) {
     return configArgs;
   }
 
-  if (templateArgs !== undefined) {
+  if (profileArgs !== undefined) {
     return configArgs === undefined
-      ? [...templateArgs]
-      : [...templateArgs, ...configArgs];
+      ? [...profileArgs]
+      : [...profileArgs, ...configArgs];
   }
 
   return configArgs === undefined

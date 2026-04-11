@@ -70,8 +70,8 @@ test('package.json command contributions stay aligned with the extension impleme
       name: 'CONFIGS',
     },
     {
-      id: 'launchComposer.templates',
-      name: 'TEMPLATES',
+      id: 'launchComposer.profiles',
+      name: 'PROFILES',
     },
   ]);
   assert.equal(packageJson.contributes.views.explorer, undefined);
@@ -108,7 +108,7 @@ test('package.json command contributions stay aligned with the extension impleme
   const inlineMenu = itemContextMenu.filter((item) => item.group === 'inline');
   assert.deepEqual(inlineMenu.map((item) => item.command).sort(), [
     'launch-composer.addConfigEntry',
-    'launch-composer.addTemplateEntry',
+    'launch-composer.addProfileEntry',
     'launch-composer.openItemJson',
   ]);
 

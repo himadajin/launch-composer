@@ -1,11 +1,11 @@
-export interface TemplateEntry {
+export interface ProfileEntry {
   [key: string]: unknown;
 }
 
-export interface TemplateData {
+export interface ProfileData {
   name: string;
   args?: string[];
-  configuration?: TemplateEntry;
+  configuration?: ProfileEntry;
 }
 
 export interface ConfigEntry {
@@ -15,15 +15,15 @@ export interface ConfigEntry {
 export interface ConfigData {
   name: string;
   enabled?: boolean;
-  extends?: string;
+  profile: string;
   argsFile?: string;
   args?: string[];
   configuration?: ConfigEntry;
 }
 
-export interface TemplateFileData {
+export interface ProfileFileData {
   file: string;
-  templates: TemplateData[];
+  profiles: ProfileData[];
 }
 
 export interface ConfigFileData {
@@ -67,7 +67,7 @@ export type ArgsFileReader = (
 ) => MaybePromise<ArgsFileLoadResult>;
 
 export interface GenerateInput {
-  templates: TemplateFileData[];
+  profiles: ProfileFileData[];
   configs: ConfigFileData[];
   variables?: Record<string, string>;
   readArgsFile?: ArgsFileReader;
@@ -85,10 +85,10 @@ export interface GenerateFailure {
 
 export type GenerateResult = GenerateSuccess | GenerateFailure;
 
-export interface TemplateRef {
+export interface ProfileRef {
   file: string;
   index: number;
-  data: TemplateData;
+  data: ProfileData;
 }
 
 export interface ConfigRef {
@@ -99,8 +99,8 @@ export interface ConfigRef {
 
 export interface ValidationState {
   errors: ValidationError[];
-  templateRefs: TemplateRef[];
+  profileRefs: ProfileRef[];
   configRefs: ConfigRef[];
-  templateMap: Map<string, TemplateRef>;
+  profileMap: Map<string, ProfileRef>;
   argsFileCache: Map<string, ArgsFileData>;
 }

@@ -16,13 +16,10 @@ import {
 } from './treeview/provider.js';
 import { EditorPanelController } from './webview/editorPanel.js';
 
-const NO_TEMPLATE_LABEL = 'No template';
-
-type TemplateSelectionItem =
-  | { label: string; value: string }
-  | { label: string; value?: undefined; description?: string }
-  | { kind: vscode.QuickPickItemKind.Separator; label: string };
-type SnapshotKind = 'template' | 'config' | 'both';
+type ProfileSelectionItem =
+  | { label: string; value: string; description?: string }
+  | vscode.QuickPickItem;
+type SnapshotKind = 'profile' | 'config' | 'both';
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = getWorkspaceRoot();
@@ -36,13 +33,13 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   const store = new WorkspaceStore(workspaceRoot.uri);
-  const templateProvider = new LaunchComposerTreeProvider('template', store);
+  const profileProvider = new LaunchComposerTreeProvider('profile', store);
   const configProvider = new LaunchComposerTreeProvider('config', store);
 
-  const templateView = vscode.window.createTreeView<TreeNode>(
-    'launchComposer.templates',
+  const profileView = vscode.window.createTreeView<TreeNode>(
+    'launchComposer.profiles',
     {
-      treeDataProvider: templateProvider,
+      treeDataProvider: profileProvider,
       showCollapseAll: false,
     },
   );
@@ -58,15 +55,15 @@ export function activate(context: vscode.ExtensionContext): void {
   const activeIssues = new Map<string, string>();
   const pendingWatcherEvents = new Map<string, number>();
   const snapshotCache: {
-    templates?: WorkspaceDataSnapshot['templates'];
+    profiles?: WorkspaceDataSnapshot['profiles'];
     configs?: WorkspaceDataSnapshot['configs'];
-    templateIssues?: ComposerDataIssue[];
+    profileIssues?: ComposerDataIssue[];
     configIssues?: ComposerDataIssue[];
   } = {};
   let syncQueue = Promise.resolve();
 
   const queueWatcherEvent = (
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): void => {
     const key = `${kind}:${file}`;
@@ -74,7 +71,7 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const shouldIgnoreWatcherEvent = (
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     uri: vscode.Uri,
   ): boolean => {
     const key = `${kind}:${path.basename(uri.fsPath)}`;
@@ -96,8 +93,8 @@ export function activate(context: vscode.ExtensionContext): void {
     snapshot: WorkspaceDataSnapshot,
     kind: SnapshotKind = 'both',
   ): void => {
-    if (kind === 'both' || kind === 'template') {
-      templateProvider.refresh(snapshot);
+    if (kind === 'both' || kind === 'profile') {
+      profileProvider.refresh(snapshot);
     }
     if (kind === 'both' || kind === 'config') {
       configProvider.refresh(snapshot);
@@ -128,10 +125,10 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   const cacheSnapshot = (snapshot: WorkspaceDataSnapshot): void => {
-    snapshotCache.templates = snapshot.templates;
+    snapshotCache.profiles = snapshot.profiles;
     snapshotCache.configs = snapshot.configs;
-    snapshotCache.templateIssues = snapshot.issues.filter(
-      (issue) => issue.kind === 'template',
+    snapshotCache.profileIssues = snapshot.issues.filter(
+      (issue) => issue.kind === 'profile',
     );
     snapshotCache.configIssues = snapshot.issues.filter(
       (issue) => issue.kind === 'config',
@@ -140,18 +137,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const getCachedSnapshot = (): WorkspaceDataSnapshot | undefined => {
     if (
-      snapshotCache.templates === undefined ||
+      snapshotCache.profiles === undefined ||
       snapshotCache.configs === undefined ||
-      snapshotCache.templateIssues === undefined ||
+      snapshotCache.profileIssues === undefined ||
       snapshotCache.configIssues === undefined
     ) {
       return undefined;
     }
 
     return {
-      templates: snapshotCache.templates,
+      profiles: snapshotCache.profiles,
       configs: snapshotCache.configs,
-      issues: [...snapshotCache.templateIssues, ...snapshotCache.configIssues],
+      issues: [...snapshotCache.profileIssues, ...snapshotCache.configIssues],
     };
   };
 
@@ -165,10 +162,10 @@ export function activate(context: vscode.ExtensionContext): void {
       return snapshot;
     }
 
-    if (kind === 'template') {
-      const templateData = await store.readTemplatesWithIssues();
-      snapshotCache.templates = templateData.templates;
-      snapshotCache.templateIssues = templateData.issues;
+    if (kind === 'profile') {
+      const profileData = await store.readProfilesWithIssues();
+      snapshotCache.profiles = profileData.profiles;
+      snapshotCache.profileIssues = profileData.issues;
     } else {
       const configData = await store.readConfigsWithIssues();
       snapshotCache.configs = configData.configs;
@@ -202,7 +199,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const refreshViews = (options?: {
     kind?: SnapshotKind;
     expectedWatchers?: ReadonlyArray<{
-      kind: 'template' | 'config';
+      kind: 'profile' | 'config';
       file: string;
     }>;
     syncEditor?: boolean;
@@ -269,7 +266,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const revealTarget = async (target: EditorTarget): Promise<void> => {
     await Promise.all([
-      templateProvider.reveal(templateView, target),
+      profileProvider.reveal(profileView, target),
       configProvider.reveal(configView, target),
     ]);
   };
@@ -308,13 +305,13 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   };
 
-  const handleAddTemplate = async (): Promise<void> => {
-    const file = await selectOrCreateFile(store, 'template');
+  const handleAddProfile = async (): Promise<void> => {
+    const file = await selectOrCreateFile(store, 'profile');
     if (file === undefined) {
       return;
     }
 
-    await addTemplateEntry(store, file, editorPanel, syncUiWithWorkspace);
+    await addProfileEntry(store, file, editorPanel, syncUiWithWorkspace);
   };
 
   const editorPanel = new EditorPanelController({
@@ -325,30 +322,30 @@ export function activate(context: vscode.ExtensionContext): void {
     onDidGenerate: handleGenerate,
   });
 
-  const templateWatcher = vscode.workspace.createFileSystemWatcher(
-    store.getRelativeTemplatePattern(),
+  const profileWatcher = vscode.workspace.createFileSystemWatcher(
+    store.getRelativeProfilePattern(),
   );
-  templateWatcher.onDidCreate((uri) => {
-    if (shouldIgnoreWatcherEvent('template', uri)) {
+  profileWatcher.onDidCreate((uri) => {
+    if (shouldIgnoreWatcherEvent('profile', uri)) {
       return;
     }
-    void syncUiWithWorkspace({ notifyIssues: false, kind: 'template' }).catch(
+    void syncUiWithWorkspace({ notifyIssues: false, kind: 'profile' }).catch(
       showError,
     );
   });
-  templateWatcher.onDidChange((uri) => {
-    if (shouldIgnoreWatcherEvent('template', uri)) {
+  profileWatcher.onDidChange((uri) => {
+    if (shouldIgnoreWatcherEvent('profile', uri)) {
       return;
     }
-    void syncUiWithWorkspace({ notifyIssues: true, kind: 'template' }).catch(
+    void syncUiWithWorkspace({ notifyIssues: true, kind: 'profile' }).catch(
       showError,
     );
   });
-  templateWatcher.onDidDelete((uri) => {
-    if (shouldIgnoreWatcherEvent('template', uri)) {
+  profileWatcher.onDidDelete((uri) => {
+    if (shouldIgnoreWatcherEvent('profile', uri)) {
       return;
     }
-    void syncUiWithWorkspace({ kind: 'template' }).catch(showError);
+    void syncUiWithWorkspace({ kind: 'profile' }).catch(showError);
   });
 
   const configWatcher = vscode.workspace.createFileSystemWatcher(
@@ -382,9 +379,9 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    templateView,
+    profileView,
     configView,
-    templateWatcher,
+    profileWatcher,
     configWatcher,
     checkboxSubscription,
     registerCommand(COMMANDS.generate, async () => {
@@ -401,93 +398,93 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.addTemplate, async () => {
+    registerCommand(COMMANDS.addProfile, async () => {
       try {
-        await handleAddTemplate();
+        await handleAddProfile();
       } catch (error) {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.addTemplateFile, async () => {
+    registerCommand(COMMANDS.addProfileFile, async () => {
       try {
-        const file = await promptForFileName('Template file name');
+        const file = await promptForFileName('Profile file name');
         if (file === undefined) {
           return;
         }
 
-        const created = await store.createDataFile('template', file);
+        const created = await store.createDataFile('profile', file);
         await syncUiWithWorkspace();
         void vscode.window.showInformationMessage(`Created ${created}.`);
       } catch (error) {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.openTemplateFileJson, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'template');
+    registerCommand(COMMANDS.openProfileFileJson, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'profile');
       if (fileNode === undefined) {
         return;
       }
 
       try {
-        await store.openDataFileAsJson('template', fileNode.file);
+        await store.openDataFileAsJson('profile', fileNode.file);
       } catch (error) {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.copyTemplateFilePath, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'template');
+    registerCommand(COMMANDS.copyProfileFilePath, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'profile');
       if (fileNode === undefined) {
         return;
       }
 
       try {
         await vscode.env.clipboard.writeText(
-          store.getDataFilePath('template', fileNode.file),
+          store.getDataFilePath('profile', fileNode.file),
         );
       } catch (error) {
         showError(error);
       }
     }),
     registerCommand(
-      COMMANDS.copyTemplateFileRelativePath,
+      COMMANDS.copyProfileFileRelativePath,
       async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, 'template');
+        const fileNode = getFileNode(node, 'profile');
         if (fileNode === undefined) {
           return;
         }
 
         try {
           await vscode.env.clipboard.writeText(
-            store.getDataFileRelativePath('template', fileNode.file),
+            store.getDataFileRelativePath('profile', fileNode.file),
           );
         } catch (error) {
           showError(error);
         }
       },
     ),
-    registerCommand(COMMANDS.renameTemplateFile, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'template');
+    registerCommand(COMMANDS.renameProfileFile, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'profile');
       if (fileNode === undefined) {
         return;
       }
 
       try {
         const nextFile = await promptForFileName(
-          'Template file name',
+          'Profile file name',
           fileNode.file,
         );
         if (nextFile === undefined) {
           return;
         }
 
-        await store.renameDataFile('template', fileNode.file, nextFile);
+        await store.renameDataFile('profile', fileNode.file, nextFile);
         await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.deleteTemplateFile, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'template');
+    registerCommand(COMMANDS.deleteProfileFile, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'profile');
       if (fileNode === undefined) {
         return;
       }
@@ -497,20 +494,20 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
 
-        await store.deleteDataFile('template', fileNode.file);
+        await store.deleteDataFile('profile', fileNode.file);
         await syncUiWithWorkspace();
       } catch (error) {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.addTemplateEntry, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'template');
+    registerCommand(COMMANDS.addProfileEntry, async (node?: TreeNode) => {
+      const fileNode = getFileNode(node, 'profile');
       if (fileNode === undefined) {
         return;
       }
 
       try {
-        await addTemplateEntry(
+        await addProfileEntry(
           store,
           fileNode.file,
           editorPanel,
@@ -622,8 +619,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       try {
-        const extendsName = await promptForTemplateSelection(store);
-        if (extendsName === null) {
+        const profileName = await promptForProfileSelection(store);
+        if (profileName === undefined) {
           return;
         }
 
@@ -635,7 +632,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const target = await store.addConfigEntry(
           fileNode.file,
           name,
-          extendsName,
+          profileName,
         );
         await syncUiWithWorkspace();
         await editorPanel.open(target);
@@ -713,9 +710,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       try {
         const nextName = await promptForRequiredValue(
-          entryNode.target.kind === 'template'
-            ? 'Template name'
-            : 'Config name',
+          entryNode.target.kind === 'profile' ? 'Profile name' : 'Config name',
           entryNode.label,
         );
         if (nextName === undefined) {
@@ -789,25 +784,25 @@ function getWorkspaceRoot(): vscode.WorkspaceFolder | undefined {
   return folders.length === 1 ? folders[0] : undefined;
 }
 
-async function addTemplateEntry(
+async function addProfileEntry(
   store: WorkspaceStore,
   file: string,
   editorPanel: EditorPanelController,
   refreshViews: () => Promise<void>,
 ): Promise<void> {
-  const name = await promptForRequiredValue('Template name');
+  const name = await promptForRequiredValue('Profile name');
   if (name === undefined) {
     return;
   }
 
-  const target = await store.addTemplateEntry(file, name);
+  const target = await store.addProfileEntry(file, name);
   await refreshViews();
   await editorPanel.open(target);
 }
 
 async function selectOrCreateFile(
   store: WorkspaceStore,
-  kind: 'template' | 'config',
+  kind: 'profile' | 'config',
 ): Promise<string | undefined> {
   const files = await store.listFiles(kind);
   const createLabel = '$(add) Create new file';
@@ -819,7 +814,7 @@ async function selectOrCreateFile(
     ],
     {
       placeHolder:
-        kind === 'template' ? 'Choose a template file' : 'Choose a config file',
+        kind === 'profile' ? 'Choose a profile file' : 'Choose a config file',
     },
   );
 
@@ -832,7 +827,7 @@ async function selectOrCreateFile(
   }
 
   const fileName = await promptForFileName(
-    kind === 'template' ? 'Template file name' : 'Config file name',
+    kind === 'profile' ? 'Profile file name' : 'Config file name',
   );
   if (fileName === undefined) {
     return undefined;
@@ -841,35 +836,36 @@ async function selectOrCreateFile(
   return store.createDataFile(kind, fileName);
 }
 
-async function promptForTemplateSelection(
+async function promptForProfileSelection(
   store: WorkspaceStore,
-): Promise<string | null | undefined> {
-  const templateNames = await store.listTemplateNames();
-  const items: TemplateSelectionItem[] = templateNames.map((name) => ({
+): Promise<string | undefined> {
+  const profileNames = await store.listProfileNames();
+  if (profileNames.length === 0) {
+    const action = 'Create Profile';
+    const selection = await vscode.window.showInformationMessage(
+      'Create a profile before adding a config.',
+      action,
+    );
+
+    if (selection === action) {
+      await vscode.commands.executeCommand(COMMANDS.addProfile);
+    }
+
+    return undefined;
+  }
+
+  const items: ProfileSelectionItem[] = profileNames.map((name) => ({
     label: name,
     value: name,
   }));
 
-  if (templateNames.length > 0) {
-    items.push({
-      kind: vscode.QuickPickItemKind.Separator,
-      label: 'Standalone',
-    });
-  }
-
-  items.push({
-    label: NO_TEMPLATE_LABEL,
-    description: 'Create a standalone config without template inheritance.',
-  });
-
   const selection = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Select a base template',
-    prompt:
-      'Choose a template to inherit from, or select No template to create a standalone config.',
+    placeHolder: 'Select a profile',
+    prompt: 'Choose a profile to use for the new config.',
   });
 
   if (selection === undefined) {
-    return null;
+    return undefined;
   }
 
   return 'value' in selection ? selection.value : undefined;
@@ -988,10 +984,8 @@ function getIssueFingerprint(issue: ComposerDataIssue): string {
 
 function getFileNode(
   node: TreeNode | undefined,
-  kind: 'template' | 'config',
-):
-  | Extract<TreeNode, { type: 'file'; kind: 'template' | 'config' }>
-  | undefined {
+  kind: 'profile' | 'config',
+): Extract<TreeNode, { type: 'file'; kind: 'profile' | 'config' }> | undefined {
   if (node === undefined || node.type !== 'file' || node.kind !== kind) {
     return undefined;
   }

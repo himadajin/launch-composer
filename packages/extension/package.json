@@ -1,7 +1,7 @@
 {
   "name": "launch-composer",
   "displayName": "Launch Composer",
-  "description": "Compose VSCode launch.json from templates and configs.",
+  "description": "Compose VSCode launch.json from profiles and configs.",
   "version": "0.1.1",
   "publisher": "himadajin",
   "license": "MIT",
@@ -55,8 +55,8 @@
           "name": "CONFIGS"
         },
         {
-          "id": "launchComposer.templates",
-          "name": "TEMPLATES"
+          "id": "launchComposer.profiles",
+          "name": "PROFILES"
         }
       ]
     },
@@ -75,45 +75,45 @@
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.addTemplate",
-        "title": "Add Template",
+        "command": "launch-composer.addProfile",
+        "title": "Add Profile",
         "category": "Launch Composer",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.addTemplateFile",
-        "title": "Add Template File",
+        "command": "launch-composer.addProfileFile",
+        "title": "Add Profile File",
         "enablement": "workspaceFolderCount == 1",
         "icon": "$(add)"
       },
       {
-        "command": "launch-composer.openTemplateFileJson",
+        "command": "launch-composer.openProfileFileJson",
         "title": "Open",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.copyTemplateFilePath",
+        "command": "launch-composer.copyProfileFilePath",
         "title": "Copy Path",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.copyTemplateFileRelativePath",
+        "command": "launch-composer.copyProfileFileRelativePath",
         "title": "Copy Relative Path",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.renameTemplateFile",
+        "command": "launch-composer.renameProfileFile",
         "title": "Rename",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.deleteTemplateFile",
+        "command": "launch-composer.deleteProfileFile",
         "title": "Delete",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.addTemplateEntry",
-        "title": "Add Template",
+        "command": "launch-composer.addProfileEntry",
+        "title": "Add Profile",
         "enablement": "workspaceFolderCount == 1",
         "icon": "$(add)"
       },
@@ -218,8 +218,8 @@
       ],
       "view/title": [
         {
-          "command": "launch-composer.addTemplateFile",
-          "when": "view == launchComposer.templates",
+          "command": "launch-composer.addProfileFile",
+          "when": "view == launchComposer.profiles",
           "group": "navigation"
         },
         {
@@ -235,8 +235,8 @@
       ],
       "view/item/context": [
         {
-          "command": "launch-composer.addTemplateEntry",
-          "when": "view == launchComposer.templates && viewItem == templateFile",
+          "command": "launch-composer.addProfileEntry",
+          "when": "view == launchComposer.profiles && viewItem == profileFile",
           "group": "1_new@1"
         },
         {
@@ -245,28 +245,28 @@
           "group": "1_new@1"
         },
         {
-          "command": "launch-composer.openTemplateFileJson",
-          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "command": "launch-composer.openProfileFileJson",
+          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "2_open@1"
         },
         {
-          "command": "launch-composer.copyTemplateFilePath",
-          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "command": "launch-composer.copyProfileFilePath",
+          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "3_copy@1"
         },
         {
-          "command": "launch-composer.copyTemplateFileRelativePath",
-          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "command": "launch-composer.copyProfileFileRelativePath",
+          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "3_copy@2"
         },
         {
-          "command": "launch-composer.renameTemplateFile",
-          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "command": "launch-composer.renameProfileFile",
+          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "4_modify@1"
         },
         {
-          "command": "launch-composer.deleteTemplateFile",
-          "when": "view == launchComposer.templates && (viewItem == templateFile || viewItem == templateFileInvalid)",
+          "command": "launch-composer.deleteProfileFile",
+          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "5_delete@1"
         },
         {
@@ -306,32 +306,32 @@
         },
         {
           "command": "launch-composer.openItemJson",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
+          "when": "viewItem == profileEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "2_open@1"
         },
         {
           "command": "launch-composer.copyItemFilePath",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
+          "when": "viewItem == profileEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "3_copy@1"
         },
         {
           "command": "launch-composer.copyItemFileRelativePath",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
+          "when": "viewItem == profileEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "3_copy@2"
         },
         {
           "command": "launch-composer.renameItem",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
+          "when": "viewItem == profileEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "4_modify@1"
         },
         {
           "command": "launch-composer.deleteItem",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
+          "when": "viewItem == profileEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "5_delete@1"
         },
         {
-          "command": "launch-composer.addTemplateEntry",
-          "when": "view == launchComposer.templates && viewItem == templateFile",
+          "command": "launch-composer.addProfileEntry",
+          "when": "view == launchComposer.profiles && viewItem == profileFile",
           "group": "inline"
         },
         {
@@ -341,37 +341,37 @@
         },
         {
           "command": "launch-composer.openItemJson",
-          "when": "viewItem == templateEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
+          "when": "viewItem == profileEntry || viewItem == configEntryEnabled || viewItem == configEntryDisabled || viewItem == configEntryDisabledByFile",
           "group": "inline"
         }
       ],
       "commandPalette": [
         {
-          "command": "launch-composer.addTemplateFile",
+          "command": "launch-composer.addProfileFile",
           "when": "false"
         },
         {
-          "command": "launch-composer.openTemplateFileJson",
+          "command": "launch-composer.openProfileFileJson",
           "when": "false"
         },
         {
-          "command": "launch-composer.copyTemplateFilePath",
+          "command": "launch-composer.copyProfileFilePath",
           "when": "false"
         },
         {
-          "command": "launch-composer.copyTemplateFileRelativePath",
+          "command": "launch-composer.copyProfileFileRelativePath",
           "when": "false"
         },
         {
-          "command": "launch-composer.renameTemplateFile",
+          "command": "launch-composer.renameProfileFile",
           "when": "false"
         },
         {
-          "command": "launch-composer.deleteTemplateFile",
+          "command": "launch-composer.deleteProfileFile",
           "when": "false"
         },
         {
-          "command": "launch-composer.addTemplateEntry",
+          "command": "launch-composer.addProfileEntry",
           "when": "false"
         },
         {
@@ -442,8 +442,8 @@
     },
     "viewsWelcome": [
       {
-        "view": "launchComposer.templates",
-        "contents": "No template files found. [Create Template File](command:launch-composer.addTemplateFile)"
+        "view": "launchComposer.profiles",
+        "contents": "No profile files found. [Create Profile File](command:launch-composer.addProfileFile)"
       },
       {
         "view": "launchComposer.configs",
