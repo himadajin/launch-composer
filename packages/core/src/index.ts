@@ -11,9 +11,9 @@ export type {
   GenerateSuccess,
   LaunchConfig,
   LaunchJson,
-  TemplateData,
-  TemplateEntry,
-  TemplateFileData,
+  ProfileData,
+  ProfileEntry,
+  ProfileFileData,
   ValidationError,
 } from './types.js';
 

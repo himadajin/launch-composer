@@ -10,34 +10,24 @@ import {
 } from '@himadajin/vscode-components';
 import { useEffect, useRef, useState } from 'react';
 
-import type { ComposerDataIssue, ConfigData, TemplateData } from '../types.js';
+import type { ComposerDataIssue, ConfigData, ProfileData } from '../types.js';
 import type { EntryChange } from './entryChanges.js';
 import {
   updateConfigArgs,
   updateConfigArgsFile,
   updateConfigCwd,
   updateConfigEnabled,
-  updateConfigExtends,
-  updateConfigRequest,
+  updateConfigProfile,
   updateConfigStopAtEntry,
-  updateConfigType,
 } from './entryChanges.js';
-import {
-  DEBUG_REQUEST_OPTIONS,
-  normalizeDebugRequest,
-  stringOrEmpty,
-  useDebouncedCommit,
-} from './editorUtils.js';
+import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
-
-const NO_TEMPLATE_LABEL = 'No template';
-const NO_TEMPLATE_VALUE = '';
 
 interface ConfigEditorProps {
   data: ConfigData;
   sourceFile: string;
   fileEnabled: boolean;
-  templates: TemplateData[];
+  profiles: ProfileData[];
   autoSaveDelay: number;
   onBrowseFile: () => Promise<string | null>;
   onChange: (change: EntryChange<ConfigData>) => void;
@@ -50,7 +40,7 @@ export function ConfigEditor({
   data,
   sourceFile,
   fileEnabled,
-  templates,
+  profiles,
   autoSaveDelay,
   onBrowseFile,
   onChange,
@@ -61,10 +51,6 @@ export function ConfigEditor({
   const readOnly = readOnlyIssue !== undefined;
   const configEntry = data.configuration ?? {};
   const [name, setName] = useState(data.name);
-  const [type, setType] = useState(stringOrEmpty(configEntry.type));
-  const [request, setRequest] = useState(
-    normalizeDebugRequest(configEntry.request),
-  );
   const [cwd, setCwd] = useState(stringOrEmpty(configEntry.cwd));
   const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
   // Tracks whether cwd was changed by the user (vs. synced from data prop).
@@ -78,14 +64,6 @@ export function ConfigEditor({
   }, [data.name]);
 
   useEffect(() => {
-    setType(stringOrEmpty(data.configuration?.type));
-  }, [data.configuration?.type]);
-
-  useEffect(() => {
-    setRequest(normalizeDebugRequest(data.configuration?.request));
-  }, [data.configuration?.request]);
-
-  useEffect(() => {
     cwdChangedByUserRef.current = false;
     setCwd(stringOrEmpty(data.configuration?.cwd));
   }, [data.configuration?.cwd]);
@@ -94,28 +72,20 @@ export function ConfigEditor({
     setArgsFile(stringOrEmpty(data.argsFile));
   }, [data.argsFile]);
 
-  const currentTemplate = templates.find(
-    (template) => template.name === data.extends,
+  const currentProfile = profiles.find(
+    (profile) => profile.name === data.profile,
   );
-  const templateNames = templates.map((template) => template.name);
-  const extendsValue = data.extends;
-  const hasMissingTemplate =
-    extendsValue !== undefined && !templateNames.includes(extendsValue);
-  const templateOptions = hasMissingTemplate
-    ? [...templateNames, extendsValue, NO_TEMPLATE_VALUE]
-    : [...templateNames, NO_TEMPLATE_VALUE];
-  const templateOptionLabels = hasMissingTemplate
-    ? [...templateNames, extendsValue, NO_TEMPLATE_LABEL]
-    : [...templateNames, NO_TEMPLATE_LABEL];
-  const selectValue = extendsValue ?? NO_TEMPLATE_VALUE;
-  const argsFileDisabled = currentTemplate?.args !== undefined;
-  const launchFieldsInherited = extendsValue !== undefined;
-  const effectiveType = launchFieldsInherited
-    ? stringOrEmpty(currentTemplate?.configuration?.type)
-    : type;
-  const effectiveRequest = launchFieldsInherited
-    ? normalizeDebugRequest(currentTemplate?.configuration?.request)
-    : request;
+  const profileNames = profiles.map((profile) => profile.name);
+  const profileValue = data.profile;
+  const hasMissingProfile = !profileNames.includes(profileValue);
+  const profileOptions = hasMissingProfile
+    ? [...profileNames, profileValue]
+    : profileNames;
+  const profileOptionLabels = hasMissingProfile
+    ? [...profileNames, profileValue]
+    : profileNames;
+  const selectValue = profileValue;
+  const argsFileDisabled = currentProfile?.args !== undefined;
 
   const handleCwdChange = (value: string) => {
     cwdChangedByUserRef.current = true;
@@ -128,14 +98,6 @@ export function ConfigEditor({
     }
 
     onChange(updateConfigCwd(data, value));
-  });
-
-  useDebouncedCommit(type, autoSaveDelay, (value) => {
-    if (readOnly || launchFieldsInherited) {
-      return;
-    }
-
-    onChange(updateConfigType(data, value));
   });
 
   useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
@@ -210,24 +172,20 @@ export function ConfigEditor({
         </FormGroup>
 
         <FormGroup
-          label="Config: Extends"
-          description="Inherit launch fields from an existing template."
+          label="Config: Profile"
+          description="Profile used as the base for this config."
         >
           <Select
             disabled={readOnly}
-            enum={templateOptions}
-            enumItemLabels={templateOptionLabels}
+            enum={profileOptions}
+            enumItemLabels={profileOptionLabels}
             value={selectValue}
             onChange={(value) => {
               if (readOnly) {
                 return;
               }
 
-              if (value === NO_TEMPLATE_VALUE) {
-                onChange(updateConfigExtends(data, undefined));
-              } else {
-                onChange(updateConfigExtends(data, value));
-              }
+              onChange(updateConfigProfile(data, value));
             }}
           />
         </FormGroup>
@@ -255,50 +213,6 @@ export function ConfigEditor({
               }
 
               onChange(updateConfigEnabled(data, checked));
-            }}
-          />
-        </FormGroup>
-
-        <FormGroup
-          label="Config: Type"
-          description="Debugger type written to the generated launch.json entry."
-          helper={
-            launchFieldsInherited ? (
-              <FormHelper tone="info">
-                Inherited from the selected template.
-              </FormHelper>
-            ) : undefined
-          }
-        >
-          <TextInput
-            disabled={readOnly || launchFieldsInherited}
-            value={effectiveType}
-            onChange={setType}
-          />
-        </FormGroup>
-
-        <FormGroup
-          label="Config: Request"
-          description="Debugger request written to the generated launch.json entry."
-          helper={
-            launchFieldsInherited ? (
-              <FormHelper tone="info">
-                Inherited from the selected template.
-              </FormHelper>
-            ) : undefined
-          }
-        >
-          <Select
-            disabled={readOnly || launchFieldsInherited}
-            enum={[...DEBUG_REQUEST_OPTIONS]}
-            value={effectiveRequest}
-            onChange={(value) => {
-              if (readOnly || launchFieldsInherited) {
-                return;
-              }
-
-              setRequest(value as (typeof DEBUG_REQUEST_OPTIONS)[number]);
-              onChange(updateConfigRequest(data, value));
             }}
           />
         </FormGroup>
@@ -342,7 +256,7 @@ export function ConfigEditor({
           helper={
             argsFileDisabled ? (
               <FormHelper tone="info">
-                The selected template already defines args.
+                The selected profile already defines args.
               </FormHelper>
             ) : undefined
           }
@@ -404,7 +318,7 @@ export function ConfigEditor({
 
         <EditInJsonHint
           fileLabel={sourceFile}
-          description="Only common launch.json properties are available here. Edit the source file to add or adjust unsupported fields."
+          description='Edit the source file to change JSON-only fields such as "type", "request", and "program", or to add unsupported properties.'
           onOpenFileJson={onOpenJson}
         />
       </FormContainer>

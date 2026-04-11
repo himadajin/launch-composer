@@ -7,12 +7,12 @@ import { WorkspaceStore } from '../src/io/workspaceStore.js';
 import * as vscode from 'vscode';
 
 const DEFAULT_TEMPLATE_TEXT =
-  '// Add template entries to this array.\n' +
-  '// Each template should have a unique "name".\n' +
+  '// Add profile entries to this array.\n' +
+  '// Each profile should have a unique "name".\n' +
   '[]\n';
 const DEFAULT_CONFIG_TEXT =
   '// Configure this file and add entries to "configurations".\n' +
-  '// Use "extends" to reference a template when needed.\n' +
+  '// Set "profile" to reference a profile.\n' +
   '{\n' +
   '  "enabled": true,\n' +
   '  "configurations": []\n' +
@@ -29,6 +29,7 @@ const testVscode = vscode as typeof vscode & {
     createGhostFile(filePath: string): void;
     setQuickPickResponses(responses: unknown[]): void;
     setInputBoxResponses(responses: unknown[]): void;
+    setInfoMessageResponses(responses: unknown[]): void;
     getRegisteredCommands(): string[];
     getErrorMessages(): string[];
     getInfoMessages(): string[];
@@ -88,16 +89,16 @@ test('initialize creates the Launch Composer workspace directories', async () =>
     '/workspace/project/.vscode',
     '/workspace/project/.vscode/launch-composer',
     '/workspace/project/.vscode/launch-composer/configs',
-    '/workspace/project/.vscode/launch-composer/templates',
+    '/workspace/project/.vscode/launch-composer/profiles',
   ]);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/profiles, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/profiles/profile.json, .vscode/launch-composer/configs/config.json).',
   ]);
 
-  const [templateBytes, configBytes] = await Promise.all([
+  const [profileBytes, configBytes] = await Promise.all([
     vscode.workspace.fs.readFile(
       vscode.Uri.file(
-        '/workspace/project/.vscode/launch-composer/templates/template.json',
+        '/workspace/project/.vscode/launch-composer/profiles/profile.json',
       ),
     ),
     vscode.workspace.fs.readFile(
@@ -107,7 +108,7 @@ test('initialize creates the Launch Composer workspace directories', async () =>
     ),
   ]);
 
-  assert.equal(new TextDecoder().decode(templateBytes), DEFAULT_TEMPLATE_TEXT);
+  assert.equal(new TextDecoder().decode(profileBytes), DEFAULT_TEMPLATE_TEXT);
   assert.equal(new TextDecoder().decode(configBytes), DEFAULT_CONFIG_TEXT);
 });
 
@@ -122,7 +123,7 @@ test('initialize tolerates ENOENT-style missing-path errors from the filesystem'
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/profiles, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/profiles/profile.json, .vscode/launch-composer/configs/config.json).',
   ]);
 });
 
@@ -135,7 +136,7 @@ test('initialize is idempotent when directories and default files already exist'
   await vscode.commands.executeCommand(COMMANDS.init);
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/existing-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/existing-project/.vscode/launch-composer/profiles/profile.json',
     ),
     new TextEncoder().encode('[\n  {\n    "name": "existing"\n  }\n]\n'),
   );
@@ -143,18 +144,18 @@ test('initialize is idempotent when directories and default files already exist'
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
-    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/profiles, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/profiles/profile.json, .vscode/launch-composer/configs/config.json).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/profiles, .vscode/launch-composer/configs).',
   ]);
 
-  const templateBytes = await vscode.workspace.fs.readFile(
+  const profileBytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
-      '/workspace/existing-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/existing-project/.vscode/launch-composer/profiles/profile.json',
     ),
   );
 
   assert.equal(
-    new TextDecoder().decode(templateBytes),
+    new TextDecoder().decode(profileBytes),
     '[\n  {\n    "name": "existing"\n  }\n]\n',
   );
 });
@@ -174,7 +175,7 @@ test('initialize creates missing child directories when composer directory exist
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json, .vscode/launch-composer/configs/config.json).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/profiles, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/profiles/profile.json, .vscode/launch-composer/configs/config.json).',
   ]);
 });
 
@@ -205,13 +206,13 @@ test('initialize creates only the missing default file when one already exists',
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
   assert.deepEqual(testVscode.__testing.getInfoMessages(), [
-    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/templates, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/templates/template.json).',
+    'Launch Composer storage is ready (.vscode/launch-composer, .vscode/launch-composer/profiles, .vscode/launch-composer/configs). Default files are ready (.vscode/launch-composer/profiles/profile.json).',
   ]);
 
-  const [templateBytes, configBytes] = await Promise.all([
+  const [profileBytes, configBytes] = await Promise.all([
     vscode.workspace.fs.readFile(
       vscode.Uri.file(
-        '/workspace/partial-default-project/.vscode/launch-composer/templates/template.json',
+        '/workspace/partial-default-project/.vscode/launch-composer/profiles/profile.json',
       ),
     ),
     vscode.workspace.fs.readFile(
@@ -221,7 +222,7 @@ test('initialize creates only the missing default file when one already exists',
     ),
   ]);
 
-  assert.equal(new TextDecoder().decode(templateBytes), DEFAULT_TEMPLATE_TEXT);
+  assert.equal(new TextDecoder().decode(profileBytes), DEFAULT_TEMPLATE_TEXT);
   assert.equal(
     new TextDecoder().decode(configBytes),
     '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "keep-me",\n      "enabled": false\n    }\n  ]\n}\n',
@@ -234,7 +235,7 @@ test('readAll returns empty data when Launch Composer directories do not exist',
   const data = await store.readAll();
 
   assert.deepEqual(data, {
-    templates: [],
+    profiles: [],
     configs: [],
     issues: [],
   });
@@ -249,7 +250,7 @@ test('readAll tolerates ENOENT-style missing directories', async () => {
   const data = await store.readAll();
 
   assert.deepEqual(data, {
-    templates: [],
+    profiles: [],
     configs: [],
     issues: [],
   });
@@ -258,7 +259,7 @@ test('readAll tolerates ENOENT-style missing directories', async () => {
 test('readAll skips files that disappear before they can be read', async () => {
   testVscode.__testing.setMissingPathErrorStyle('vscode-enoent');
   testVscode.__testing.createGhostFile(
-    '/workspace/racy-project/.vscode/launch-composer/templates/racy.json',
+    '/workspace/racy-project/.vscode/launch-composer/profiles/racy.json',
   );
   testVscode.__testing.createGhostFile(
     '/workspace/racy-project/.vscode/launch-composer/configs/racy.json',
@@ -268,7 +269,7 @@ test('readAll skips files that disappear before they can be read', async () => {
   const data = await store.readAll();
 
   assert.deepEqual(data, {
-    templates: [],
+    profiles: [],
     configs: [],
     issues: [],
   });
@@ -281,78 +282,73 @@ test('readAll keeps valid files and reports invalid files as issues', async () =
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/invalid-project/.vscode/launch-composer/templates',
+      '/workspace/invalid-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/invalid-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/invalid-project/.vscode/launch-composer/profiles/profile.json',
     ),
     new TextEncoder().encode(''),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/invalid-project/.vscode/launch-composer/templates/valid.json',
+      '/workspace/invalid-project/.vscode/launch-composer/profiles/valid.json',
     ),
     new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
   );
 
   const data = await store.readAll();
 
-  assert.deepEqual(data.templates, [
+  assert.deepEqual(data.profiles, [
     {
       file: 'valid.json',
-      templates: [{ name: 'cpp' }],
+      profiles: [{ name: 'cpp' }],
     },
   ]);
   assert.deepEqual(data.configs, []);
   assert.deepEqual(data.issues, [
     {
-      kind: 'template',
-      file: 'template.json',
+      kind: 'profile',
+      file: 'profile.json',
       code: 'empty',
-      message: 'template.json is empty. Expected a JSON array such as [].',
+      message: 'profile.json is empty. Expected a JSON array such as [].',
     },
   ]);
 });
 
-test('readTemplatesWithIssues reads template data without requiring config directories', async () => {
-  const workspaceUri = vscode.Uri.file('/workspace/templates-only-project');
+test('readProfilesWithIssues reads profile data without requiring config directories', async () => {
+  const workspaceUri = vscode.Uri.file('/workspace/profiles-only-project');
   const store = new WorkspaceStore(workspaceUri);
 
   await vscode.workspace.fs.createDirectory(
-    vscode.Uri.joinPath(
-      workspaceUri,
-      '.vscode',
-      'launch-composer',
-      'templates',
-    ),
+    vscode.Uri.joinPath(workspaceUri, '.vscode', 'launch-composer', 'profiles'),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.joinPath(
       workspaceUri,
       '.vscode',
       'launch-composer',
-      'templates',
-      'template.json',
+      'profiles',
+      'profile.json',
     ),
     new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
   );
 
-  const data = await store.readTemplatesWithIssues();
+  const data = await store.readProfilesWithIssues();
 
   assert.deepEqual(data, {
-    templates: [
+    profiles: [
       {
-        file: 'template.json',
-        templates: [{ name: 'cpp' }],
+        file: 'profile.json',
+        profiles: [{ name: 'cpp' }],
       },
     ],
     issues: [],
   });
 });
 
-test('readConfigsWithIssues reads config data without requiring template directories', async () => {
+test('readConfigsWithIssues reads config data without requiring profile directories', async () => {
   const workspaceUri = vscode.Uri.file('/workspace/configs-only-project');
   const store = new WorkspaceStore(workspaceUri);
 
@@ -393,12 +389,12 @@ test('generateLaunchJson returns validation-style errors for invalid files', asy
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/generate-invalid-project/.vscode/launch-composer/templates',
+      '/workspace/generate-invalid-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/generate-invalid-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/generate-invalid-project/.vscode/launch-composer/profiles/profile.json',
     ),
     new TextEncoder().encode('{'),
   );
@@ -409,30 +405,30 @@ test('generateLaunchJson returns validation-style errors for invalid files', asy
     success: false,
     errors: [
       {
-        file: 'template.json',
+        file: 'profile.json',
         message:
-          'Invalid JSON in template.json. Open the file and fix the syntax.',
+          'Invalid JSON in profile.json. Open the file and fix the syntax.',
       },
     ],
   });
 });
 
-test('addTemplateEntry creates its backing file when it does not exist', async () => {
+test('addProfileEntry creates its backing file when it does not exist', async () => {
   const store = new WorkspaceStore(
-    vscode.Uri.file('/workspace/template-project'),
+    vscode.Uri.file('/workspace/profile-project'),
   );
 
-  const target = await store.addTemplateEntry('new-template.json', 'cpp');
+  const target = await store.addProfileEntry('new-profile.json', 'cpp');
 
   assert.deepEqual(target, {
-    kind: 'template',
-    file: 'new-template.json',
+    kind: 'profile',
+    file: 'new-profile.json',
     index: 0,
   });
 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
-      '/workspace/template-project/.vscode/launch-composer/templates/new-template.json',
+      '/workspace/profile-project/.vscode/launch-composer/profiles/new-profile.json',
     ),
   );
 
@@ -467,16 +463,14 @@ test('addConfigEntry creates its backing file when it does not exist', async () 
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Basic Test",\n      "enabled": true,\n      "extends": "cpp"\n    }\n  ]\n}',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Basic Test",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}',
   );
 });
 
-test('addConfig command creates enabled configs by default', async () => {
+test('addConfig command with zero profiles shows Create Profile guidance and creates nothing', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders(['/workspace/add-config-project']);
-  testVscode.__testing.setQuickPickResponses([{ label: 'No template' }]);
-  testVscode.__testing.setInputBoxResponses(['Launch']);
 
   activate(context);
   await vscode.commands.executeCommand(COMMANDS.addConfigEntry, {
@@ -486,33 +480,65 @@ test('addConfig command creates enabled configs by default', async () => {
   });
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
-  assert.deepEqual(testVscode.__testing.getLastQuickPickCall(), {
-    items: [
-      {
-        label: 'No template',
-        description: 'Create a standalone config without template inheritance.',
-      },
-    ],
-    options: {
-      placeHolder: 'Select a base template',
-      prompt:
-        'Choose a template to inherit from, or select No template to create a standalone config.',
-    },
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Create a profile before adding a config.',
+  ]);
+
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/add-config-project'),
+  );
+  const data = await store.readAll();
+  assert.deepEqual(data, {
+    profiles: [],
+    configs: [],
+    issues: [],
   });
-
-  const bytes = await vscode.workspace.fs.readFile(
-    vscode.Uri.file(
-      '/workspace/add-config-project/.vscode/launch-composer/configs/config.json',
-    ),
-  );
-
-  assert.equal(
-    new TextDecoder().decode(bytes).trim(),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "",\n        "request": "launch"\n      }\n    }\n  ]\n}',
-  );
 });
 
-test('addConfig command shows templates first and No template last', async () => {
+test('addConfig command choosing Create Profile starts profile creation without auto-creating a config', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/add-config-create-profile-project',
+  ]);
+  testVscode.__testing.setInfoMessageResponses(['Create Profile']);
+  testVscode.__testing.setQuickPickResponses([
+    { label: '$(add) Create new file', value: '__create__' },
+  ]);
+  testVscode.__testing.setInputBoxResponses(['profile', 'cpp']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.addConfigEntry, {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+  });
+
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/add-config-create-profile-project'),
+  );
+  const data = await store.readAll();
+  assert.deepEqual(data, {
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [
+          {
+            name: 'cpp',
+            configuration: {
+              type: '',
+              request: 'launch',
+            },
+          },
+        ],
+      },
+    ],
+    configs: [],
+    issues: [],
+  });
+});
+
+test('addConfig command shows available profiles in selection order', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders([
@@ -521,12 +547,12 @@ test('addConfig command shows templates first and No template last', async () =>
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/add-config-picker-project/.vscode/launch-composer/templates',
+      '/workspace/add-config-picker-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/add-config-picker-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/add-config-picker-project/.vscode/launch-composer/profiles/profile.json',
     ),
     new TextEncoder().encode(
       '[\n  {\n    "name": "cpp"\n  },\n  {\n    "name": "python"\n  }\n]\n',
@@ -547,16 +573,10 @@ test('addConfig command shows templates first and No template last', async () =>
   assert.deepEqual(quickPickCall.items, [
     { label: 'cpp', value: 'cpp' },
     { label: 'python', value: 'python' },
-    { kind: vscode.QuickPickItemKind.Separator, label: 'Standalone' },
-    {
-      label: 'No template',
-      description: 'Create a standalone config without template inheritance.',
-    },
   ]);
   assert.deepEqual(quickPickCall.options, {
-    placeHolder: 'Select a base template',
-    prompt:
-      'Choose a template to inherit from, or select No template to create a standalone config.',
+    placeHolder: 'Select a profile',
+    prompt: 'Choose a profile to use for the new config.',
   });
 });
 
@@ -565,7 +585,7 @@ test('toggleConfigFileEnabled updates the file-level enabled flag', async () => 
     vscode.Uri.file('/workspace/toggle-config-file-project'),
   );
 
-  await store.addConfigEntry('config.json', 'Launch', undefined);
+  await store.addConfigEntry('config.json', 'Launch', 'cpp');
   await store.toggleConfigFileEnabled('config.json');
 
   const bytes = await vscode.workspace.fs.readFile(
@@ -576,29 +596,29 @@ test('toggleConfigFileEnabled updates the file-level enabled flag', async () => 
 
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
+    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
   );
 });
 
-test('addTemplateEntry preserves existing JSONC comments', async () => {
+test('addProfileEntry preserves existing JSONC comments', async () => {
   const store = new WorkspaceStore(
-    vscode.Uri.file('/workspace/comment-add-template-project'),
+    vscode.Uri.file('/workspace/comment-add-profile-project'),
   );
   const fileUri = vscode.Uri.file(
-    '/workspace/comment-add-template-project/.vscode/launch-composer/templates/template.json',
+    '/workspace/comment-add-profile-project/.vscode/launch-composer/profiles/profile.json',
   );
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/comment-add-template-project/.vscode/launch-composer/templates',
+      '/workspace/comment-add-profile-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.writeFile(
     fileUri,
     new TextEncoder().encode(
-      '// template file comment\n' +
+      '// profile file comment\n' +
         '[\n' +
-        '  // keep template comment\n' +
+        '  // keep profile comment\n' +
         '  {\n' +
         '    "name": "cpp",\n' +
         '    "configuration": {\n' +
@@ -610,13 +630,13 @@ test('addTemplateEntry preserves existing JSONC comments', async () => {
     ),
   );
 
-  await store.addTemplateEntry('template.json', 'node');
+  await store.addProfileEntry('profile.json', 'node');
 
   const text = new TextDecoder().decode(
     await vscode.workspace.fs.readFile(fileUri),
   );
-  assert.match(text, /\/\/ template file comment/);
-  assert.match(text, /\/\/ keep template comment/);
+  assert.match(text, /\/\/ profile file comment/);
+  assert.match(text, /\/\/ keep profile comment/);
   assert.match(text, /"name": "node"/);
 });
 
@@ -644,14 +664,14 @@ test('addConfigEntry preserves existing JSONC comments', async () => {
         '    {\n' +
         '      "name": "Launch",\n' +
         '      "enabled": true,\n' +
-        '      "extends": "cpp"\n' +
+        '      "profile": "cpp"\n' +
         '    }\n' +
         '  ]\n' +
         '}\n',
     ),
   );
 
-  await store.addConfigEntry('config.json', 'Attach', undefined);
+  await store.addConfigEntry('config.json', 'Attach', 'cpp');
 
   const text = new TextDecoder().decode(
     await vscode.workspace.fs.readFile(fileUri),
@@ -769,7 +789,7 @@ test('config tree checkbox toggles the file-level enabled flag', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/config-checkbox-view'),
   );
-  await store.addConfigEntry('config.json', 'Launch', undefined);
+  await store.addConfigEntry('config.json', 'Launch', 'cpp');
 
   activate(context);
 
@@ -800,7 +820,7 @@ test('config tree checkbox toggles the file-level enabled flag', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
+    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
   );
 });
 
@@ -809,13 +829,13 @@ test('createDataFile supports unicode file names without stat-ing the target pat
     vscode.Uri.file('/workspace/unicode-project'),
   );
 
-  const fileName = await store.createDataFile('template', 'あ');
+  const fileName = await store.createDataFile('profile', 'あ');
 
   assert.equal(fileName, 'あ.json');
 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
-      '/workspace/unicode-project/.vscode/launch-composer/templates/あ.json',
+      '/workspace/unicode-project/.vscode/launch-composer/profiles/あ.json',
     ),
   );
 
@@ -837,12 +857,12 @@ test('renameDataFile moves the JSON file without changing its contents', async (
     vscode.Uri.file('/workspace/rename-file-project'),
   );
   const sourceUri = vscode.Uri.file(
-    '/workspace/rename-file-project/.vscode/launch-composer/templates/template.json',
+    '/workspace/rename-file-project/.vscode/launch-composer/profiles/profile.json',
   );
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/rename-file-project/.vscode/launch-composer/templates',
+      '/workspace/rename-file-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.writeFile(
@@ -851,16 +871,16 @@ test('renameDataFile moves the JSON file without changing its contents', async (
   );
 
   const renamed = await store.renameDataFile(
-    'template',
-    'template.json',
-    'renamed-template.json',
+    'profile',
+    'profile.json',
+    'renamed-profile.json',
   );
 
-  assert.equal(renamed, 'renamed-template.json');
+  assert.equal(renamed, 'renamed-profile.json');
 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
-      '/workspace/rename-file-project/.vscode/launch-composer/templates/renamed-template.json',
+      '/workspace/rename-file-project/.vscode/launch-composer/profiles/renamed-profile.json',
     ),
   );
   await assert.rejects(async () => vscode.workspace.fs.readFile(sourceUri));
@@ -871,14 +891,14 @@ test('renameDataFile moves the JSON file without changing its contents', async (
   );
 });
 
-test('renameEntry updates template references in configs', async () => {
+test('renameEntry updates profile references in configs', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/rename-entry-project'),
   );
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/rename-entry-project/.vscode/launch-composer/templates',
+      '/workspace/rename-entry-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.createDirectory(
@@ -888,7 +908,7 @@ test('renameEntry updates template references in configs', async () => {
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/rename-entry-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/rename-entry-project/.vscode/launch-composer/profiles/profile.json',
     ),
     new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
   );
@@ -897,23 +917,23 @@ test('renameEntry updates template references in configs', async () => {
       '/workspace/rename-entry-project/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "extends": "cpp"\n    }\n  ]\n}\n',
+      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "profile": "cpp"\n    }\n  ]\n}\n',
     ),
   );
 
   await store.renameEntry(
     {
-      kind: 'template',
-      file: 'template.json',
+      kind: 'profile',
+      file: 'profile.json',
       index: 0,
     },
     'cpp-renamed',
   );
 
-  const [templateBytes, configBytes] = await Promise.all([
+  const [profileBytes, configBytes] = await Promise.all([
     vscode.workspace.fs.readFile(
       vscode.Uri.file(
-        '/workspace/rename-entry-project/.vscode/launch-composer/templates/template.json',
+        '/workspace/rename-entry-project/.vscode/launch-composer/profiles/profile.json',
       ),
     ),
     vscode.workspace.fs.readFile(
@@ -924,21 +944,21 @@ test('renameEntry updates template references in configs', async () => {
   ]);
 
   assert.equal(
-    new TextDecoder().decode(templateBytes),
+    new TextDecoder().decode(profileBytes),
     '[\n  {\n    "name": "cpp-renamed"\n  }\n]\n',
   );
   assert.equal(
     new TextDecoder().decode(configBytes),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "extends": "cpp-renamed"\n    }\n  ]\n}\n',
+    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "profile": "cpp-renamed"\n    }\n  ]\n}\n',
   );
 });
 
-test('renameEntry preserves template and config comments while updating extends', async () => {
+test('renameEntry preserves profile and config comments while updating profile', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/comment-rename-entry-project'),
   );
-  const templateUri = vscode.Uri.file(
-    '/workspace/comment-rename-entry-project/.vscode/launch-composer/templates/template.json',
+  const profileUri = vscode.Uri.file(
+    '/workspace/comment-rename-entry-project/.vscode/launch-composer/profiles/profile.json',
   );
   const configUri = vscode.Uri.file(
     '/workspace/comment-rename-entry-project/.vscode/launch-composer/configs/config.json',
@@ -946,7 +966,7 @@ test('renameEntry preserves template and config comments while updating extends'
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/comment-rename-entry-project/.vscode/launch-composer/templates',
+      '/workspace/comment-rename-entry-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.createDirectory(
@@ -955,11 +975,11 @@ test('renameEntry preserves template and config comments while updating extends'
     ),
   );
   await vscode.workspace.fs.writeFile(
-    templateUri,
+    profileUri,
     new TextEncoder().encode(
       '[\n' +
         '  {\n' +
-        '    // keep template name comment\n' +
+        '    // keep profile name comment\n' +
         '    "name": "cpp",\n' +
         '    "configuration": {\n' +
         '      "type": "cppdbg",\n' +
@@ -977,8 +997,8 @@ test('renameEntry preserves template and config comments while updating extends'
         '  "configurations": [\n' +
         '    {\n' +
         '      "name": "Launch",\n' +
-        '      // keep extends comment\n' +
-        '      "extends": "cpp"\n' +
+        '      // keep profile comment\n' +
+        '      "profile": "cpp"\n' +
         '    }\n' +
         '  ]\n' +
         '}\n',
@@ -987,32 +1007,32 @@ test('renameEntry preserves template and config comments while updating extends'
 
   await store.renameEntry(
     {
-      kind: 'template',
-      file: 'template.json',
+      kind: 'profile',
+      file: 'profile.json',
       index: 0,
     },
     'cpp-renamed',
   );
 
-  const templateText = new TextDecoder().decode(
-    await vscode.workspace.fs.readFile(templateUri),
+  const profileText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(profileUri),
   );
   const configText = new TextDecoder().decode(
     await vscode.workspace.fs.readFile(configUri),
   );
 
-  assert.match(templateText, /\/\/ keep template name comment/);
-  assert.match(configText, /\/\/ keep extends comment/);
-  assert.match(templateText, /"name": "cpp-renamed"/);
-  assert.match(configText, /"extends": "cpp-renamed"/);
+  assert.match(profileText, /\/\/ keep profile name comment/);
+  assert.match(configText, /\/\/ keep profile comment/);
+  assert.match(profileText, /"name": "cpp-renamed"/);
+  assert.match(configText, /"profile": "cpp-renamed"/);
 });
 
 test('patch entry updates preserve comments around edited fields', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/comment-patch-project'),
   );
-  const templateUri = vscode.Uri.file(
-    '/workspace/comment-patch-project/.vscode/launch-composer/templates/template.json',
+  const profileUri = vscode.Uri.file(
+    '/workspace/comment-patch-project/.vscode/launch-composer/profiles/profile.json',
   );
   const configUri = vscode.Uri.file(
     '/workspace/comment-patch-project/.vscode/launch-composer/configs/config.json',
@@ -1020,7 +1040,7 @@ test('patch entry updates preserve comments around edited fields', async () => {
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/comment-patch-project/.vscode/launch-composer/templates',
+      '/workspace/comment-patch-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.createDirectory(
@@ -1029,7 +1049,7 @@ test('patch entry updates preserve comments around edited fields', async () => {
     ),
   );
   await vscode.workspace.fs.writeFile(
-    templateUri,
+    profileUri,
     new TextEncoder().encode(
       '[\n' +
         '  {\n' +
@@ -1037,7 +1057,7 @@ test('patch entry updates preserve comments around edited fields', async () => {
         '    "configuration": {\n' +
         '      "type": "node",\n' +
         '      "request": "launch",\n' +
-        '      // keep template program comment\n' +
+        '      // keep profile program comment\n' +
         '      "program": "${workspaceFolder}/old.js"\n' +
         '    }\n' +
         '  }\n' +
@@ -1065,16 +1085,16 @@ test('patch entry updates preserve comments around edited fields', async () => {
     ),
   );
 
-  const templateRevision = await store.getDataFileRevision(
-    'template',
-    'template.json',
+  const profileRevision = await store.getDataFileRevision(
+    'profile',
+    'profile.json',
   );
   const configRevision = await store.getDataFileRevision(
     'config',
     'config.json',
   );
 
-  await store.patchTemplateEntry('template.json', 0, templateRevision, [
+  await store.patchProfileEntry('profile.json', 0, profileRevision, [
     {
       type: 'set',
       path: ['configuration', 'program'],
@@ -1089,30 +1109,30 @@ test('patch entry updates preserve comments around edited fields', async () => {
     },
   ]);
 
-  const templateText = new TextDecoder().decode(
-    await vscode.workspace.fs.readFile(templateUri),
+  const profileText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(profileUri),
   );
   const configText = new TextDecoder().decode(
     await vscode.workspace.fs.readFile(configUri),
   );
 
-  assert.match(templateText, /\/\/ keep template program comment/);
+  assert.match(profileText, /\/\/ keep profile program comment/);
   assert.match(configText, /\/\/ keep config cwd comment/);
-  assert.match(templateText, /"program": "\$\{workspaceFolder\}\/server\.js"/);
+  assert.match(profileText, /"program": "\$\{workspaceFolder\}\/server\.js"/);
   assert.match(configText, /"cwd": "\$\{workspaceFolder\}\/dist"/);
 });
 
-test('patchTemplateEntry rejects name updates', async () => {
+test('patchProfileEntry rejects name updates', async () => {
   const store = new WorkspaceStore(
-    vscode.Uri.file('/workspace/patch-template-name-project'),
+    vscode.Uri.file('/workspace/patch-profile-name-project'),
   );
   const fileUri = vscode.Uri.file(
-    '/workspace/patch-template-name-project/.vscode/launch-composer/templates/template.json',
+    '/workspace/patch-profile-name-project/.vscode/launch-composer/profiles/profile.json',
   );
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/patch-template-name-project/.vscode/launch-composer/templates',
+      '/workspace/patch-profile-name-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.writeFile(
@@ -1122,11 +1142,11 @@ test('patchTemplateEntry rejects name updates', async () => {
     ),
   );
 
-  const revision = await store.getDataFileRevision('template', 'template.json');
+  const revision = await store.getDataFileRevision('profile', 'profile.json');
 
   await assert.rejects(
     async () =>
-      store.patchTemplateEntry('template.json', 0, revision, [
+      store.patchProfileEntry('profile.json', 0, revision, [
         {
           type: 'set',
           path: ['name'],
@@ -1184,25 +1204,25 @@ test('patchConfigEntry rejects name updates', async () => {
   );
 });
 
-test('copyTemplateFilePath writes the backing JSON path to the clipboard', async () => {
+test('copyProfileFilePath writes the backing JSON path to the clipboard', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders(['/workspace/copy-path-project']);
 
   activate(context);
-  await vscode.commands.executeCommand(COMMANDS.copyTemplateFilePath, {
+  await vscode.commands.executeCommand(COMMANDS.copyProfileFilePath, {
     type: 'file',
-    kind: 'template',
-    file: 'template.json',
+    kind: 'profile',
+    file: 'profile.json',
   });
 
   assert.equal(
     testVscode.__testing.getClipboardText(),
-    '/workspace/copy-path-project/.vscode/launch-composer/templates/template.json',
+    '/workspace/copy-path-project/.vscode/launch-composer/profiles/profile.json',
   );
 });
 
-test('copyTemplateFileRelativePath writes the workspace-relative JSON path to the clipboard', async () => {
+test('copyProfileFileRelativePath writes the workspace-relative JSON path to the clipboard', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders([
@@ -1210,35 +1230,35 @@ test('copyTemplateFileRelativePath writes the workspace-relative JSON path to th
   ]);
 
   activate(context);
-  await vscode.commands.executeCommand(COMMANDS.copyTemplateFileRelativePath, {
+  await vscode.commands.executeCommand(COMMANDS.copyProfileFileRelativePath, {
     type: 'file',
-    kind: 'template',
-    file: 'template.json',
+    kind: 'profile',
+    file: 'profile.json',
   });
 
   assert.equal(
     testVscode.__testing.getClipboardText(),
-    '.vscode/launch-composer/templates/template.json',
+    '.vscode/launch-composer/profiles/profile.json',
   );
 });
 
-test('addTemplate initializes directories before listing files', async () => {
+test('addProfile initializes directories before listing files', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
-  testVscode.__testing.setWorkspaceFolders(['/workspace/add-template-project']);
+  testVscode.__testing.setWorkspaceFolders(['/workspace/add-profile-project']);
   testVscode.__testing.setQuickPickResponses([
     { label: '$(add) Create new file', value: '__create__' },
   ]);
-  testVscode.__testing.setInputBoxResponses(['templates', 'cpp']);
+  testVscode.__testing.setInputBoxResponses(['profiles', 'cpp']);
 
   activate(context);
-  await vscode.commands.executeCommand(COMMANDS.addTemplate);
+  await vscode.commands.executeCommand(COMMANDS.addProfile);
 
   assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
-      '/workspace/add-template-project/.vscode/launch-composer/templates/templates.json',
+      '/workspace/add-profile-project/.vscode/launch-composer/profiles/profiles.json',
     ),
   );
 
@@ -1256,26 +1276,26 @@ test('sync commands only warn once per invalid file until it is fixed', async ()
 
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
-      '/workspace/warn-once-project/.vscode/launch-composer/templates',
+      '/workspace/warn-once-project/.vscode/launch-composer/profiles',
     ),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/warn-once-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/warn-once-project/.vscode/launch-composer/profiles/profile.json',
     ),
     new TextEncoder().encode(''),
   );
 
   activate(context);
-  await vscode.commands.executeCommand(COMMANDS.addTemplateFile);
-  await vscode.commands.executeCommand(COMMANDS.addTemplateFile);
+  await vscode.commands.executeCommand(COMMANDS.addProfileFile);
+  await vscode.commands.executeCommand(COMMANDS.addProfileFile);
 
   assert.deepEqual(testVscode.__testing.getWarningMessages(), [
-    'template.json is empty. Expected a JSON array such as [].',
+    'profile.json is empty. Expected a JSON array such as [].',
   ]);
 });
 
-test('generate writes an empty launch.json when no templates or configs exist', async () => {
+test('generate writes an empty launch.json when no profiles or configs exist', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders([

@@ -149,7 +149,7 @@ textarea {
 
 .composer-input-action-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-profile-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 8px;
   width: 100%;
@@ -176,6 +176,6 @@ textarea {
   }
 
   .composer-input-action-row {
-    grid-template-columns: 1fr;
+    grid-profile-columns: 1fr;
   }
 }

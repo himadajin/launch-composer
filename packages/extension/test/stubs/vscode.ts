@@ -196,6 +196,7 @@ let clipboardText = '';
 const configuration = new Map<string, unknown>();
 const quickPickResponses: unknown[] = [];
 const inputBoxResponses: unknown[] = [];
+const infoMessageResponses: unknown[] = [];
 let lastQuickPickCall:
   | {
       items: unknown[];
@@ -505,9 +506,13 @@ export const window = {
     return undefined;
   },
 
-  async showInformationMessage(message: string): Promise<undefined> {
+  async showInformationMessage<T extends string>(
+    message: string,
+    ...items: T[]
+  ): Promise<T | undefined> {
     infoMessages.push(message);
-    return undefined;
+    void items;
+    return infoMessageResponses.shift() as T | undefined;
   },
 
   async showWarningMessage(message: string): Promise<undefined> {
@@ -632,6 +637,7 @@ export const __testing = {
     configuration.clear();
     quickPickResponses.length = 0;
     inputBoxResponses.length = 0;
+    infoMessageResponses.length = 0;
     workspaceFolders = undefined;
     missingPathErrorStyle = 'vscode';
     lastQuickPickCall = undefined;
@@ -675,6 +681,11 @@ export const __testing = {
   setInputBoxResponses(responses: unknown[]): void {
     inputBoxResponses.length = 0;
     inputBoxResponses.push(...responses);
+  },
+
+  setInfoMessageResponses(responses: unknown[]): void {
+    infoMessageResponses.length = 0;
+    infoMessageResponses.push(...responses);
   },
 
   getRegisteredCommands(): string[] {

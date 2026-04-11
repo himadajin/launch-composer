@@ -1,11 +1,11 @@
-export interface TemplateEntry {
+export interface ProfileEntry {
   [key: string]: unknown;
 }
 
-export interface TemplateData {
+export interface ProfileData {
   name: string;
   args?: string[];
-  configuration?: TemplateEntry;
+  configuration?: ProfileEntry;
 }
 
 export interface ConfigEntry {
@@ -15,15 +15,15 @@ export interface ConfigEntry {
 export interface ConfigData {
   name: string;
   enabled?: boolean;
-  extends?: string;
+  profile: string;
   argsFile?: string;
   args?: string[];
   configuration?: ConfigEntry;
 }
 
-export interface TemplateFileData {
+export interface ProfileFileData {
   file: string;
-  templates: TemplateData[];
+  profiles: ProfileData[];
 }
 
 export interface ConfigFileData {
@@ -40,13 +40,13 @@ export interface ValidationError {
 }
 
 export interface EditorTarget {
-  kind: 'template' | 'config';
+  kind: 'profile' | 'config';
   file: string;
   index: number;
 }
 
 export interface ComposerDataIssue {
-  kind: 'template' | 'config';
+  kind: 'profile' | 'config';
   file: string;
   code: 'empty' | 'invalid-json' | 'invalid-shape';
   message: string;
@@ -54,7 +54,7 @@ export interface ComposerDataIssue {
 }
 
 export interface InitialDataPayload {
-  templates: TemplateFileData[];
+  profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
   editor: EditorTarget;
@@ -63,8 +63,8 @@ export interface InitialDataPayload {
 }
 
 export interface WorkspaceUpdatePayload {
-  kind: 'template' | 'config';
-  templates?: TemplateFileData[];
+  kind: 'profile' | 'config';
+  profiles?: ProfileFileData[];
   configs?: ConfigFileData[];
   issues: ComposerDataIssue[];
   editorRevision?: string | null;
@@ -83,7 +83,7 @@ export type EntryPatchOperation =
 
 export type WebviewMessage =
   | {
-      type: 'update-template';
+      type: 'update-profile';
       requestId: string;
       payload: {
         file: string;
@@ -106,14 +106,14 @@ export type WebviewMessage =
       type: 'rename-entry';
       requestId: string;
       payload: {
-        kind: 'template' | 'config';
+        kind: 'profile' | 'config';
         file: string;
         index: number;
         name: string;
       };
     }
   | {
-      type: 'delete-template';
+      type: 'delete-profile';
       requestId: string;
       payload: { file: string; index: number };
     }
@@ -127,7 +127,7 @@ export type WebviewMessage =
   | { type: 'browse-file'; requestId: string }
   | {
       type: 'open-file-json';
-      payload: { kind: 'template' | 'config'; file: string };
+      payload: { kind: 'profile' | 'config'; file: string };
     };
 
 export type HostMessage =

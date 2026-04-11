@@ -1,8 +1,8 @@
 import type {
   ConfigData,
   ConfigFileData,
-  TemplateData,
-  TemplateFileData,
+  ProfileData,
+  ProfileFileData,
 } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
@@ -15,11 +15,11 @@ import type {
 
 type FileNode = {
   type: 'file';
-  kind: 'template' | 'config';
+  kind: 'profile' | 'config';
   file: string;
   issue?: ComposerDataIssue;
   enabled?: boolean;
-  templates?: TemplateData[];
+  profiles?: ProfileData[];
   configurations?: ConfigData[];
 };
 
@@ -59,7 +59,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
   private snapshot: WorkspaceDataSnapshot | undefined;
 
   constructor(
-    private readonly kind: 'template' | 'config',
+    private readonly kind: 'profile' | 'config',
     private readonly store: WorkspaceStore,
   ) {}
 
@@ -80,21 +80,21 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     }
 
     const entries =
-      element.kind === 'template'
-        ? (element.templates ?? [])
+      element.kind === 'profile'
+        ? (element.profiles ?? [])
         : (element.configurations ?? []);
 
     return entries.map((entry, index) => {
       const node: EntryNode =
-        element.kind === 'template'
+        element.kind === 'profile'
           ? {
               type: 'entry',
               target: {
-                kind: 'template',
+                kind: 'profile',
                 file: element.file,
                 index,
               },
-              label: (entry as TemplateData).name,
+              label: (entry as ProfileData).name,
             }
           : {
               type: 'entry',
@@ -124,13 +124,13 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       item.id = `file:${element.kind}:${element.file}`;
       item.contextValue =
         element.issue === undefined
-          ? element.kind === 'template'
-            ? 'templateFile'
+          ? element.kind === 'profile'
+            ? 'profileFile'
             : element.enabled === false
               ? 'configFileDisabled'
               : 'configFile'
-          : element.kind === 'template'
-            ? 'templateFileInvalid'
+          : element.kind === 'profile'
+            ? 'profileFileInvalid'
             : 'configFileInvalid';
       item.resourceUri = this.store.getDataFileUriForTreeItem(
         element.kind,
@@ -139,8 +139,8 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       if (element.issue !== undefined) {
         item.command = {
           command:
-            element.kind === 'template'
-              ? 'launch-composer.openTemplateFileJson'
+            element.kind === 'profile'
+              ? 'launch-composer.openProfileFileJson'
               : 'launch-composer.openConfigFileJson',
           title: 'Open JSON',
           arguments: [element],
@@ -166,8 +166,8 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     );
     item.id = getEntryKey(element.target);
     item.contextValue =
-      element.target.kind === 'template'
-        ? 'templateEntry'
+      element.target.kind === 'profile'
+        ? 'profileEntry'
         : element.inheritedDisabled
           ? 'configEntryDisabledByFile'
           : element.enabled
@@ -220,7 +220,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
   private async loadRootNodes(): Promise<TreeNode[]> {
     const data = this.snapshot ?? (await this.store.readAll());
-    const files = this.kind === 'template' ? data.templates : data.configs;
+    const files = this.kind === 'profile' ? data.profiles : data.configs;
     const fileNames = [
       ...files.map((f) => f.file),
       ...data.issues.filter((i) => i.kind === this.kind).map((i) => i.file),
@@ -241,13 +241,13 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
             file,
             issue,
           }
-        : this.kind === 'template'
+        : this.kind === 'profile'
           ? {
               type: 'file',
-              kind: 'template',
+              kind: 'profile',
               file,
-              templates:
-                (fileData as TemplateFileData | undefined)?.templates ?? [],
+              profiles:
+                (fileData as ProfileFileData | undefined)?.profiles ?? [],
             }
           : {
               type: 'file',

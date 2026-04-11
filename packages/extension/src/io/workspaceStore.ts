@@ -3,8 +3,8 @@ import {
   type ConfigData,
   type ConfigFileData,
   type GenerateResult,
-  type TemplateData,
-  type TemplateFileData,
+  type ProfileData,
+  type ProfileFileData,
 } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
@@ -23,25 +23,25 @@ import {
 } from './json.js';
 
 const COMPOSER_DIR = '.vscode/launch-composer';
-const TEMPLATES_DIR = `${COMPOSER_DIR}/templates`;
+const PROFILES_DIR = `${COMPOSER_DIR}/profiles`;
 const CONFIGS_DIR = `${COMPOSER_DIR}/configs`;
 const LAUNCH_FILE = '.vscode/launch.json';
-const DEFAULT_TEMPLATE_FILE = 'template.json';
+const DEFAULT_PROFILE_FILE = 'profile.json';
 const DEFAULT_CONFIG_FILE = 'config.json';
-const DEFAULT_TEMPLATE_CONTENT =
-  '// Add template entries to this array.\n' +
-  '// Each template should have a unique "name".\n' +
+const DEFAULT_PROFILE_CONTENT =
+  '// Add profile entries to this array.\n' +
+  '// Each profile should have a unique "name".\n' +
   '[]\n';
 const DEFAULT_CONFIG_CONTENT =
   '// Configure this file and add entries to "configurations".\n' +
-  '// Use "extends" to reference a template when needed.\n' +
+  '// Set "profile" to reference a profile.\n' +
   '{\n' +
   '  "enabled": true,\n' +
   '  "configurations": []\n' +
   '}\n';
 
 export interface ComposerDataIssue {
-  kind: 'template' | 'config';
+  kind: 'profile' | 'config';
   file: string;
   code: 'empty' | 'invalid-json' | 'invalid-shape';
   message: string;
@@ -49,13 +49,13 @@ export interface ComposerDataIssue {
 }
 
 export interface WorkspaceDataSnapshot {
-  templates: TemplateFileData[];
+  profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
 }
 
-export interface TemplateWorkspaceData {
-  templates: TemplateFileData[];
+export interface ProfileWorkspaceData {
+  profiles: ProfileFileData[];
   issues: ComposerDataIssue[];
 }
 
@@ -98,10 +98,10 @@ export class WorkspaceStore {
     );
   }
 
-  getRelativeTemplatePattern(): vscode.RelativePattern {
+  getRelativeProfilePattern(): vscode.RelativePattern {
     return new vscode.RelativePattern(
       this.workspaceRoot,
-      `${TEMPLATES_DIR}/**/*.json`,
+      `${PROFILES_DIR}/**/*.json`,
     );
   }
 
@@ -113,22 +113,22 @@ export class WorkspaceStore {
   }
 
   async readAll(): Promise<WorkspaceDataSnapshot> {
-    const [templatesResult, configsResult] = await Promise.all([
-      this.readTemplatesWithIssues(),
+    const [profilesResult, configsResult] = await Promise.all([
+      this.readProfilesWithIssues(),
       this.readConfigsWithIssues(),
     ]);
 
     return {
-      templates: templatesResult.templates,
+      profiles: profilesResult.profiles,
       configs: configsResult.configs,
-      issues: [...templatesResult.issues, ...configsResult.issues],
+      issues: [...profilesResult.issues, ...configsResult.issues],
     };
   }
 
-  async readTemplatesWithIssues(): Promise<TemplateWorkspaceData> {
-    const result = await this.readTemplateFiles();
+  async readProfilesWithIssues(): Promise<ProfileWorkspaceData> {
+    const result = await this.readProfileFiles();
     return {
-      templates: result.data,
+      profiles: result.data,
       issues: result.issues,
     };
   }
@@ -141,16 +141,16 @@ export class WorkspaceStore {
     };
   }
 
-  async listTemplateNames(): Promise<string[]> {
-    const data = await this.readTemplateFiles();
+  async listProfileNames(): Promise<string[]> {
+    const data = await this.readProfileFiles();
     return data.data.flatMap((fileData) =>
-      fileData.templates.map((template) => template.name),
+      fileData.profiles.map((profile) => profile.name),
     );
   }
 
-  async listFiles(kind: 'template' | 'config'): Promise<string[]> {
+  async listFiles(kind: 'profile' | 'config'): Promise<string[]> {
     const directory =
-      kind === 'template' ? this.getTemplatesDirUri() : this.getConfigsDirUri();
+      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
     const entries = await this.readDirectory(directory);
 
     return entries
@@ -168,7 +168,7 @@ export class WorkspaceStore {
   }> {
     const targets = [
       [COMPOSER_DIR, this.getComposerDirUri()],
-      [TEMPLATES_DIR, this.getTemplatesDirUri()],
+      [PROFILES_DIR, this.getProfilesDirUri()],
       [CONFIGS_DIR, this.getConfigsDirUri()],
     ] as const;
 
@@ -182,12 +182,12 @@ export class WorkspaceStore {
     const ensuredFiles: string[] = [];
     if (
       await this.ensureDefaultDataFile(
-        'template',
-        DEFAULT_TEMPLATE_FILE,
-        DEFAULT_TEMPLATE_CONTENT,
+        'profile',
+        DEFAULT_PROFILE_FILE,
+        DEFAULT_PROFILE_CONTENT,
       )
     ) {
-      ensuredFiles.push(`${TEMPLATES_DIR}/${DEFAULT_TEMPLATE_FILE}`);
+      ensuredFiles.push(`${PROFILES_DIR}/${DEFAULT_PROFILE_FILE}`);
     }
 
     if (
@@ -204,14 +204,14 @@ export class WorkspaceStore {
   }
 
   async createDataFile(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     rawFileName: string,
   ): Promise<string> {
     await this.ensureInitializedDirectory(kind);
 
     const fileName = normalizeFileName(rawFileName);
     const targetDir =
-      kind === 'template' ? this.getTemplatesDirUri() : this.getConfigsDirUri();
+      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
     const uri = vscode.Uri.joinPath(targetDir, fileName);
 
     if (await this.hasDataFile(kind, fileName)) {
@@ -221,7 +221,7 @@ export class WorkspaceStore {
     await vscode.workspace.fs.writeFile(
       uri,
       encodeText(
-        kind === 'template'
+        kind === 'profile'
           ? '[]\n'
           : stringifyJsonFile(createEmptyConfigFile()),
       ),
@@ -229,11 +229,11 @@ export class WorkspaceStore {
     return fileName;
   }
 
-  getDataFilePath(kind: 'template' | 'config', file: string): string {
+  getDataFilePath(kind: 'profile' | 'config', file: string): string {
     return this.getDataFileUri(kind, file).fsPath;
   }
 
-  getDataFileRelativePath(kind: 'template' | 'config', file: string): string {
+  getDataFileRelativePath(kind: 'profile' | 'config', file: string): string {
     return vscode.workspace.asRelativePath(
       this.getDataFileUri(kind, file),
       false,
@@ -249,7 +249,7 @@ export class WorkspaceStore {
   }
 
   async getDataFileRevision(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): Promise<string | null> {
     const uri = this.getDataFileUri(kind, file);
@@ -269,7 +269,7 @@ export class WorkspaceStore {
   }
 
   async renameDataFile(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
     rawFileName: string,
   ): Promise<string> {
@@ -296,7 +296,7 @@ export class WorkspaceStore {
   }
 
   async deleteDataFile(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
     const uri = this.getDataFileUri(kind, file);
@@ -312,18 +312,18 @@ export class WorkspaceStore {
     }
   }
 
-  async addTemplateEntry(file: string, name: string): Promise<EditorTarget> {
-    await this.ensureArrayDataFile('template', file);
-    const text = await this.readRequiredDataFileText('template', file);
-    const entries = this.parseTemplateEntries(file, text);
+  async addProfileEntry(file: string, name: string): Promise<EditorTarget> {
+    await this.ensureArrayDataFile('profile', file);
+    const text = await this.readRequiredDataFileText('profile', file);
+    const entries = this.parseProfileEntries(file, text);
     const nextText = appendJsonArrayValue(text, [], {
       name,
       configuration: { type: '', request: 'launch' },
     });
-    await this.writeDataFileText('template', file, nextText);
+    await this.writeDataFileText('profile', file, nextText);
 
     return {
-      kind: 'template',
+      kind: 'profile',
       file,
       index: entries.length,
     };
@@ -332,19 +332,12 @@ export class WorkspaceStore {
   async addConfigEntry(
     file: string,
     name: string,
-    extendsName: string | undefined,
+    profileName: string,
   ): Promise<EditorTarget> {
     await this.ensureConfigDataFile(file);
     const text = await this.readRequiredDataFileText('config', file);
     const configFile = this.parseConfigFileContent(file, text);
-    const data: ConfigData =
-      extendsName !== undefined
-        ? { name, enabled: true, extends: extendsName }
-        : {
-            name,
-            enabled: true,
-            configuration: { type: '', request: 'launch' },
-          };
+    const data: ConfigData = { name, enabled: true, profile: profileName };
 
     const nextText = appendJsonArrayValue(text, ['configurations'], data);
     await this.writeDataFileText('config', file, nextText);
@@ -356,13 +349,13 @@ export class WorkspaceStore {
     };
   }
 
-  async patchTemplateEntry(
+  async patchProfileEntry(
     file: string,
     index: number,
     baseRevision: string | null,
     patches: JsonObjectPatchOperation[],
   ): Promise<EntryPatchResult> {
-    return this.patchArrayEntry('template', file, index, baseRevision, patches);
+    return this.patchArrayEntry('profile', file, index, baseRevision, patches);
   }
 
   async patchConfigEntry(
@@ -403,16 +396,16 @@ export class WorkspaceStore {
   }
 
   async deleteEntry(target: EditorTarget): Promise<void> {
-    if (target.kind === 'template') {
-      const text = await this.readRequiredDataFileText('template', target.file);
-      const templates = this.parseTemplateEntries(target.file, text);
-      assertIndex(templates, target.index, target.file);
-      const template = templates[target.index]!;
-      const references = await this.findConfigReferences(template.name);
+    if (target.kind === 'profile') {
+      const text = await this.readRequiredDataFileText('profile', target.file);
+      const profiles = this.parseProfileEntries(target.file, text);
+      assertIndex(profiles, target.index, target.file);
+      const profile = profiles[target.index]!;
+      const references = await this.findConfigReferences(profile.name);
 
       if (references.length > 0) {
         throw new Error(
-          `Cannot delete template "${template.name}" because it is referenced by: ${references.join(', ')}`,
+          `Cannot delete profile "${profile.name}" because it is referenced by: ${references.join(', ')}`,
         );
       }
 
@@ -422,7 +415,7 @@ export class WorkspaceStore {
           path: [target.index],
         },
       ]);
-      await this.writeDataFileText('template', target.file, nextText);
+      await this.writeDataFileText('profile', target.file, nextText);
       return;
     }
 
@@ -442,11 +435,11 @@ export class WorkspaceStore {
     const nextName = normalizeEntryName(rawName);
     await this.assertUniqueEntryName(nextName, target);
 
-    if (target.kind === 'template') {
-      const text = await this.readRequiredDataFileText('template', target.file);
-      const templates = this.parseTemplateEntries(target.file, text);
-      assertIndex(templates, target.index, target.file);
-      const current = templates[target.index]!;
+    if (target.kind === 'profile') {
+      const text = await this.readRequiredDataFileText('profile', target.file);
+      const profiles = this.parseProfileEntries(target.file, text);
+      assertIndex(profiles, target.index, target.file);
+      const current = profiles[target.index]!;
       if (current.name === nextName) {
         return;
       }
@@ -458,8 +451,8 @@ export class WorkspaceStore {
           value: nextName,
         },
       ]);
-      await this.writeDataFileText('template', target.file, nextText);
-      await this.updateTemplateReferences(current.name, nextName);
+      await this.writeDataFileText('profile', target.file, nextText);
+      await this.updateProfileReferences(current.name, nextName);
       return;
     }
 
@@ -482,7 +475,7 @@ export class WorkspaceStore {
   }
 
   async openDataFileAsJson(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
     const uri = this.getDataFileUri(kind, file);
@@ -493,7 +486,7 @@ export class WorkspaceStore {
   }
 
   getDataFileUriForTreeItem(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): vscode.Uri {
     return this.getDataFileUri(kind, file);
@@ -506,7 +499,7 @@ export class WorkspaceStore {
     const offset =
       findArrayEntryOffset(
         text,
-        target.kind === 'template'
+        target.kind === 'profile'
           ? [target.index]
           : ['configurations', target.index],
       ) ?? 0;
@@ -522,13 +515,13 @@ export class WorkspaceStore {
   }
 
   async hasEntry(target: EditorTarget): Promise<boolean> {
-    if (target.kind === 'template') {
-      const result = await this.readTemplateFileResult(target.file);
+    if (target.kind === 'profile') {
+      const result = await this.readProfileFileResult(target.file);
       if (result.status !== 'ok') {
         return false;
       }
 
-      return target.index >= 0 && target.index < result.data.templates.length;
+      return target.index >= 0 && target.index < result.data.profiles.length;
     }
 
     const result = await this.readConfigFileResult(target.file);
@@ -544,13 +537,13 @@ export class WorkspaceStore {
   isComposerDataFile(uri: vscode.Uri): boolean {
     const relativePath = vscode.workspace.asRelativePath(uri, false);
     return (
-      relativePath.startsWith(`${TEMPLATES_DIR}/`) ||
+      relativePath.startsWith(`${PROFILES_DIR}/`) ||
       relativePath.startsWith(`${CONFIGS_DIR}/`)
     );
   }
 
   async generateLaunchJson(): Promise<GenerateResult> {
-    const { templates, configs, issues } = await this.readAll();
+    const { profiles, configs, issues } = await this.readAll();
     if (issues.length > 0) {
       return {
         success: false,
@@ -562,7 +555,7 @@ export class WorkspaceStore {
     }
 
     return generate({
-      templates,
+      profiles,
       configs,
       variables: {
         workspaceFolder: this.workspaceRoot.fsPath,
@@ -611,13 +604,13 @@ export class WorkspaceStore {
     return this.exists(this.getLaunchJsonUri());
   }
 
-  private async readTemplateFiles(): Promise<{
-    data: TemplateFileData[];
+  private async readProfileFiles(): Promise<{
+    data: ProfileFileData[];
     issues: ComposerDataIssue[];
   }> {
-    const entries = await this.listFiles('template');
+    const entries = await this.listFiles('profile');
     return this.readExistingFiles(entries, (file) =>
-      this.readTemplateFileResult(file),
+      this.readProfileFileResult(file),
     );
   }
 
@@ -631,8 +624,8 @@ export class WorkspaceStore {
     );
   }
 
-  private async readTemplateFile(file: string): Promise<TemplateFileData> {
-    const result = await this.readTemplateFileResult(file);
+  private async readProfileFile(file: string): Promise<ProfileFileData> {
+    const result = await this.readProfileFileResult(file);
     if (result.status === 'ok') {
       return result.data;
     }
@@ -657,21 +650,21 @@ export class WorkspaceStore {
     );
   }
 
-  private async readTemplateFileResult(
+  private async readProfileFileResult(
     file: string,
   ): Promise<
-    | { status: 'ok'; data: TemplateFileData }
+    | { status: 'ok'; data: ProfileFileData }
     | { status: 'missing' }
     | { status: 'invalid'; issue: ComposerDataIssue }
   > {
-    const result = await this.readArrayFile<TemplateData>('template', file);
+    const result = await this.readArrayFile<ProfileData>('profile', file);
     if (result.status !== 'ok') {
       return result;
     }
 
     return {
       status: 'ok',
-      data: { file, templates: result.data },
+      data: { file, profiles: result.data },
     };
   }
 
@@ -729,11 +722,11 @@ export class WorkspaceStore {
     };
   }
 
-  private parseTemplateEntries(file: string, text: string): TemplateData[] {
+  private parseProfileEntries(file: string, text: string): ProfileData[] {
     const parsed = parseJsoncDocument<unknown>(text);
     if (parsed.issues.length > 0) {
       throw new Error(
-        this.createParseIssue('template', file, text, parsed.issues).message,
+        this.createParseIssue('profile', file, text, parsed.issues).message,
       );
     }
 
@@ -741,7 +734,7 @@ export class WorkspaceStore {
       throw new Error(`${file} must contain a JSON array.`);
     }
 
-    return parsed.value as TemplateData[];
+    return parsed.value as ProfileData[];
   }
 
   private parseConfigFileContent(
@@ -775,7 +768,7 @@ export class WorkspaceStore {
   }
 
   private async readArrayFile<T>(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): Promise<ArrayFileReadResult<T>> {
     const uri = this.getDataFileUri(kind, file);
@@ -816,7 +809,7 @@ export class WorkspaceStore {
   }
 
   private async readRequiredDataFileText(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): Promise<string> {
     const uri = this.getDataFileUri(kind, file);
@@ -834,7 +827,7 @@ export class WorkspaceStore {
   }
 
   private async writeDataFileText(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
     text: string,
   ): Promise<void> {
@@ -844,7 +837,7 @@ export class WorkspaceStore {
   }
 
   private async patchArrayEntry(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
     index: number,
     baseRevision: string | null,
@@ -885,8 +878,8 @@ export class WorkspaceStore {
     }
 
     const entries =
-      kind === 'template'
-        ? this.parseTemplateEntries(file, text)
+      kind === 'profile'
+        ? this.parseProfileEntries(file, text)
         : this.parseConfigFileContent(file, text).configurations;
 
     assertIndex(entries, index, file);
@@ -895,7 +888,7 @@ export class WorkspaceStore {
       throw new Error(`Entry index ${index} in ${file} must be a JSON object.`);
     }
 
-    const entryPath = kind === 'template' ? [index] : ['configurations', index];
+    const entryPath = kind === 'profile' ? [index] : ['configurations', index];
     const nextText = applyJsonDocumentPatches(
       text,
       joinJsonPatchPath(entryPath, patches),
@@ -914,13 +907,13 @@ export class WorkspaceStore {
     };
   }
 
-  private async findConfigReferences(templateName: string): Promise<string[]> {
+  private async findConfigReferences(profileName: string): Promise<string[]> {
     const configFiles = await this.readConfigFiles();
     const references: string[] = [];
 
     for (const fileData of configFiles.data) {
       fileData.configurations.forEach((config) => {
-        if (config.extends === templateName) {
+        if (config.profile === profileName) {
           references.push(`${fileData.file}:${config.name}`);
         }
       });
@@ -975,12 +968,12 @@ export class WorkspaceStore {
     name: string,
     target: EditorTarget,
   ): Promise<void> {
-    const { templates, configs } = await this.readAll();
+    const { profiles, configs } = await this.readAll();
 
-    for (const fileData of templates) {
-      fileData.templates.forEach((entry, index) => {
+    for (const fileData of profiles) {
+      fileData.profiles.forEach((entry, index) => {
         if (
-          target.kind === 'template' &&
+          target.kind === 'profile' &&
           fileData.file === target.file &&
           index === target.index
         ) {
@@ -1010,7 +1003,7 @@ export class WorkspaceStore {
     }
   }
 
-  private async updateTemplateReferences(
+  private async updateProfileReferences(
     currentName: string,
     nextName: string,
   ): Promise<void> {
@@ -1023,11 +1016,11 @@ export class WorkspaceStore {
     await Promise.all(
       configFiles.data.map(async (fileData) => {
         const patches = fileData.configurations.flatMap((config, index) =>
-          config.extends === currentName
+          config.profile === currentName
             ? ([
                 {
                   type: 'set',
-                  path: ['configurations', index, 'extends'],
+                  path: ['configurations', index, 'profile'],
                   value: nextName,
                 },
               ] satisfies JsonObjectPatchOperation[])
@@ -1065,8 +1058,8 @@ export class WorkspaceStore {
     return vscode.Uri.joinPath(this.workspaceRoot, COMPOSER_DIR);
   }
 
-  private getTemplatesDirUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, TEMPLATES_DIR);
+  private getProfilesDirUri(): vscode.Uri {
+    return vscode.Uri.joinPath(this.workspaceRoot, PROFILES_DIR);
   }
 
   private getConfigsDirUri(): vscode.Uri {
@@ -1078,7 +1071,7 @@ export class WorkspaceStore {
   }
 
   private async ensureArrayDataFile(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
     await this.ensureInitializedDirectory(kind);
@@ -1108,7 +1101,7 @@ export class WorkspaceStore {
   }
 
   private async ensureDefaultDataFile(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
     content: string,
   ): Promise<boolean> {
@@ -1125,12 +1118,12 @@ export class WorkspaceStore {
   }
 
   private async hasDataFile(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
   ): Promise<boolean> {
     const fileName = normalizeFileName(file);
     const directory =
-      kind === 'template' ? this.getTemplatesDirUri() : this.getConfigsDirUri();
+      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
     const entries = await this.readDirectory(directory);
 
     return entries.some(
@@ -1139,27 +1132,24 @@ export class WorkspaceStore {
     );
   }
 
-  private getDataFileUri(
-    kind: 'template' | 'config',
-    file: string,
-  ): vscode.Uri {
+  private getDataFileUri(kind: 'profile' | 'config', file: string): vscode.Uri {
     const fileName = normalizeFileName(file);
-    return kind === 'template'
-      ? vscode.Uri.joinPath(this.getTemplatesDirUri(), fileName)
+    return kind === 'profile'
+      ? vscode.Uri.joinPath(this.getProfilesDirUri(), fileName)
       : vscode.Uri.joinPath(this.getConfigsDirUri(), fileName);
   }
 
   private async ensureInitializedDirectory(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
   ): Promise<void> {
     await vscode.workspace.fs.createDirectory(this.getComposerDirUri());
     await vscode.workspace.fs.createDirectory(
-      kind === 'template' ? this.getTemplatesDirUri() : this.getConfigsDirUri(),
+      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri(),
     );
   }
 
   private createParseIssue(
-    kind: 'template' | 'config',
+    kind: 'profile' | 'config',
     file: string,
     text: string,
     issues: JsonParseIssue[],
@@ -1170,7 +1160,7 @@ export class WorkspaceStore {
         file,
         code: 'empty',
         message:
-          kind === 'template'
+          kind === 'profile'
             ? `${file} is empty. Expected a JSON array such as [].`
             : `${file} is empty. Expected an object with a "configurations" array.`,
       };

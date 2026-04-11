@@ -3,7 +3,7 @@ import type {
   ConfigRef,
   ConfigFileData,
   GenerateInput,
-  TemplateRef,
+  ProfileRef,
   ValidationError,
   ValidationState,
 } from './types.js';
@@ -22,49 +22,43 @@ export async function validateGenerateInput(
 export async function collectValidationState(
   input: GenerateInput,
 ): Promise<ValidationState> {
-  const templateRefs = flattenTemplates(input.templates);
+  const profileRefs = flattenProfiles(input.profiles);
   const configRefs = flattenConfigs(input.configs);
   const errors: ValidationError[] = [];
-  const templateMap = new Map<string, TemplateRef>();
+  const profileMap = new Map<string, ProfileRef>();
   const argsFileCache = new Map<string, ArgsFileData>();
 
-  validateTemplateEntries(templateRefs, errors);
+  validateProfileEntries(profileRefs, errors);
   validateConfigFiles(input.configs, errors);
   validateConfigEntries(configRefs, errors);
-  validateNameUniqueness(templateRefs, configRefs, errors);
+  validateNameUniqueness(profileRefs, configRefs, errors);
 
-  for (const templateRef of templateRefs) {
+  for (const profileRef of profileRefs) {
     if (
-      typeof templateRef.data.name === 'string' &&
-      templateRef.data.name !== ''
+      typeof profileRef.data.name === 'string' &&
+      profileRef.data.name !== ''
     ) {
-      templateMap.set(templateRef.data.name, templateRef);
+      profileMap.set(profileRef.data.name, profileRef);
     }
   }
 
   for (const configRef of configRefs) {
-    validateConfigSemantics(configRef, templateMap, errors);
-    await validateArgsFile(
-      configRef,
-      templateMap,
-      input,
-      argsFileCache,
-      errors,
-    );
+    validateConfigSemantics(configRef, profileMap, errors);
+    await validateArgsFile(configRef, profileMap, input, argsFileCache, errors);
   }
 
   return {
     errors,
-    templateRefs,
+    profileRefs,
     configRefs,
-    templateMap,
+    profileMap,
     argsFileCache,
   };
 }
 
-function flattenTemplates(files: GenerateInput['templates']): TemplateRef[] {
+function flattenProfiles(files: GenerateInput['profiles']): ProfileRef[] {
   return files.flatMap((fileData) =>
-    fileData.templates.map((data, index) => ({
+    fileData.profiles.map((data, index) => ({
       file: fileData.file,
       index,
       data,
@@ -115,58 +109,68 @@ function validateConfigFiles(
   }
 }
 
-function validateTemplateEntries(
-  templateRefs: TemplateRef[],
+function validateProfileEntries(
+  profileRefs: ProfileRef[],
   errors: ValidationError[],
 ): void {
-  for (const templateRef of templateRefs) {
-    if (!isNonEmptyString(templateRef.data.name)) {
+  for (const profileRef of profileRefs) {
+    if (!isNonEmptyString(profileRef.data.name)) {
       errors.push(
         createValidationError({
-          file: templateRef.file,
+          file: profileRef.file,
           field: 'name',
-          message: 'Template name is required.',
+          message: 'Profile name is required.',
         }),
       );
     }
 
     if (
-      Object.hasOwn(templateRef.data, 'args') &&
-      !isStringArray(templateRef.data.args)
+      Object.hasOwn(profileRef.data, 'args') &&
+      !isStringArray(profileRef.data.args)
     ) {
       errors.push(
         createValidationError({
-          file: templateRef.file,
+          file: profileRef.file,
           field: 'args',
-          message: 'Template args must be an array of strings.',
+          message: 'Profile args must be an array of strings.',
         }),
       );
     }
 
-    const templateEntry = templateRef.data.configuration;
+    const profileEntry = profileRef.data.configuration;
 
     if (
-      templateEntry !== undefined &&
-      (typeof templateEntry !== 'object' ||
-        templateEntry === null ||
-        Array.isArray(templateEntry))
+      profileEntry !== undefined &&
+      (typeof profileEntry !== 'object' ||
+        profileEntry === null ||
+        Array.isArray(profileEntry))
     ) {
       errors.push(
         createValidationError({
-          file: templateRef.file,
+          file: profileRef.file,
           field: 'configuration',
-          message: 'Template configuration must be an object.',
+          message: 'Profile configuration must be an object.',
         }),
       );
       continue;
     }
 
-    if (!isDebugRequestValue(templateEntry?.request)) {
+    if (!isDebugRequestValue(profileEntry?.request)) {
       errors.push(
         createValidationError({
-          file: templateRef.file,
+          file: profileRef.file,
           field: 'configuration.request',
-          message: `Template request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
+          message: `Profile request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
+        }),
+      );
+    }
+
+    if (!isNonEmptyString(profileEntry?.type)) {
+      errors.push(
+        createValidationError({
+          file: profileRef.file,
+          field: 'configuration.type',
+          message: 'Profile type is required.',
         }),
       );
     }
@@ -202,17 +206,13 @@ function validateConfigEntries(
       );
     }
 
-    if (
-      Object.hasOwn(configRef.data, 'extends') &&
-      configRef.data.extends !== undefined &&
-      typeof configRef.data.extends !== 'string'
-    ) {
+    if (!isNonEmptyString(configRef.data.profile)) {
       errors.push(
         createValidationError({
           file: configRef.file,
           configName: safeConfigName(configRef.data.name),
-          field: 'extends',
-          message: 'Config extends must be a string.',
+          field: 'profile',
+          message: 'Config profile is required.',
         }),
       );
     }
@@ -264,45 +264,31 @@ function validateConfigEntries(
       );
       continue;
     }
-
-    if (
-      configRef.data.extends === undefined &&
-      !isDebugRequestValue(configEntry?.request)
-    ) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          configName: safeConfigName(configRef.data.name),
-          field: 'configuration.request',
-          message: `Config request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
-        }),
-      );
-    }
   }
 }
 
 function validateNameUniqueness(
-  templateRefs: TemplateRef[],
+  profileRefs: ProfileRef[],
   configRefs: ConfigRef[],
   errors: ValidationError[],
 ): void {
   const groups = new Map<
     string,
-    Array<{ kind: 'template' | 'config'; file: string; index: number }>
+    Array<{ kind: 'profile' | 'config'; file: string; index: number }>
   >();
 
-  for (const templateRef of templateRefs) {
-    if (!isNonEmptyString(templateRef.data.name)) {
+  for (const profileRef of profileRefs) {
+    if (!isNonEmptyString(profileRef.data.name)) {
       continue;
     }
 
-    const entries = groups.get(templateRef.data.name) ?? [];
+    const entries = groups.get(profileRef.data.name) ?? [];
     entries.push({
-      kind: 'template',
-      file: templateRef.file,
-      index: templateRef.index,
+      kind: 'profile',
+      file: profileRef.file,
+      index: profileRef.index,
     });
-    groups.set(templateRef.data.name, entries);
+    groups.set(profileRef.data.name, entries);
   }
 
   for (const configRef of configRefs) {
@@ -325,8 +311,8 @@ function validateNameUniqueness(
     }
 
     const firstEntry = entries[0]!;
-    const templateCount = entries.filter(
-      (entry) => entry.kind === 'template',
+    const profileCount = entries.filter(
+      (entry) => entry.kind === 'profile',
     ).length;
     const configCount = entries.filter(
       (entry) => entry.kind === 'config',
@@ -336,12 +322,12 @@ function validateNameUniqueness(
     );
 
     let message: string;
-    if (templateCount > 0 && configCount === 0) {
-      message = `Template name "${name}" is defined in multiple entries: ${locations.join(', ')}`;
-    } else if (templateCount === 0 && configCount > 0) {
+    if (profileCount > 0 && configCount === 0) {
+      message = `Profile name "${name}" is defined in multiple entries: ${locations.join(', ')}`;
+    } else if (profileCount === 0 && configCount > 0) {
       message = `Config name "${name}" is defined in multiple entries: ${locations.join(', ')}`;
     } else {
-      message = `Name "${name}" is used by multiple templates/configs: ${locations.join(', ')}`;
+      message = `Name "${name}" is used by multiple profiles/configs: ${locations.join(', ')}`;
     }
 
     errors.push(
@@ -356,22 +342,21 @@ function validateNameUniqueness(
 
 function validateConfigSemantics(
   configRef: ConfigRef,
-  templateMap: Map<string, TemplateRef>,
+  profileMap: Map<string, ProfileRef>,
   errors: ValidationError[],
 ): void {
-  const extendsName = configRef.data.extends;
-  if (extendsName === undefined) {
+  if (!isNonEmptyString(configRef.data.profile)) {
     return;
   }
 
-  const templateRef = templateMap.get(extendsName);
-  if (templateRef === undefined) {
+  const profileRef = profileMap.get(configRef.data.profile);
+  if (profileRef === undefined) {
     errors.push(
       createValidationError({
         file: configRef.file,
         configName: safeConfigName(configRef.data.name),
-        field: 'extends',
-        message: `Config extends unknown template "${extendsName}".`,
+        field: 'profile',
+        message: `Config references unknown profile "${configRef.data.profile}".`,
       }),
     );
   }
@@ -384,14 +369,14 @@ function validateConfigSemantics(
           file: configRef.file,
           configName: safeConfigName(configRef.data.name),
           field: `configuration.${key}`,
-          message: `Config with extends cannot override "${key}".`,
+          message: `Config with a profile cannot override "${key}".`,
         }),
       );
     }
   }
 
   if (
-    templateRef?.data.args !== undefined &&
+    profileRef?.data.args !== undefined &&
     configRef.data.argsFile !== undefined
   ) {
     errors.push(
@@ -400,7 +385,7 @@ function validateConfigSemantics(
         configName: safeConfigName(configRef.data.name),
         field: 'argsFile',
         message:
-          'Config cannot specify argsFile when the extended template already defines args.',
+          'Config cannot specify argsFile when the selected profile already defines args.',
       }),
     );
   }
@@ -408,7 +393,7 @@ function validateConfigSemantics(
 
 async function validateArgsFile(
   configRef: ConfigRef,
-  templateMap: Map<string, TemplateRef>,
+  profileMap: Map<string, ProfileRef>,
   input: GenerateInput,
   argsFileCache: Map<string, ArgsFileData>,
   errors: ValidationError[],
@@ -418,10 +403,8 @@ async function validateArgsFile(
     return;
   }
 
-  const extendsName = configRef.data.extends;
-  const templateRef =
-    extendsName === undefined ? undefined : templateMap.get(extendsName);
-  if (templateRef?.data.args !== undefined) {
+  const profileRef = profileMap.get(configRef.data.profile);
+  if (profileRef?.data.args !== undefined) {
     return;
   }
 

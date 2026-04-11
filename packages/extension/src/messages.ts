@@ -1,18 +1,18 @@
 import type {
   ConfigFileData,
-  TemplateFileData,
+  ProfileFileData,
   ValidationError,
 } from '@launch-composer/core';
 import type { ComposerDataIssue } from './io/workspaceStore.js';
 
 export interface EditorTarget {
-  kind: 'template' | 'config';
+  kind: 'profile' | 'config';
   file: string;
   index: number;
 }
 
 export interface InitialDataPayload {
-  templates: TemplateFileData[];
+  profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
   editor: EditorTarget;
@@ -21,8 +21,8 @@ export interface InitialDataPayload {
 }
 
 export interface WorkspaceUpdatePayload {
-  kind: 'template' | 'config';
-  templates?: TemplateFileData[];
+  kind: 'profile' | 'config';
+  profiles?: ProfileFileData[];
   configs?: ConfigFileData[];
   issues: ComposerDataIssue[];
   editorRevision?: string | null;
@@ -41,7 +41,7 @@ export type EntryPatchOperation =
 
 export type WebviewMessage =
   | {
-      type: 'update-template';
+      type: 'update-profile';
       requestId: string;
       payload: {
         file: string;
@@ -64,14 +64,14 @@ export type WebviewMessage =
       type: 'rename-entry';
       requestId: string;
       payload: {
-        kind: 'template' | 'config';
+        kind: 'profile' | 'config';
         file: string;
         index: number;
         name: string;
       };
     }
   | {
-      type: 'delete-template';
+      type: 'delete-profile';
       requestId: string;
       payload: { file: string; index: number };
     }
@@ -85,7 +85,7 @@ export type WebviewMessage =
   | { type: 'browse-file'; requestId: string }
   | {
       type: 'open-file-json';
-      payload: { kind: 'template' | 'config'; file: string };
+      payload: { kind: 'profile' | 'config'; file: string };
     };
 
 export type HostMessage =

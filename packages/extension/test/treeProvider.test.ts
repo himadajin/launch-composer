@@ -10,24 +10,22 @@ test('tree provider keeps invalid files visible as warning nodes', async () => {
   const store = new WorkspaceStore(vscode.Uri.file('/workspace/tree-project'));
 
   await vscode.workspace.fs.createDirectory(
-    vscode.Uri.file(
-      '/workspace/tree-project/.vscode/launch-composer/templates',
-    ),
+    vscode.Uri.file('/workspace/tree-project/.vscode/launch-composer/profiles'),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/tree-project/.vscode/launch-composer/templates/template.json',
+      '/workspace/tree-project/.vscode/launch-composer/profiles/profile.json',
     ),
     new TextEncoder().encode(''),
   );
   await vscode.workspace.fs.writeFile(
     vscode.Uri.file(
-      '/workspace/tree-project/.vscode/launch-composer/templates/valid.json',
+      '/workspace/tree-project/.vscode/launch-composer/profiles/valid.json',
     ),
     new TextEncoder().encode('[\n  {\n    "name": "cpp"\n  }\n]\n'),
   );
 
-  const provider = new LaunchComposerTreeProvider('template', store);
+  const provider = new LaunchComposerTreeProvider('profile', store);
   const rootNodes = await provider.getChildren();
 
   assert.deepEqual(
@@ -37,7 +35,7 @@ test('tree provider keeps invalid files visible as warning nodes', async () => {
         : { file: 'entry', issue: undefined },
     ),
     [
-      { file: 'template.json', issue: 'empty' },
+      { file: 'profile.json', issue: 'empty' },
       { file: 'valid.json', issue: undefined },
     ],
   );
@@ -48,7 +46,7 @@ test('tree provider keeps invalid files visible as warning nodes', async () => {
   assert.deepEqual(await provider.getChildren(invalidNode), []);
 
   const invalidItem = provider.getTreeItem(invalidNode);
-  assert.equal(invalidItem.contextValue, 'templateFileInvalid');
+  assert.equal(invalidItem.contextValue, 'profileFileInvalid');
   assert.equal(invalidItem.description, 'empty file');
 
   const validNode = rootNodes[1];

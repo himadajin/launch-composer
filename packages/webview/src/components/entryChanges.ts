@@ -1,10 +1,5 @@
-import type {
-  ConfigData,
-  EntryPatchOperation,
-  TemplateData,
-} from '../types.js';
+import type { ConfigData, EntryPatchOperation, ProfileData } from '../types.js';
 import {
-  stringOrEmpty,
   updateOptionalString,
   updateRequiredString,
   withConfiguration,
@@ -15,10 +10,10 @@ export interface EntryChange<T> {
   patches: EntryPatchOperation[];
 }
 
-export function updateTemplateType(
-  data: TemplateData,
+export function updateProfileType(
+  data: ProfileData,
   value: string,
-): EntryChange<TemplateData> {
+): EntryChange<ProfileData> {
   return {
     data: {
       ...data,
@@ -36,10 +31,10 @@ export function updateTemplateType(
   };
 }
 
-export function updateTemplateRequest(
-  data: TemplateData,
+export function updateProfileRequest(
+  data: ProfileData,
   value: string,
-): EntryChange<TemplateData> {
+): EntryChange<ProfileData> {
   return {
     data: {
       ...data,
@@ -57,10 +52,10 @@ export function updateTemplateRequest(
   };
 }
 
-export function updateTemplateProgram(
-  data: TemplateData,
+export function updateProfileProgram(
+  data: ProfileData,
   value: string,
-): EntryChange<TemplateData> {
+): EntryChange<ProfileData> {
   return {
     data: withConfiguration(
       data,
@@ -74,10 +69,10 @@ export function updateTemplateProgram(
   };
 }
 
-export function updateTemplateCwd(
-  data: TemplateData,
+export function updateProfileCwd(
+  data: ProfileData,
   value: string,
-): EntryChange<TemplateData> {
+): EntryChange<ProfileData> {
   return {
     data: withConfiguration(
       data,
@@ -91,10 +86,10 @@ export function updateTemplateCwd(
   };
 }
 
-export function updateTemplateStopAtEntry(
-  data: TemplateData,
+export function updateProfileStopAtEntry(
+  data: ProfileData,
   checked: boolean,
-): EntryChange<TemplateData> {
+): EntryChange<ProfileData> {
   return {
     data: {
       ...data,
@@ -108,10 +103,10 @@ export function updateTemplateStopAtEntry(
   };
 }
 
-export function updateTemplateArgs(
-  data: TemplateData,
+export function updateProfileArgs(
+  data: ProfileData,
   args: string[],
-): EntryChange<TemplateData> {
+): EntryChange<ProfileData> {
   const next = { ...data };
   if (args.length === 0) {
     delete next.args;
@@ -125,62 +120,20 @@ export function updateTemplateArgs(
   };
 }
 
-export function updateConfigExtends(
+export function updateConfigProfile(
   data: ConfigData,
-  value: string | undefined,
+  value: string,
 ): EntryChange<ConfigData> {
-  if (value === undefined) {
-    const nextConfig = { ...data.configuration };
-    nextConfig.type = stringOrEmpty(nextConfig.type);
-    nextConfig.request = 'launch';
-
-    const next = { ...data, configuration: nextConfig };
-    delete next.extends;
-
-    return {
-      data: next,
-      patches: [
-        ...createDeleteIfPresentPatch(['extends'], data, 'extends'),
-        ...createSetIfChangedPatch(
-          ['configuration', 'type'],
-          data.configuration?.type,
-          nextConfig.type,
-        ),
-        ...createSetIfChangedPatch(
-          ['configuration', 'request'],
-          data.configuration?.request,
-          'launch',
-        ),
-      ],
-    };
-  }
-
   const nextConfig =
     data.configuration === undefined ? undefined : { ...data.configuration };
-  if (nextConfig !== undefined) {
-    delete nextConfig.type;
-    delete nextConfig.request;
-  }
 
   return {
     data: {
       ...data,
-      extends: value,
+      profile: value,
       ...(nextConfig === undefined ? {} : { configuration: nextConfig }),
     },
-    patches: [
-      ...createSetIfChangedPatch(['extends'], data.extends, value),
-      ...createDeleteIfPresentPatch(
-        ['configuration', 'type'],
-        data.configuration,
-        'type',
-      ),
-      ...createDeleteIfPresentPatch(
-        ['configuration', 'request'],
-        data.configuration,
-        'request',
-      ),
-    ],
+    patches: createSetIfChangedPatch(['profile'], data.profile, value),
   };
 }
 
@@ -194,48 +147,6 @@ export function updateConfigEnabled(
       enabled: checked,
     },
     patches: createSetIfChangedPatch(['enabled'], data.enabled, checked),
-  };
-}
-
-export function updateConfigType(
-  data: ConfigData,
-  value: string,
-): EntryChange<ConfigData> {
-  return {
-    data: {
-      ...data,
-      configuration: updateRequiredString(
-        { ...data.configuration },
-        'type',
-        value,
-      ),
-    },
-    patches: createSetIfChangedPatch(
-      ['configuration', 'type'],
-      data.configuration?.type,
-      value,
-    ),
-  };
-}
-
-export function updateConfigRequest(
-  data: ConfigData,
-  value: string,
-): EntryChange<ConfigData> {
-  return {
-    data: {
-      ...data,
-      configuration: updateRequiredString(
-        { ...data.configuration },
-        'request',
-        value,
-      ),
-    },
-    patches: createSetIfChangedPatch(
-      ['configuration', 'request'],
-      data.configuration?.request,
-      value,
-    ),
   };
 }
 

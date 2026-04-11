@@ -5,7 +5,7 @@ import type {
   GenerateInput,
   GenerateResult,
   LaunchConfig,
-  TemplateData,
+  ProfileData,
 } from './types.js';
 import { collectValidationState } from './validate.js';
 import { resolveArgsFilePath } from './variables.js';
@@ -26,6 +26,7 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
       fileData.enabled !== false,
     ]),
   );
+
   for (const configRef of state.configRefs) {
     if (fileEnabledByPath.get(configRef.file) === false) {
       continue;
@@ -35,19 +36,22 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
       continue;
     }
 
-    const template =
-      configRef.data.extends === undefined
-        ? undefined
-        : state.templateMap.get(configRef.data.extends)?.data;
+    const profile = state.profileMap.get(configRef.data.profile)?.data;
+    if (profile === undefined) {
+      throw new Error(
+        `Config profile was not resolved: ${configRef.data.profile}`,
+      );
+    }
+
     const argsFileArgs = await resolveArgsForConfig(
       configRef,
-      template,
+      profile,
       state.argsFileCache,
       input,
     );
 
     configurations.push(
-      buildLaunchConfig(configRef.data, template, argsFileArgs),
+      buildLaunchConfig(configRef.data, profile, argsFileArgs),
     );
   }
 
@@ -62,11 +66,11 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
 
 async function resolveArgsForConfig(
   configRef: ConfigRef,
-  template: TemplateData | undefined,
+  profile: ProfileData,
   argsFileCache: Map<string, { args: string[] }>,
   input: GenerateInput,
 ): Promise<string[] | undefined> {
-  if (template?.args !== undefined) {
+  if (profile.args !== undefined) {
     return undefined;
   }
 
