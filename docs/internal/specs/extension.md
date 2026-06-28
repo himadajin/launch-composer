@@ -1,6 +1,6 @@
 # Launch Composer - 拡張機能ホスト仕様
 
-このファイルは `launch-composer` パッケージの Extension Host 側仕様を定める。JSON file data の contract map は [contracts/json-files.md](./contracts/json-files.md)、生成と validation は [spec-core.md](./spec-core.md)、Webview 通信は [spec-communication.md](./spec-communication.md)、UI 表示は [spec-ui.md](./spec-ui.md) を参照する。
+このファイルは `launch-composer` パッケージの Extension Host 側仕様を定める。JSON file data の contract map は [contracts/json-files.md](../contracts/json-files.md)、生成と validation は [core.md](./core.md)、Webview 通信は [communication.md](./communication.md)、UI 表示は [ui.md](./ui.md) を参照する。
 
 ## 役割
 
@@ -47,7 +47,7 @@ workspace folder が 0 件または複数件の場合:
 
 `WorkspaceStore.readAll()` は profile と config をそれぞれ読み、正常データと issue を返す。
 
-snapshot の data shape は [contracts/json-files.md](./contracts/json-files.md) と [contracts/host-webview.md](./contracts/host-webview.md) を参照する。
+snapshot の data shape は [contracts/json-files.md](../contracts/json-files.md) と [contracts/host-webview.md](../contracts/host-webview.md) を参照する。
 
 未作成ディレクトリは空として扱う。たとえば `.vscode/launch-composer/` がない場合、`profiles: []`、`configs: []`、`issues: []` を返す。
 
@@ -59,7 +59,7 @@ snapshot の data shape は [contracts/json-files.md](./contracts/json-files.md)
 
 読み込み時の invalid file はファイル単位の `ComposerDataIssue` として扱い、他の正常ファイルの読み込みは継続する。
 
-`ComposerDataIssue` の shape は [contracts/host-webview.md](./contracts/host-webview.md) を参照する。
+`ComposerDataIssue` の shape は [contracts/host-webview.md](../contracts/host-webview.md) を参照する。
 
 issue の分類:
 
@@ -197,7 +197,7 @@ config entry の checkbox または `Include` / `Exclude` は entry-level `exclu
 
 ## Webview からの保存
 
-Webview からの保存はファイル全体の再生成ではなく、編集中 entry への部分更新である。通信契約は [spec-communication.md](./spec-communication.md) を参照する。
+Webview からの保存はファイル全体の再生成ではなく、編集中 entry への部分更新である。通信契約は [communication.md](./communication.md) を参照する。
 
 `name` の変更は patch ではなく `rename-entry` request で処理する。`patchProfileEntry` / `patchConfigEntry` は patch path の先頭が `name` の場合に拒否する。
 
@@ -369,7 +369,7 @@ profile の更新は、open config editor にも workspace update を送る。co
 - command ID: `launch-composer.toggleIncluded`
   - 主な用途: checkbox 操作による included toggle
 
-menus と表示条件の詳細は [spec-ui.md](./spec-ui.md) を参照する。
+menus と表示条件の詳細は [ui.md](./ui.md) を参照する。
 
 ## 設定
 

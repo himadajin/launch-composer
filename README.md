@@ -59,10 +59,10 @@ Copy this as `.vscode/launch-composer/profiles/profile.json`:
       "console": "integratedTerminal",
       "skipFiles": ["<node_internals>/**"],
       "env": {
-        "NODE_ENV": "development"
-      }
-    }
-  }
+        "NODE_ENV": "development",
+      },
+    },
+  },
 ]
 ```
 
@@ -86,10 +86,10 @@ Copy this as `.vscode/launch-composer/configs/config.json`:
       "configuration": {
         "program": "${workspaceFolder}/src/server.ts",
         "sourceMaps": true,
-        "outFiles": ["${workspaceFolder}/dist/**/*.js"]
-      }
-    }
-  ]
+        "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      },
+    },
+  ],
 }
 ```
 
@@ -109,5 +109,6 @@ its profile and written to `.vscode/launch.json`.
 
 ## More Information
 
-- Product behavior and file formats: [docs/spec.md](./docs/spec.md)
+- User guide: [docs/user/guide.md](./docs/user/guide.md)
+- Documentation index: [docs/README.md](./docs/README.md)
 - Repository workflow and development instructions: [AGENTS.md](./AGENTS.md)

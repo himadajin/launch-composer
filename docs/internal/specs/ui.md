@@ -1,6 +1,6 @@
 # Launch Composer - UI 仕様
 
-このファイルは Launch Composer の TreeView と Webview 編集フォームのユーザー向け挙動を定める。ファイル I/O と Generate の詳細は [spec-extension.md](./spec-extension.md)、通信契約は [spec-communication.md](./spec-communication.md)、生成規則は [spec-core.md](./spec-core.md) を参照する。
+このファイルは Launch Composer の TreeView と Webview 編集フォームのユーザー向け挙動を定める。ファイル I/O と Generate の詳細は [extension.md](./extension.md)、通信契約は [communication.md](./communication.md)、生成規則は [core.md](./core.md) を参照する。
 
 ## UI 構成
 

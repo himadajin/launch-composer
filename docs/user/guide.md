@@ -1,11 +1,9 @@
-# Launch Composer
+# Launch Composer User Guide
 
-Launch Composer is a VS Code extension for generating `.vscode/launch.json` from
-reusable profile and config files.
-
-Use it when several debug configurations share the same base settings, or when
-you want to keep generated `launch.json` entries separate from the small pieces
-you edit by hand.
+Launch Composer generates `.vscode/launch.json` from reusable profile and config
+files. Use it when multiple debug configurations share common settings, or when
+you want generated debug entries to stay separate from the smaller files you edit
+by hand.
 
 Launch Composer works with exactly one workspace folder.
 
@@ -20,7 +18,7 @@ npm run install:vscode
 
 This builds a VSIX package and installs it into VS Code.
 
-## Quick Start
+## Basic Workflow
 
 1. Open a single-folder workspace in VS Code.
 2. Run `Launch Composer: Initialize`.
@@ -28,8 +26,8 @@ This builds a VSIX package and installs it into VS Code.
 4. Add or edit profiles and configs.
 5. Run `Launch Composer: Generate launch.json`.
 
-The extension stores its source files under `.vscode/launch-composer/` and
-writes the generated output to `.vscode/launch.json`.
+Launch Composer stores its source files under `.vscode/launch-composer/` and
+writes generated output to `.vscode/launch.json`.
 
 ```text
 .vscode/
@@ -43,8 +41,7 @@ writes the generated output to `.vscode/launch.json`.
 
 ## Profiles
 
-A profile contains shared launch settings. Configs extend profiles when
-generating `launch.json`.
+A profile contains shared launch settings. Configs refer to profiles by name.
 
 Copy this as `.vscode/launch-composer/profiles/profile.json`:
 
@@ -96,19 +93,15 @@ Copy this as `.vscode/launch-composer/configs/config.json`:
 After running `Launch Composer: Generate launch.json`, the config is merged with
 its profile and written to `.vscode/launch.json`.
 
-## Notes
+## Practical Notes
 
 - Source files are JSONC, so comments and trailing commas are allowed.
 - `configuration` is shallow-merged: config keys replace profile keys with the
   same name.
-- Use `argsFile` when an argument list is too long to keep inline.
+- Use inline `args` for short argument lists.
+- Use `argsFile` when an argument list is too long to keep inline. The args file
+  contains an object with an `args` string array.
 - `launch.json` is generated output. Existing contents are replaced when
   generation succeeds.
 - Use `excluded: true` on a config entry to keep it out of the generated
   `launch.json`.
-
-## More Information
-
-- User guide: [../../docs/user/guide.md](../../docs/user/guide.md)
-- Documentation index: [../../docs/README.md](../../docs/README.md)
-- Repository workflow and development instructions: [../../AGENTS.md](../../AGENTS.md)
