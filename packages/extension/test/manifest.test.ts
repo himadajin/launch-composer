@@ -94,7 +94,7 @@ test('package.json command contributions stay aligned with the extension impleme
   assert.ok(
     itemContextMenu.some(
       (item) =>
-        item.command === 'launch-composer.enableConfig' &&
+        item.command === 'launch-composer.includeConfig' &&
         item.when === 'viewItem == configEntryDisabled' &&
         item.group === '0_state@1',
     ),
@@ -102,7 +102,7 @@ test('package.json command contributions stay aligned with the extension impleme
   assert.ok(
     itemContextMenu.some(
       (item) =>
-        item.command === 'launch-composer.disableConfig' &&
+        item.command === 'launch-composer.excludeConfig' &&
         item.when === 'viewItem == configEntryEnabled' &&
         item.group === '0_state@1',
     ),
@@ -110,14 +110,14 @@ test('package.json command contributions stay aligned with the extension impleme
   assert.ok(
     itemContextMenu.every(
       (item) =>
-        item.command !== 'launch-composer.enableConfig' ||
+        item.command !== 'launch-composer.includeConfig' ||
         !(item.when ?? '').includes('configFile'),
     ),
   );
   assert.ok(
     itemContextMenu.every(
       (item) =>
-        item.command !== 'launch-composer.disableConfig' ||
+        item.command !== 'launch-composer.excludeConfig' ||
         !(item.when ?? '').includes('configFile'),
     ),
   );

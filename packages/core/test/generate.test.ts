@@ -26,7 +26,7 @@ test('buildLaunchArgs follows the specified precedence rules', () => {
   ]);
 });
 
-test('generate shallow-merges profile and config for enabled entries only', async () => {
+test('generate shallow-merges profile and config for included entries only', async () => {
   const result = await generate({
     profiles: [
       {
@@ -51,7 +51,6 @@ test('generate shallow-merges profile and config for enabled entries only', asyn
         configurations: [
           {
             name: 'Basic Test',
-            enabled: true,
             profile: 'cpp',
             args: ['--config'],
             configuration: {
@@ -60,8 +59,8 @@ test('generate shallow-merges profile and config for enabled entries only', asyn
             },
           },
           {
-            name: 'Disabled',
-            enabled: false,
+            name: 'Excluded',
+            excluded: true,
             profile: 'cpp',
           },
         ],
@@ -113,7 +112,6 @@ test('generate resolves argsFile via workspaceFolder and appends config args', a
         configurations: [
           {
             name: 'Replay',
-            enabled: true,
             profile: 'cpp',
             argsFile: '${workspaceFolder}/tmp/args.json',
             args: ['--debug'],
@@ -179,7 +177,6 @@ test('validateGenerateInput reports spec violations together', async () => {
         configurations: [
           {
             name: 'cpp',
-            enabled: true,
             profile: 'missing',
             argsFile: 'relative/path.json',
             configuration: {
@@ -245,7 +242,6 @@ test('generate fails when config.profile is missing', async () => {
         configurations: [
           {
             name: 'Draft',
-            enabled: true,
             profile: '',
           },
         ],
@@ -285,7 +281,6 @@ test('generate fails when profile args and config argsFile are combined', async 
         configurations: [
           {
             name: 'Test',
-            enabled: true,
             profile: 'cpp',
             argsFile: '/tmp/args.json',
           },
@@ -305,52 +300,7 @@ test('generate fails when profile args and config argsFile are combined', async 
   assert.match(result.errors[0]?.message ?? '', /cannot specify argsFile/);
 });
 
-test('generate ignores root enabled when deciding included configs', async () => {
-  const result = await generate({
-    profiles: [
-      {
-        file: 'profile.json',
-        profiles: [
-          {
-            name: 'cpp',
-            configuration: {
-              type: 'cppdbg',
-              request: 'launch',
-            },
-          },
-        ],
-      },
-    ],
-    configs: [
-      {
-        file: 'config.json',
-        enabled: false,
-        configurations: [
-          {
-            name: 'Draft',
-            enabled: true,
-            profile: 'cpp',
-          },
-        ],
-      } as unknown as ConfigFileData,
-    ],
-  });
-
-  assert.equal(result.success, true);
-  if (!result.success) {
-    throw new Error('Expected success');
-  }
-
-  assert.deepEqual(result.launchJson.configurations, [
-    {
-      name: 'Draft',
-      type: 'cppdbg',
-      request: 'launch',
-    },
-  ]);
-});
-
-test('generate treats omitted enabled values as enabled', async () => {
+test('generate treats omitted excluded values as included', async () => {
   const result = await generate({
     profiles: [
       {

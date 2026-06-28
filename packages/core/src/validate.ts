@@ -179,15 +179,15 @@ function validateConfigEntries(
     }
 
     if (
-      Object.hasOwn(configRef.data, 'enabled') &&
-      typeof configRef.data.enabled !== 'boolean'
+      Object.hasOwn(configRef.data, 'excluded') &&
+      typeof configRef.data.excluded !== 'boolean'
     ) {
       errors.push(
         createValidationError({
           file: configRef.file,
           configName: safeConfigName(configRef.data.name),
-          field: 'enabled',
-          message: 'Config enabled must be a boolean.',
+          field: 'excluded',
+          message: 'Config excluded must be a boolean.',
         }),
       );
     }

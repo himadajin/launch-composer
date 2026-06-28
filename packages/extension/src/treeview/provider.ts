@@ -26,7 +26,7 @@ type EntryNode = {
   type: 'entry';
   target: EditorTarget;
   label: string;
-  enabled?: boolean;
+  included?: boolean;
 };
 
 export type TreeNode = FileNode | EntryNode;
@@ -97,7 +97,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
                 index,
               },
               label: (entry as ConfigData).name,
-              enabled: (entry as ConfigData).enabled !== false,
+              included: (entry as ConfigData).excluded !== true,
             };
 
       this.entryNodes.set(getEntryKey(node.target), node);
@@ -153,7 +153,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     item.contextValue =
       element.target.kind === 'profile'
         ? 'profileEntry'
-        : element.enabled
+        : element.included
           ? 'configEntryEnabled'
           : 'configEntryDisabled';
     item.command = {
@@ -164,10 +164,10 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
     if (element.target.kind === 'config') {
       item.checkboxState = {
-        state: toCheckboxState(element.enabled === true),
+        state: toCheckboxState(element.included === true),
         tooltip: 'Include this config when generating launch.json.',
       };
-      if (!element.enabled) {
+      if (!element.included) {
         item.description = 'excluded';
       }
     }

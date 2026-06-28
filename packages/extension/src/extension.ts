@@ -231,14 +231,18 @@ export function activate(context: vscode.ExtensionContext): void {
       const changedFiles = new Set<string>();
 
       for (const [node, checkboxState] of event.items) {
-        const enabled = checkboxState === vscode.TreeItemCheckboxState.Checked;
+        const included = checkboxState === vscode.TreeItemCheckboxState.Checked;
 
         if (node.type !== 'entry' || node.target.kind !== 'config') {
           continue;
         }
 
-        if (node.enabled !== enabled) {
-          await store.toggleConfigEnabled(node.target.file, node.target.index);
+        if (node.included !== included) {
+          await store.setConfigExcluded(
+            node.target.file,
+            node.target.index,
+            !included,
+          );
           changedFiles.add(node.target.file);
         }
       }
@@ -728,22 +732,22 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
-    registerCommand(COMMANDS.enableConfig, async (node?: TreeNode) => {
-      await setConfigEnabled(node, true, store, async (file) => {
+    registerCommand(COMMANDS.includeConfig, async (node?: TreeNode) => {
+      await setConfigIncluded(node, true, store, async (file) => {
         queueWatcherEvent('config', file);
         await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
       });
     }),
-    registerCommand(COMMANDS.disableConfig, async (node?: TreeNode) => {
-      await setConfigEnabled(node, false, store, async (file) => {
+    registerCommand(COMMANDS.excludeConfig, async (node?: TreeNode) => {
+      await setConfigIncluded(node, false, store, async (file) => {
         queueWatcherEvent('config', file);
         await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
       });
     }),
-    registerCommand(COMMANDS.toggleEnabled, async (node?: TreeNode) => {
+    registerCommand(COMMANDS.toggleIncluded, async (node?: TreeNode) => {
       try {
         if (node?.type === 'entry' && node.target.kind === 'config') {
-          await store.toggleConfigEnabled(node.target.file, node.target.index);
+          await store.toggleConfigExcluded(node.target.file, node.target.index);
           queueWatcherEvent('config', node.target.file);
           await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
         }
@@ -987,9 +991,9 @@ function getEntryNode(
   return node;
 }
 
-async function setConfigEnabled(
+async function setConfigIncluded(
   node: TreeNode | undefined,
-  enabled: boolean,
+  included: boolean,
   store: WorkspaceStore,
   onDidChange: (file: string) => Promise<void>,
 ): Promise<void> {
@@ -998,14 +1002,15 @@ async function setConfigEnabled(
     return;
   }
 
-  if (entryNode.enabled === enabled) {
+  if (entryNode.included === included) {
     return;
   }
 
   try {
-    await store.toggleConfigEnabled(
+    await store.setConfigExcluded(
       entryNode.target.file,
       entryNode.target.index,
+      !included,
     );
     await onDidChange(entryNode.target.file);
   } catch (error) {

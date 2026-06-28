@@ -21,7 +21,7 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
   const configurations: LaunchConfig[] = [];
 
   for (const configRef of state.configRefs) {
-    if (configRef.data.enabled === false) {
+    if (configRef.data.excluded === true) {
       continue;
     }
 

@@ -141,12 +141,18 @@ export function updateConfigEnabled(
   data: ConfigData,
   checked: boolean,
 ): EntryChange<ConfigData> {
+  const next = { ...data };
+  if (checked) {
+    delete next.excluded;
+  } else {
+    next.excluded = true;
+  }
+
   return {
-    data: {
-      ...data,
-      enabled: checked,
-    },
-    patches: createSetIfChangedPatch(['enabled'], data.enabled, checked),
+    data: next,
+    patches: checked
+      ? createDeleteIfPresentPatch(['excluded'], data, 'excluded')
+      : createSetIfChangedPatch(['excluded'], data.excluded, true),
   };
 }
 

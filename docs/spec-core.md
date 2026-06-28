@@ -17,10 +17,10 @@
 1. profile と config をファイル順、配列順に展開する。
 2. Generate 時バリデーションを全エントリに対して行う。
 3. エラーが 1 件以上ある場合は `success: false` とすべてのエラーを返す。
-4. エラーがなければ、entry-level の `enabled` が `false` でない config だけを生成対象にする。
+4. エラーがなければ、entry-level の `excluded` が `true` でない config だけを生成対象にする。
 5. 各 config の `profile` が指す profile をベースにマージし、`LaunchJson` を返す。
 
-excluded な config も、Generate 時バリデーションの対象である。`enabled` は出力対象から除外するためのフラグであり、入力の不正を隠すためのフラグではない。
+excluded な config も、Generate 時バリデーションの対象である。`excluded` は出力対象から除外するためのフラグであり、入力の不正を隠すためのフラグではない。
 
 ### validateGenerateInput(input)
 
@@ -55,15 +55,15 @@ config に存在しないキーは profile から継承する。生成結果の 
 
 config の `configuration` に `program`、`type`、`request` が存在する場合は Generate 時エラーにする。これらは profile 側で管理する。
 
-### enabled
+### excluded
 
 生成対象になる条件:
 
 ```text
-config.enabled !== false
+config.excluded !== true
 ```
 
-config entry の `enabled` は、省略時に Generate 上 `true` として扱う。
+config entry の `excluded` は、省略時に Generate 上 `false` として扱う。
 
 ### args
 
@@ -179,7 +179,7 @@ extension のファイル読み込みでは、config ファイルのルート形
 
 - 条件: `name` が非空文字列でない
   - エラー: はい
-- 条件: `enabled` が存在し、boolean でない
+- 条件: `excluded` が存在し、boolean でない
   - エラー: はい
 - 条件: `profile` が非空文字列でない
   - エラー: はい

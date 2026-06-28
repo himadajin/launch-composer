@@ -518,7 +518,7 @@ test('update-config message refreshes only config views through onDidMutate', as
         configs: [
           {
             file: 'config.json',
-            configurations: [{ name: 'Launch', enabled: true, profile: 'cpp' }],
+            configurations: [{ name: 'Launch', profile: 'cpp' }],
           },
         ],
         issues: [],
@@ -571,8 +571,8 @@ test('update-config message refreshes only config views through onDidMutate', as
       patches: [
         {
           type: 'set',
-          path: ['enabled'],
-          value: false,
+          path: ['excluded'],
+          value: true,
         },
       ],
     },
@@ -665,7 +665,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
           {
             file: 'config.json',
             configurations: [
-              { name: 'Launch Server', enabled: false, profile: 'cpp' },
+              { name: 'Launch Server', excluded: true, profile: 'cpp' },
             ],
           },
         ],
@@ -710,7 +710,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
         {
           file: 'config.json',
           configurations: [
-            { name: 'Launch Server', enabled: false, profile: 'cpp' },
+            { name: 'Launch Server', excluded: true, profile: 'cpp' },
           ],
         },
       ],
@@ -736,7 +736,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
         {
           file: 'config.json',
           configurations: [
-            { name: 'Launch Server', enabled: false, profile: 'cpp' },
+            { name: 'Launch Server', excluded: true, profile: 'cpp' },
           ],
         },
       ],
@@ -853,7 +853,7 @@ test('syncWithWorkspaceData skips config-only editor updates when a profile edit
           {
             file: 'config.json',
             configurations: [
-              { name: 'Launch', enabled: false, profile: 'cpp' },
+              { name: 'Launch', excluded: true, profile: 'cpp' },
             ],
           },
         ],
@@ -903,7 +903,7 @@ test('syncWithWorkspaceData skips config-only editor updates when a profile edit
       configs: [
         {
           file: 'config.json',
-          configurations: [{ name: 'Launch', enabled: false, profile: 'cpp' }],
+          configurations: [{ name: 'Launch', excluded: true, profile: 'cpp' }],
         },
       ],
       issues: [],

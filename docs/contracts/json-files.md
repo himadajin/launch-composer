@@ -27,7 +27,7 @@ JSON file data と Generate 入出力の shape は `packages/core/src/types.ts` 
   - canonical source: `ConfigFileData` in `packages/core/src/types.ts`
   - file shape: `configs/*.json` の root object
   - behavior spec: [../spec.md](../spec.md), [../spec-extension.md](../spec-extension.md)
-  - 注意: 生成対象判定は config entry の `enabled` で行う
+  - 注意: 生成対象判定は config entry の `excluded` で行う
 - 契約: argsFile data
   - 用途: config entry から参照する外部 args source
   - canonical source: `ArgsFileData` in `packages/core/src/types.ts`

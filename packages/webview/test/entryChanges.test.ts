@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   updateConfigArgsFile,
+  updateConfigEnabled,
   updateConfigProfile,
   updateProfileProgram,
 } from '../src/components/entryChanges.js';
@@ -57,7 +58,6 @@ test('updateConfigProfile emits a direct profile patch', () => {
   const change = updateConfigProfile(
     {
       name: 'Launch',
-      enabled: true,
       profile: 'old-profile',
       configuration: {
         cwd: '${workspaceFolder}',
@@ -68,7 +68,6 @@ test('updateConfigProfile emits a direct profile patch', () => {
 
   assert.deepEqual(change.data, {
     name: 'Launch',
-    enabled: true,
     profile: 'base-profile',
     configuration: {
       cwd: '${workspaceFolder}',
@@ -113,7 +112,6 @@ test('updateConfigArgsFile omits patches when clearing an already-empty value', 
   const change = updateConfigArgsFile(
     {
       name: 'Launch',
-      enabled: true,
       profile: 'cpp',
     },
     '   ',
@@ -121,8 +119,52 @@ test('updateConfigArgsFile omits patches when clearing an already-empty value', 
 
   assert.deepEqual(change.data, {
     name: 'Launch',
-    enabled: true,
     profile: 'cpp',
   });
   assert.deepEqual(change.patches, []);
+});
+
+test('updateConfigEnabled excludes configs with excluded true', () => {
+  const change = updateConfigEnabled(
+    {
+      name: 'Launch',
+      profile: 'cpp',
+    },
+    false,
+  );
+
+  assert.deepEqual(change.data, {
+    name: 'Launch',
+    profile: 'cpp',
+    excluded: true,
+  });
+  assert.deepEqual(change.patches, [
+    {
+      type: 'set',
+      path: ['excluded'],
+      value: true,
+    },
+  ]);
+});
+
+test('updateConfigEnabled includes configs by deleting excluded', () => {
+  const change = updateConfigEnabled(
+    {
+      name: 'Launch',
+      profile: 'cpp',
+      excluded: true,
+    },
+    true,
+  );
+
+  assert.deepEqual(change.data, {
+    name: 'Launch',
+    profile: 'cpp',
+  });
+  assert.deepEqual(change.patches, [
+    {
+      type: 'delete',
+      path: ['excluded'],
+    },
+  ]);
 });

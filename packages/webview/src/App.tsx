@@ -442,7 +442,6 @@ function createPlaceholderProfile(file: string): ProfileData {
 function createPlaceholderConfig(file: string): ConfigData {
   return {
     name: file,
-    enabled: true,
     profile: '',
   };
 }

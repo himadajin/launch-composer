@@ -193,11 +193,11 @@ export function ConfigEditor({
         <FormGroup
           label="Config: Include"
           description="Include this config when generating launch.json."
-          modified={data.enabled === true}
+          modified={data.excluded === true}
         >
           <Checkbox
             toggle
-            checked={data.enabled !== false}
+            checked={data.excluded !== true}
             disabled={readOnly}
             label="Include"
             onChange={(checked) => {

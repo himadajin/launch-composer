@@ -193,17 +193,17 @@
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.enableConfig",
+        "command": "launch-composer.includeConfig",
         "title": "Include",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.disableConfig",
+        "command": "launch-composer.excludeConfig",
         "title": "Exclude",
         "enablement": "workspaceFolderCount == 1"
       },
       {
-        "command": "launch-composer.toggleEnabled",
+        "command": "launch-composer.toggleIncluded",
         "title": "Toggle Included",
         "enablement": "workspaceFolderCount == 1"
       }
@@ -290,12 +290,12 @@
           "group": "4_modify@1"
         },
         {
-          "command": "launch-composer.enableConfig",
+          "command": "launch-composer.includeConfig",
           "when": "viewItem == configEntryDisabled",
           "group": "0_state@1"
         },
         {
-          "command": "launch-composer.disableConfig",
+          "command": "launch-composer.excludeConfig",
           "when": "viewItem == configEntryEnabled",
           "group": "0_state@1"
         },
@@ -427,15 +427,15 @@
           "when": "false"
         },
         {
-          "command": "launch-composer.enableConfig",
+          "command": "launch-composer.includeConfig",
           "when": "false"
         },
         {
-          "command": "launch-composer.disableConfig",
+          "command": "launch-composer.excludeConfig",
           "when": "false"
         },
         {
-          "command": "launch-composer.toggleEnabled",
+          "command": "launch-composer.toggleIncluded",
           "when": "false"
         }
       ]

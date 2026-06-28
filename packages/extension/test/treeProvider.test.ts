@@ -59,7 +59,7 @@ test('tree provider keeps invalid files visible as warning nodes', async () => {
   );
 });
 
-test('tree provider ignores legacy file enabled state for config entries', async () => {
+test('tree provider shows included config entries as checked checkboxes', async () => {
   const store = new WorkspaceStore(vscode.Uri.file('/workspace/config-tree'));
 
   await vscode.workspace.fs.createDirectory(
@@ -70,7 +70,7 @@ test('tree provider ignores legacy file enabled state for config entries', async
       '/workspace/config-tree/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch"\n    }\n  ]\n}\n',
     ),
   );
 
@@ -106,7 +106,7 @@ test('tree provider ignores legacy file enabled state for config entries', async
   });
 });
 
-test('tree provider keeps entry checkbox state when legacy file enabled is false', async () => {
+test('tree provider keeps excluded config entries as unchecked checkboxes', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/config-tree-preserve-state'),
   );
@@ -121,7 +121,7 @@ test('tree provider keeps entry checkbox state when legacy file enabled is false
       '/workspace/config-tree-preserve-state/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "excluded": true\n    }\n  ]\n}\n',
     ),
   );
 
@@ -146,7 +146,7 @@ test('tree provider keeps entry checkbox state when legacy file enabled is false
   assert.equal(item.label, 'Launch');
 });
 
-test('tree provider keeps item-level disabled config entries as unchecked checkboxes', async () => {
+test('tree provider describes excluded config entries', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/config-tree-item-disabled'),
   );
@@ -161,7 +161,7 @@ test('tree provider keeps item-level disabled config entries as unchecked checkb
       '/workspace/config-tree-item-disabled/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "excluded": true\n    }\n  ]\n}\n',
     ),
   );
 

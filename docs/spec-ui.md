@@ -84,7 +84,7 @@ config entry の状態:
     - checkbox: unchecked
     - description: `excluded`
 
-config entry の `enabled` 省略時は Generate 上も TreeView 上も included として扱う。
+config entry の `excluded` 省略時は Generate 上も TreeView 上も included として扱う。
 
 ### view title actions
 
@@ -139,7 +139,7 @@ CONFIGS TreeView は `manageCheckboxStateManually: true` で作成する。
 
 checkbox 操作は即座に JSONC file へ書き込む。
 
-- config entry checkbox: entry-level `enabled` を切り替える
+- config entry checkbox: entry-level `excluded` を切り替える
 
 ## Webview Editor
 
@@ -237,7 +237,7 @@ config editor のフォーム項目:
   - control: `Select`
   - 保存方法: 即時 patch
 - 表示ラベル: `Config: Include`
-  - JSON path: `enabled`
+  - JSON path: `excluded`
   - control: `Checkbox`
   - 保存方法: 即時 patch
 - 表示ラベル: `Config: Working Directory`
