@@ -1,282 +1,158 @@
 # Launch Composer - Extension Host ↔ Webview 通信仕様
 
-`launch-composer`（extension）と `@launch-composer/webview` の双方が参照する通信契約を定める。メッセージ型とデータ型はこのファイルを唯一の情報源とする。
+このファイルは `launch-composer` と `@launch-composer/webview` の通信 behavior を定める。message shape の canonical source は `packages/extension/src/messages.ts`、Webview 側 mirror は `packages/webview/src/types.ts` である。契約ごとの参照先は [contracts/host-webview.md](./contracts/host-webview.md) を参照する。
 
----
+## 基本方針
 
-## 概要
+Extension Host と Webview は VS Code の `postMessage` API で通信する。Webview は workspace file I/O を直接行わない。編集内容は message として Host に送り、Host が JSONC file へ書き込む。
 
-VSCode 拡張機能は、Extension Host（Node.js プロセス）と Webview（ブラウザ相当の独立したコンテキスト）の 2 つの分離されたプロセスで動作する。両者は直接関数を呼び合えないため、VSCode の `postMessage` API でメッセージを交換する。
+通信には request/response 型と fire-and-forget 型がある。
 
-このファイルは Extension Host と Webview の通信契約を定義する。Extension Host 側の `launch-composer`（extension）と Webview 側の `@launch-composer/webview` の双方は、このファイルで定義した型に従ってメッセージを送受信する。
+- response が必要な Webview message は `requestId: string` を持つ
+- Host response は同じ `requestId` を返す
+- `open-file-json` は fire-and-forget であり `requestId` を持たない
 
-主な通信の流れは次のとおり。
+Webview 側は `RpcClient` で `requestId` を生成し、response message を Promise に対応付ける。
 
-- 編集パネルを開くと、Extension Host が初期データ（profileおよび config の全ファイル内容）を Webview に送信する。
-- ユーザーがフォームを編集すると、Webview が編集中エントリへの差分または rename 要求を Extension Host に送信する。
-- 読み込み対象ファイルが一時的に不正な JSON である場合、Extension Host はそのファイルを `issues` として通知し、Webview は通常のフォームを read-only の状態で表示する。
-- argsFile のブラウズダイアログや Generate のようにリクエストとレスポンスを必要とする操作では、Webview がリクエストを送信し、Extension Host がレスポンスを返す。リクエストとレスポンスは `requestId` で対応付ける。
+## データ同期
 
----
+Editor panel を開いたとき、Host は `initial-data` を送る。
 
-## 1. Extension Host ↔ Webview 通信設計
+`initial-data` には以下を含める。
 
-Extension Host と Webview の間の通信設計を定める。
+- 全 profile file data
+- 全 config file data
+- 現在の issue list
+- 現在の editor target
+- editor target file の revision
+- `launch-composer.autoSaveDelay`
 
-### 1.1 基本方針
+workspace file が変化した場合、Host は必要に応じて `workspace-update` を送る。profile update は open config editor にも送る。config editor は profile select 候補を更新する必要があるためである。
 
-基本的な設計方針を以下に示す。
+## 保存と競合
 
-- 通信手段: VSCode の `postMessage` API を使用する。
-- 状態管理: 編集中は Webview 側の React state がデータのマスターとなる。フォームのうち `name` 以外のフィールドは、`<TextInput>` は debounce、`<Checkbox>`・`<Select>`・`<ListEditor>` は即時で Extension Host に差分を送信し、Extension Host がファイルに書き込む。`name` は専用の rename 要求で送信する。
-- 競合制御: Extension Host は `initial-data` に現在の `editorRevision` を含めて送信する。Webview は差分パッチの保存ごとに `baseRevision` を添えて更新を要求し、Extension Host はその `baseRevision` が対象ファイルの最新 revision と一致した場合のみ保存する。
-- 競合解決: revision が一致しない場合、Extension Host は `update-result` で conflict を返す。Webview はその応答を受けて最新の `initial-data` を再取得し、外部編集された内容を反映する。rename 要求は成功と失敗のどちらでも、その応答後に Webview が最新の `initial-data` を再取得して表示を同期する。
-- Webview 破棄対策: Webview Panel の生成時に `retainContextWhenHidden: true` を設定する。この設定により、タブが非表示になっても DOM と state が破棄されずに保持される。
+`name` 以外のフォーム変更は `update-profile` または `update-config` で送る。payload は対象 file、entry index、`baseRevision`、patch list を持つ。
 
-### 1.2 通信フロー
+Host は対象 file の現在 revision と `baseRevision` を比較する。
 
-編集パネルを開いてからユーザーが操作するまでの、Extension Host と Webview の間のメッセージのやり取りを示す。
+- 一致: patch を適用し `update-result.success: true` を返す
+- 不一致: 書き込まず `update-result.success: false, conflict: true` を返す
 
-```
-1. Webview が開く
-   Extension Host → Webview: initial-data（profile一覧、対象エントリのデータ）
+`name` は `rename-entry` で送る。rename は Host 側の専用処理で、trim、空文字拒否、一意性検証、profile rename 時の参照更新を行う。
 
-2. ユーザーがフォームを編集
-   Webview 内で React state を更新。
+rename request の成功・失敗後、Webview は最新 `initial-data` を再取得する。patch 保存で conflict が返った場合も同様である。
 
-3. 自動保存（フォーム変更後、`name` 以外）
-   TextInput: launch-composer.autoSaveDelay ms の debounce 後に送信
-   Checkbox / Select / ListEditor 操作: 変更と同時に即送信
-   Webview → Extension Host: update-profile / update-config（requestId 付き、baseRevision + patches を送信）
-   Extension Host: revision を検証し、JSONC の該当エントリに差分だけを書き込む
-   Extension Host → Webview: update-result
-   conflict の場合: Webview は request-initial-data で最新状態を再取得する
+## 共有データ型
 
-4. 名前変更
-   Webview 内で `name` 入力を更新
-   blur または Enter 確定時に Webview → Extension Host: rename-entry（requestId 付き、kind + file + index + name を送信）
-   Extension Host: `renameEntry()` を呼び出し、必要なら profile 参照先 config の `profile` を更新する
-   Extension Host → Webview: rename-result
-   Webview: request-initial-data で最新状態を再取得する
+共有データ型の canonical source は次の通りである。
 
-5. ファイル選択ダイアログ（argsFile の Browse ボタン）
-   Webview → Extension Host: browse-file（requestId 付き）
-   Extension Host: vscode.window.showOpenDialog を呼び出し
-   Extension Host → Webview: file-selected（同じ requestId 付き）
+- JSON file data / validation error: `packages/core/src/types.ts`
+- Host/Webview payload: `packages/extension/src/messages.ts`
+- Webview mirror: `packages/webview/src/types.ts`
+- contract map: [contracts/host-webview.md](./contracts/host-webview.md)
 
-6. ワークスペース変更の自動通知
-   ファイル変更検知時: Extension Host → Webview: workspace-update（変更種別・最新データ・issues）
-   Webview: 受信データで React state を更新する
-```
+`file` は composer directory 内のファイル名である。絶対パスではない。
 
-### 1.3 メッセージ型定義
+`editorRevision` は Host が file content から生成する opaque string である。Webview は比較や表示を行わず、次の保存 request の `baseRevision` として返す。
 
-リクエストとレスポンスの対応付けには `requestId` を使用する。`update-profile`・`update-config`・`rename-entry` を含め、レスポンスを必要とする Webview → Extension Host のメッセージはすべて `requestId: string` を持つ。`open-file-json` だけは fire-and-forget とする。
+## Patch 型
 
-```typescript
-// ============================================
-// Webview → Extension Host
-// ============================================
-type WebviewMessage =
-  // データ更新（自動保存）
-  | {
-      type: 'update-profile';
-      requestId: string;
-      payload: {
-        file: string;
-        index: number;
-        baseRevision: string | null;
-        patches: EntryPatchOperation[];
-      };
-    }
-  | {
-      type: 'update-config';
-      requestId: string;
-      payload: {
-        file: string;
-        index: number;
-        baseRevision: string | null;
-        patches: EntryPatchOperation[];
-      };
-    }
-  | {
-      type: 'rename-entry';
-      requestId: string;
-      payload: {
-        kind: 'profile' | 'config';
-        file: string;
-        index: number;
-        name: string;
-      };
-    }
-  // 削除
-  | {
-      type: 'delete-profile';
-      requestId: string;
-      payload: { file: string; index: number };
-    }
-  | {
-      type: 'delete-config';
-      requestId: string;
-      payload: { file: string; index: number };
-    }
-  // 初期データ要求
-  | { type: 'request-initial-data'; requestId: string }
-  // 生成
-  | { type: 'generate'; requestId: string }
-  // ファイル選択ダイアログ
-  | { type: 'browse-file'; requestId: string }
-  // source file の JSON を開く
-  | {
-      type: 'open-file-json';
-      payload: { kind: 'profile' | 'config'; file: string };
-    };
+`EntryPatchOperation` の shape は `packages/extension/src/messages.ts` を canonical source とする。Webview 側 mirror は `packages/webview/src/types.ts` である。
 
-// ============================================
-// Extension Host → Webview
-// ============================================
-type HostMessage =
-  // 初期データ / 更新データ
-  | {
-      type: 'initial-data';
-      requestId: string;
-      payload: {
-        profiles: ProfileFileData[];
-        configs: ConfigFileData[];
-        issues: ComposerDataIssue[];
-        editor: EditorTarget;
-        editorRevision: string | null;
-        autoSaveDelay: number;
-      };
-    }
-  // ワークスペース変更通知
-  | {
-      type: 'workspace-update';
-      requestId: string;
-      payload: {
-        kind: 'profile' | 'config';
-        profiles?: ProfileFileData[];
-        configs?: ConfigFileData[];
-        issues: ComposerDataIssue[];
-        editorRevision?: string | null;
-      };
-    }
-  // 保存結果
-  | {
-      type: 'update-result';
-      requestId: string;
-      payload: {
-        success: boolean;
-        conflict?: boolean;
-        revision?: string | null;
-        error?: string;
-      };
-    }
-  // 名前変更結果
-  | {
-      type: 'rename-result';
-      requestId: string;
-      payload: { success: boolean; error?: string };
-    }
-  // 削除結果
-  | {
-      type: 'delete-result';
-      requestId: string;
-      payload: { success: boolean; error?: string };
-    }
-  // 生成結果
-  | {
-      type: 'generate-result';
-      requestId: string;
-      payload: { success: boolean; errors?: ValidationError[] };
-    }
-  // ファイル選択結果
-  | {
-      type: 'file-selected';
-      requestId: string;
-      payload: { path: string | null };
-    };
-```
+`path` は entry root からの相対パスである。たとえば profile の program 変更は `['configuration', 'program']`、config の profile 変更は `['profile']` である。
 
-### 1.4 requestId ユーティリティ
+Host は受け取った patch path に対象 entry の document path を prefix して JSONC document に適用する。profile の場合は `[index]`、config の場合は `['configurations', index]` を prefix する。
 
-Webview 側には、requestId の生成と Promise の管理を行うヘルパー関数を用意する。このヘルパー関数は内部で requestId を自動付与して `postMessage` を送信し、対応する requestId を持つレスポンスが返ってきたら Promise を resolve する。`update-profile`・`update-config`・`rename-entry` もこのヘルパー関数を使い、結果を明示的に受け取る。
+`path[0] === 'name'` の patch は Host が拒否する。entry name の変更は必ず `rename-entry` を使う。
 
-```typescript
-// 使用イメージ
-const result = await sendRequest({ type: 'browse-file' });
-```
+## Webview → Host message
 
-実装は Map（requestId → Promise resolver）を管理する小さな関数で済む。
+`WebviewMessage` の shape は `packages/extension/src/messages.ts` を canonical source とする。Webview が送る message は次の通りである。
 
-### 1.5 データ型
+- `update-profile`
+- `update-config`
+- `rename-entry`
+- `delete-profile`
+- `delete-config`
+- `request-initial-data`
+- `generate`
+- `browse-file`
+- `open-file-json`
 
-`ProfileData` と `ConfigData` は [spec.md](./spec.md) §4 のスキーマに対応する TypeScript 表現である。`ProfileFileData` と `ConfigFileData` は Extension Host が Webview に渡すファイル単位のコンテナである。`ValidationError` は `@launch-composer/core` のバリデーション結果を Webview に伝えるための型である。
+### update-profile / update-config
 
-```typescript
-interface ProfileEntry {
-  [key: string]: unknown;
-}
+Entry patch 保存 request である。Host は `update-result` を返す。
 
-interface ProfileData {
-  name: string;
-  args?: string[];
-  configuration?: ProfileEntry;
-}
+### rename-entry
 
-interface ConfigEntry {
-  [key: string]: unknown; // パススルーキーのみ
-}
+Entry name 変更 request である。Host は `rename-result` を返す。
 
-interface ConfigData {
-  name: string;
-  enabled?: boolean;
-  profile: string;
-  argsFile?: string;
-  args?: string[];
-  configuration?: ConfigEntry;
-}
+profile rename の場合、Host は参照している config entry の `profile` も更新する。
 
-interface ProfileFileData {
-  file: string; // ファイル名（例: "cpp.json"）
-  profiles: ProfileData[];
-}
+### delete-profile / delete-config
 
-interface ConfigFileData {
-  file: string; // ファイル名（例: "basic-test.json"）
-  enabled?: boolean;
-  configurations: ConfigData[];
-}
+Webview から entry を削除する request である。Host は `delete-result` を返す。現在の UI では TreeView の削除導線が主だが、通信型としては存在する。
 
-interface ValidationError {
-  file: string;
-  configName?: string;
-  field?: string;
-  message: string;
-}
+### request-initial-data
 
-interface EditorTarget {
-  kind: 'profile' | 'config';
-  file: string;
-  index: number;
-}
+現在の editor target に対する最新 `initial-data` を要求する。Host は `initial-data` を返す。
 
-type EntryPatchOperation =
-  | {
-      type: 'set';
-      path: (string | number)[];
-      value: unknown;
-    }
-  | {
-      type: 'delete';
-      path: (string | number)[];
-    };
+### generate
 
-interface ComposerDataIssue {
-  kind: 'profile' | 'config';
-  file: string;
-  code: 'empty' | 'invalid-json' | 'invalid-shape';
-  message: string;
-  details?: string;
-}
-```
+Webview から Generate を要求する。Host は通常の Generate 処理を実行し、`generate-result` を返す。
+
+### browse-file
+
+Host に `showOpenDialog` を開かせる。Host は `file-selected` を返す。キャンセル時の `path` は `null` である。
+
+### open-file-json
+
+Backing JSON file を開く fire-and-forget message である。response はない。
+
+## Host → Webview message
+
+`HostMessage` の shape は `packages/extension/src/messages.ts` を canonical source とする。Host が送る message は次の通りである。
+
+- `initial-data`
+- `workspace-update`
+- `update-result`
+- `rename-result`
+- `delete-result`
+- `generate-result`
+- `file-selected`
+
+### initial-data
+
+Full snapshot と editor target を送る。Editor panel を開いた直後、`request-initial-data` への response、rename 後の再同期などで使う。
+
+### workspace-update
+
+Profile または config の部分 snapshot を送る。`kind` は更新対象の領域を示す。payload の `issues` はその `kind` に属する issue だけを含む。
+
+`editorRevision` は、現在開いている editor target の file が更新対象 kind と一致する場合に含める。
+
+### update-result
+
+Patch 保存結果である。
+
+- payload: `success: true`
+  - 意味: 保存成功
+  - response: `revision` を含める
+- payload: `success: false, conflict: true`
+  - 意味: 競合
+  - Webview action: 最新データを再取得する
+- payload: `success: false, error`
+  - 意味: 保存失敗
+  - Host action: error message を表示する
+
+### rename-result / delete-result
+
+Rename または delete の結果である。失敗時は `error` を含める。
+
+### generate-result
+
+Generate の結果である。失敗時は core validation error または invalid file 由来の error を `errors` に含める。
+
+### file-selected
+
+`browse-file` の結果である。ファイル選択時は absolute path、キャンセル時は `null` を返す。

@@ -1,339 +1,160 @@
-# Launch Composer - VSCode Extension 設計仕様書
+# Launch Composer - 共通仕様
 
-## 仕様ファイル一覧
+このファイルは Launch Composer の共通入口である。詳細な挙動は領域別の仕様ファイルを正とし、このファイルには概要、仕様ファイルの読み分け、JSON ファイル構造の読み方、パッケージ構成だけを置く。
 
-| ファイル                                         | 内容                                                             | 対象パッケージ                                 |
-| ------------------------------------------------ | ---------------------------------------------------------------- | ---------------------------------------------- |
-| spec.md（本ファイル）                            | 概要・実装方針・ディレクトリ構成・スキーマ定義・プロジェクト構成 | 全員が読む共通基盤                             |
-| [spec-core.md](./spec-core.md)                   | マージルール・パス解決・バリデーション                           | `@launch-composer/core`                        |
-| [spec-communication.md](./spec-communication.md) | Extension Host ↔ Webview 通信契約・型定義                        | `launch-composer` + `@launch-composer/webview` |
-| [spec-extension.md](./spec-extension.md)         | launch.json 生成動作・ファイル監視・コマンド登録・設定項目       | `launch-composer`（Extension Host）            |
-| [spec-ui.md](./spec-ui.md)                       | UI 設計（サイドバー・編集フォーム）                              | `@launch-composer/webview`                     |
+## 仕様ファイル
 
----
+- ファイル: `spec.md`（本ファイル）
+  - 主な内容: 概要、仕様ファイルの読み分け、JSON ファイル構造の読み方、構成
+  - 対象パッケージ: 全体
+- ファイル: [spec-core.md](./spec-core.md)
+  - 主な内容: 生成、マージ、バリデーション、argsFile、変数展開
+  - 対象パッケージ: `@launch-composer/core`
+- ファイル: [spec-extension.md](./spec-extension.md)
+  - 主な内容: VS Code 統合、workspace I/O、Generate コマンド、TreeView 操作
+  - 対象パッケージ: `launch-composer`
+- ファイル: [spec-ui.md](./spec-ui.md)
+  - 主な内容: TreeView 表示、Webview 編集フォーム、ユーザー操作
+  - 対象パッケージ: `launch-composer` + `@launch-composer/webview`
+- ファイル: [spec-communication.md](./spec-communication.md)
+  - 主な内容: Extension Host と Webview のメッセージ、共有データ型、保存契約
+  - 対象パッケージ: `launch-composer` + `@launch-composer/webview`
 
-## 1. 概要
+データ構造の canonical source は TypeScript 型である。変更対象の実装面に対応する仕様ファイルを同時に更新し、JSON file data や shared message shape を変更する場合は [contracts](./contracts/README.md) の contract map も確認する。
 
-Launch Composer は、プロジェクトの `.vscode/launch-composer/` ディレクトリに配置したprofileと個別構成のファイルを読み込み、`.vscode/launch.json` を生成する VSCode 拡張機能である。
+## 概要
 
-- 拡張機能名: Launch Composer
-- Extension ID: `launch-composer`
+Launch Composer は、ワークスペース内の `.vscode/launch-composer/` に置かれた profile と config を読み込み、VS Code の `.vscode/launch.json` を生成する拡張機能である。
 
-データフロー:
-
+```text
+.vscode/launch-composer/profiles/*.json
+.vscode/launch-composer/configs/*.json
+argsFile
+        -> merge / validate / generate
+.vscode/launch.json
 ```
-profiles/*.json + configs/*.json + argsFile（外部ファイル）
-        ↓ マージ・変数展開
-  .vscode/launch.json
-```
 
-Launch Composer は、ユーザーが GUI のボタンを押した時だけ launch.json を生成する。ファイル変更を検知した際に自動で生成することはない。
+`launch.json` はユーザーが Generate を実行したときだけ生成する。設定ファイルの変更は TreeView と Webview に反映するが、自動で `launch.json` を再生成しない。
 
----
+Launch Composer は単一ワークスペースフォルダーを前提にする。ワークスペースフォルダーが 0 件または複数件の場合、コマンドは登録されるが、実行時に「exactly one workspace folder」が必要であることを通知して処理を行わない。マルチルートワークスペースのデータ解決や生成結果は仕様対象外とする。
 
-## 2. 実装方針
+## 入出力ディレクトリ
 
-- 動作が予測可能であることを最優先とする。ユーザーが設定ファイルに書いた内容がそのまま launch.json に反映される単純な対応関係を維持する。暗黙的な変換や条件分岐を増やさない。
-- 機能は必要最小限に絞る。実装コストに見合わない機能や使用頻度の低い機能は入れない。後から追加できるものは後から追加する。
-- VSCode の既存の UI パターンと API に従う。独自の UI 規約を作らず、TreeView API・Codicon・テーマカラーといった VSCode が提供する標準要素をそのまま使う。
-- JSON ファイルはユーザーが直接編集する前提で扱う。入力が一時的に不正になっても Launch Composer は全体の処理を停止せず、問題はファイル単位で扱う。
-- GUI からの保存はファイル全体の再生成ではなく、編集中エントリ単位の更新として扱う。`name` 以外のフィールドは差分として反映し、`name` は専用の rename 処理で反映する。保存前には必要な整合性検査を実施する。GUI からの編集と JSON ファイルの直接編集が競合した場合は、ファイル側の内容を優先する。
-- カスタマイズ項目を増やさない。選択肢が増えるとコードパスが分岐し、テストとメンテナンスのコストが増える。
+入力と出力のパスは固定である。
 
----
-
-## 3. ディレクトリ構成
-
-ユーザーがプロジェクトに追加する設定ファイルは以下の通りである。
-
-```
-<project-root>/
+```text
+<workspace-root>/
 └── .vscode/
-    ├── launch.json                  ← 生成先（出力）
-    └── launch-composer/             ← 設定ディレクトリ（入力）
+    ├── launch.json
+    └── launch-composer/
         ├── profiles/
-        │   ├── profile.json        ← initialize が不足時に作る雛形
-        │   ├── cpp.json
-        │   └── scripting.json
+        │   └── *.json
         └── configs/
-            ├── config.json          ← initialize が不足時に作る雛形
-            ├── basic-test.json
-            └── input-test.json
+            └── *.json
 ```
 
-設定ディレクトリのパスは `.vscode/launch-composer` に固定し、ユーザーが変更する手段は提供しない。
+読み込み対象は `profiles/` と `configs/` の直下にある `.json` ファイルである。`.vscode/launch-composer/`、`profiles/`、`configs/` が未作成の場合、読み取り系処理は空データとして扱う。ファイル作成や Generate など書き込みが必要な処理は、必要なディレクトリを作成してから書き込む。
 
-マルチルートワークスペースへの対応はスコープ外とする。マルチルートワークスペースで使用しようとした場合の挙動は規定しない。
+## JSON ファイル構造の読み方
 
----
+JSON file data と Generate 入出力の shape は `packages/core/src/types.ts` を canonical source とする。契約ごとの参照先は [contracts/json-files.md](./contracts/json-files.md) を参照する。
 
-## 4. スキーマ定義
+この節では profile、config、argsFile、生成される `launch.json` の関係と、詳細を読む場所を示す。
 
-### 4.1 profiles/\*.json
+入力ファイルは JSONC として読む。コメントと末尾カンマを受け付ける。GUI からの編集は `jsonc-parser` ベースの部分更新で行い、関係しないコメントをできるだけ保持する。生成される `launch.json` は毎回ファイル全体を再生成するため、既存の `launch.json` の内容やコメントは保持しない。
 
-各ファイルのルートはprofileオブジェクトの配列とする。1 ファイルに複数のprofileを含められる。各profileは `launch.json` の configuration のベースとなる。
+### profiles/\*.json
 
-```jsonc
-[
-  {
-    // --- 拡張機能固有キー ---
-    "name": "cpp", // 必須。識別子。launch.jsonには出力しない。
-    "args": [], // 省略可。launch.json の args に出力する。
+profile ファイルの root は profile entry の配列である。
 
-    // --- launch.json エントリの内容（省略可）---
-    "configuration": {
-      // パススルーキー（launch.json の任意プロパティ）
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/build/myapp",
-      "MIMode": "gdb",
-      "env": { "PATH": "/usr/bin" },
-      // ...その他 launch.json の標準プロパティ
-    },
-  },
-]
-```
+- contract: `ProfileFileData` / `ProfileData`
+- role: profile entry の `configuration` を Generate の base として使う
+- details: contract map は [contracts/json-files.md](./contracts/json-files.md)、Generate 時 validation は [spec-core.md](./spec-core.md)
 
-制約:
+`configuration` は `launch.json` configuration のベースになるパススルーオブジェクトである。ファイル読み込み上は省略可能だが、Generate 時には各 profile の `configuration.type` が非空文字列であり、`configuration.request` が `launch` または `attach` でなければならない。GUI で profile を追加した直後は `type` が空文字で作られるため、Generate 前に JSON で有効な値へ修正する必要がある。
 
-- `name` は必須とする。`profiles/` ディレクトリ以下の全ファイルにわたって一意でなければならない。
-- GUI から profile の `name` を変更した場合、Launch Composer はその profile を参照する config の `profile` も同じ名前に更新する。
-- `args` は省略できる。値を指定する場合は文字列の配列でなければならない。
-- `configuration.request` は必須とする。値は `launch` または `attach` のいずれかでなければならない。
-- `configuration` オブジェクトは省略できる。存在する場合はオブジェクトでなければならない。空オブジェクト `{}` はファイルに書き込まず、省略と同じ扱いでキーごと削除する。
-- profile に `args` が定義されている場合、その profile を参照する config エントリで `argsFile` を指定してはならない。指定されていた場合は Generate 時エラーとする（spec-core.md §3.1 参照）。
-- profile 間の継承は実装しない。将来も追加しない。
+profile 間の継承はない。
 
-profileエントリのキーは次の 2 種類に分けられる。
+### configs/\*.json
 
-- **拡張機能固有キー**: `name`、`args`。生成時に launch.json へはパススルーしない。`args` は spec-core.md §1.3 のルールで処理して出力する。
-- **`configuration` オブジェクト**: launch.json エントリの内容をすべてパススルーキーとして格納する。config の `configuration` で上書きされない限り、launch.json にそのまま出力する。
+config ファイルの root は config file object であり、config entry の配列を持つ。
 
-### 4.2 configs/\*.json
+- contract: `ConfigFileData` / `ConfigData`
+- role: config entry ごとに profile を参照し、生成対象の `launch.json` configuration を作る
+- details: contract map は [contracts/json-files.md](./contracts/json-files.md)、merge / validation は [spec-core.md](./spec-core.md)
 
-各ファイルのルートは config ファイルオブジェクトとする。`configurations` 配列の各要素が 1 件のデバッグ構成を表す。1 ファイルに複数の構成を含められる。
+`configuration` は `launch.json` configuration に渡すパススルーオブジェクトである。ただし Generate 時、config の `configuration` に `program`、`type`、`request` がある場合はエラーにする。これらは profile 側で管理する。
 
-```jsonc
-{
-  "enabled": true, // 省略時 true。false の場合、このファイル内の全構成は生成対象外。
-  "configurations": [
-    {
-      // --- 拡張機能固有キー ---
-      "name": "Basic Test", // 必須。launch.json の name になる。
-      "profile": "cpp", // 必須。profiles の name を参照する。
-      "enabled": true, // 省略時 true。file.enabled とこの値の両方が false でない場合のみ launch.json に出力。
-      "argsFile": "/absolute/path/to/args.json", // 省略可。
-      "args": ["--debug-mode"], // 省略可。
+`enabled` の省略は Generate 上は有効として扱う。file-level `enabled === false` の場合、そのファイル内の config は entry-level `enabled` の値に関わらず生成されない。
 
-      // --- launch.json エントリの内容（省略可）---
-      "configuration": {
-        // パススルーキー（profileをオーバーライド）
-        "env": { "DEBUG": "1" },
-        "cwd": "${workspaceFolder}/test",
-      },
-    },
-  ],
-}
-```
+### argsFile
 
-`enabled` の評価はファイル単位と config 単位で独立して行う。`file.enabled === false` の場合、そのファイル内の config は各 config の `enabled` の値に関わらずすべて無効とする。`enabled` を省略した場合、ファイル・config のどちらも `true` として扱う。
+`argsFile` は config エントリから参照される外部 JSON/JSONC ファイルである。ルートはオブジェクトで、`args` に文字列配列を持つ。
 
-config エントリのキーは次の 2 種類に分けられる。
+- contract: `ArgsFileData`
+- role: config entry から参照される外部 args source
+- details: path resolution / precedence は [spec-core.md](./spec-core.md)
 
-- **拡張機能固有キー**: `name`、`profile`、`enabled`、`argsFile`、`args`。launch.json へはパススルーしない。`args` は argsFile と合成した結果を launch.json に出力する。
-- **`configuration` オブジェクト**: launch.json エントリの内容をすべてパススルーキーとして格納する。launch.json にそのまま出力する。
+`args` 以外のキーは生成に使わない。メタデータとして自由に含めてよい。`argsFile` のパス解決と結合順序は [spec-core.md](./spec-core.md) を参照する。
 
-config は常に `profile` を持つ。`type` と `request` は参照先 profile で管理し、GUI には表示しない。`configuration` オブジェクトでは `cwd` や `stopAtEntry` などの config 側で許可された上書きキーだけを扱う。
+### 生成される launch.json
 
-`configuration` オブジェクトは省略できる。存在する場合はオブジェクトでなければならない。空オブジェクト `{}` はファイルに書き込まず、省略と同じ扱いでキーごと削除する。
+Generate が成功すると、`.vscode/launch.json` に `LaunchJson` shape の JSONC を書き込む。出力 shape の canonical source は `packages/core/src/types.ts` の `LaunchJson` / `LaunchConfig` である。
 
-GUI から config の `name` を変更した場合、Launch Composer はそのエントリ自身の `name` だけを更新する。GUI から profile の `name` を変更した場合は、Launch Composer がその profile を参照する config の `profile` も同時に更新する。
+- contract: `LaunchJson` / `LaunchConfig`
+- role: Generate の出力
+- details: output order は [spec-core.md](./spec-core.md)、file write は [spec-extension.md](./spec-extension.md)
 
-### 4.3 argsFile（外部ファイル）
+`launch.json` の生成ルール、確認ダイアログ、エラー処理は [spec-extension.md](./spec-extension.md) と [spec-core.md](./spec-core.md) を参照する。
 
-argsFile はデバッグ対象のバイナリに渡す引数を格納する外部ファイルである。プロジェクトの外に配置してもよい。Launch Composer は、外部のツールが実行ログから引数の一覧を自動生成する利用シーンを想定している。
+## パッケージ構成
 
-```jsonc
-{
-  "args": ["-v", "-o", "output.txt", "input.txt"],
-  "generatedAt": "2026-03-16T10:30:00Z",
-  "source": "replay-tool v1.2",
-}
-```
+このリポジトリは npm workspaces による monorepo である。
 
-制約:
-
-- 形式は JSON または JSONC とする。文字コードは UTF-8 であることを前提とする。
-- ファイルのルートは JSON オブジェクトでなければならない。配列やプリミティブ値は不正とみなしエラーにする。
-- ルートオブジェクトには `args` キーが必須であり、その値は文字列の配列でなければならない。
-- `args` 以外のキーはすべて無視する。メタデータを自由に含めてよい。
-
-### 4.4 生成される launch.json
-
-```jsonc
-{
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Basic Test",
-      "type": "cppdbg",
-      "request": "launch",
-      "program": "${workspaceFolder}/build/myapp",
-      "MIMode": "gdb",
-      "args": ["-v", "-o", "output.txt", "input.txt", "--debug-mode"],
-      "env": { "DEBUG": "1" },
-      "cwd": "${workspaceFolder}/test",
-    },
-  ],
-}
-```
-
-※ env は config で指定しているため、Launch Composer は profile の env（`"PATH": "/usr/bin"`）を継承せず、config の env で丸ごと置換する（shallow merge）。
-
-`type` と `request` は生成結果に常に出力する。`request` の値は常に `launch` または `attach` のいずれかでなければならない。
-
----
-
-## 5. プロジェクト構成
-
-### 5.1 方針
-
-npm workspaces による monorepo 構成とする。設定ファイルのマージ・バリデーション・生成ロジックを `@launch-composer/core` パッケージに切り出し、VSCode に依存しない純粋な関数として実装する。このパッケージ分割により、VSCode API を一切モックせずにコアロジックのユニットテストを書ける。
-
-### 5.2 パッケージ構成
-
-```
+```text
 launch-composer/
-├── packages/
-│   ├── core/              # @launch-composer/core
-│   ├── extension/         # launch-composer (VSCode 拡張本体)
-│   └── webview/           # @launch-composer/webview
-├── package.json           # workspaces 定義
-└── tsconfig.base.json
-```
-
-#### `@launch-composer/core`
-
-設定ファイルの入力から launch.json 内容の出力までの純粋なロジックを実装する。VSCode と Node.js のどちらにも依存しない。
-
-- スキーマに対応する TypeScript 型の定義（`ProfileData`、`ConfigData`、`ArgsFileData`、`LaunchConfig` を含む）
-- マージロジック（spec-core.md §1）
-- バリデーション（spec-core.md §3）
-- `generate(profiles, configs, variables)` — メインの生成関数
-
-変数解決で使える変数は `${workspaceFolder}` のみとする。呼び出し側が `variables: Record<string, string>` として値を渡し、コアは文字列置換のみを行う。
-
-#### `launch-composer`（extension）
-
-`@launch-composer/core` と VSCode API を接続する統合層である。
-
-- ファイル I/O（profiles および configs の読み込み、launch.json の書き出し）
-- TreeView プロバイダー、Webview Panel 管理、コマンド登録
-- `FileSystemWatcher` によるファイル監視
-- ビルドには esbuild を使用し、`@launch-composer/webview` のビルド成果物を取り込む
-
-#### `@launch-composer/webview`
-
-React 19 + Vite 7 で実装する編集フォーム UI を提供する。ビルド成果物を extension パッケージが取り込む。
-
-### 5.3 パッケージ間の依存関係
-
-```
-@launch-composer/core  ←── launch-composer (extension)
-                                    ↑
-                        @launch-composer/webview (ビルド成果物)
-```
-
-### 5.4 ディレクトリ構成
-
-```
-launch-composer/
-├── package.json                    ← workspaces 定義
+├── package.json
 ├── tsconfig.base.json
+├── docs/
 └── packages/
     ├── core/
-    │   ├── package.json
-    │   ├── tsconfig.json
-    │   └── src/
-    │       ├── index.ts
-    │       ├── types.ts            ← スキーマに対応する型の定義
-    │       ├── merge.ts            ← マージロジック
-    │       ├── validate.ts         ← バリデーション
-    │       └── generate.ts         ← generate()
     ├── extension/
-    │   ├── package.json
-    │   ├── tsconfig.json
-    │   ├── esbuild.mjs
-    │   ├── .vscodeignore
-    │   └── src/
-    │       ├── extension.ts        ← エントリポイント
-    │       ├── treeview/           ← TreeView プロバイダー
-    │       ├── io/                 ← ファイル I/O, FileSystemWatcher
-    │       ├── webview/            ← Webview Panel 管理（HTML 生成、メッセージハンドラ）
-    │       └── messages.ts         ← WebviewMessage, HostMessage 型定義
     └── webview/
-        ├── package.json
-        ├── tsconfig.json
-        ├── vite.config.ts
-        ├── index.html
-        └── src/
-            ├── main.tsx
-            ├── App.tsx
-            ├── components/         ← エディタフォーム用コンポーネント
-            └── utils/
-                └── rpc.ts          ← requestId ヘルパー
 ```
 
-### 5.5 バンドラー
+### @launch-composer/core
 
-| 対象                    | バンドラー                        |
-| ----------------------- | --------------------------------- |
-| `@launch-composer/core` | tsc（型定義 + ES モジュール出力） |
-| Extension Host          | esbuild                           |
-| Webview                 | Vite 7                            |
+VS Code API と Node.js のファイルシステム API に依存しない純粋な TypeScript ロジックを持つ。
 
-Webview のビルド出力先は `packages/extension/dist/webview/` とする。
+- JSON file data と Generate 入出力に対応する型
+- マージと args 結合
+- Generate 時バリデーション
+- `generate(input)` と `validateGenerateInput(input)`
 
-### 5.6 npm scripts
+### launch-composer
 
-ルートの `package.json`:
+VS Code 拡張本体である。`@launch-composer/core` と VS Code API を接続する。
 
-```jsonc
-{
-  "scripts": {
-    "build:core": "npm run build -w @launch-composer/core",
-    "build:webview": "npm run build -w @launch-composer/webview",
-    "build:extension": "npm run build -w launch-composer",
-    "build": "npm run build:core && npm run build:webview && npm run build:extension",
-    "install:vscode": "npm run install:vscode -w launch-composer",
-    "lint": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/webview/test packages/extension/src packages/extension/test packages/extension/esbuild.mjs",
-    "lint:fix": "eslint eslint.config.mjs packages/core/src packages/core/test packages/webview/src packages/webview/test packages/extension/src packages/extension/test packages/extension/esbuild.mjs --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "typecheck": "npm run typecheck -w @launch-composer/core && npm run typecheck -w @launch-composer/webview && npm run typecheck -w launch-composer",
-    "test": "npm run test -w @launch-composer/core && npm run test -w @launch-composer/webview && npm run test -w launch-composer",
-  },
-}
+- workspace I/O
+- JSONC 読み書きと部分更新
+- TreeView
+- Webview Panel 管理
+- コマンド登録
+- Generate コマンドと `launch.json` 書き込み
+
+### @launch-composer/webview
+
+React 19 + Vite 7 で実装する Webview UI である。ビルド成果物は extension パッケージの `dist/webview/` に取り込まれる。
+
+- 編集フォーム
+- Webview 側 RPC
+- フォーム変更から `EntryPatchOperation` への変換
+
+依存関係は次のとおりである。
+
+```text
+@launch-composer/core <- launch-composer
+                              ^
+                              |
+                  @launch-composer/webview (build artifact)
 ```
-
-### 5.7 開発ワークフロー
-
-開発中に継続ビルドが必要な場合は、`npm run watch -w launch-composer` と `npm run watch -w @launch-composer/webview` を並列実行する。これらは各 workspace の package.json に定義された watch スクリプトを直接利用する。
-
-### 5.8 パッケージング
-
-`packages/extension/.vscodeignore`:
-
-```
-src/**
-node_modules/**
-.vscode/**
-.vscode-test/**
-esbuild.mjs
-tsconfig.json
-**/*.ts
-**/*.map
-!dist/**
-```
-
-`vsce package` を実行すると、`.vscodeignore` の設定に従い `dist/` 以下のビルド済みファイルのみが .vsix に含まれる。
