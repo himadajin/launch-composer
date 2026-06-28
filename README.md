@@ -51,10 +51,16 @@ Copy this as `.vscode/launch-composer/profiles/profile.json`:
 ```jsonc
 [
   {
-    "name": "node",
+    "name": "node-launch",
     "configuration": {
       "type": "node",
-      "request": "launch"
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "env": {
+        "NODE_ENV": "development"
+      }
     }
   }
 ]
@@ -73,10 +79,14 @@ Copy this as `.vscode/launch-composer/configs/config.json`:
 {
   "configurations": [
     {
-      "name": "Debug app",
-      "profile": "node",
+      "name": "Debug API server",
+      "profile": "node-launch",
+      "excluded": false,
+      "args": ["--config", "config/local.json"],
       "configuration": {
-        "program": "${workspaceFolder}/src/index.js"
+        "program": "${workspaceFolder}/src/server.ts",
+        "sourceMaps": true,
+        "outFiles": ["${workspaceFolder}/dist/**/*.js"]
       }
     }
   ]
@@ -89,6 +99,9 @@ its profile and written to `.vscode/launch.json`.
 ## Notes
 
 - Source files are JSONC, so comments and trailing commas are allowed.
+- `configuration` is shallow-merged: config keys replace profile keys with the
+  same name.
+- Use `argsFile` when an argument list is too long to keep inline.
 - `launch.json` is generated output. Existing contents are replaced when
   generation succeeds.
 - Use `excluded: true` on a config entry to keep it out of the generated
