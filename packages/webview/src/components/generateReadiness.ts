@@ -13,33 +13,9 @@ export const DEFAULT_GENERATE_READINESS: GenerateReadiness = {
   diagnostics: [],
 };
 
-type MaybeGenerateReadiness = Omit<GenerateReadiness, 'diagnostics'> & {
-  diagnostics?: GenerateDiagnostic[];
-};
-
-type MaybeInitialDataPayload = Omit<InitialDataPayload, 'generateReadiness'> & {
-  generateReadiness?: MaybeGenerateReadiness;
-};
-
-type MaybeWorkspaceUpdatePayload = Omit<
-  WorkspaceUpdatePayload,
-  'generateReadiness'
-> & {
-  generateReadiness?: MaybeGenerateReadiness;
-};
-
-export function normalizeInitialDataPayload(
-  payload: MaybeInitialDataPayload,
-): InitialDataPayload {
-  return {
-    ...payload,
-    generateReadiness: normalizeGenerateReadiness(payload.generateReadiness),
-  };
-}
-
 export function mergeWorkspaceUpdatePayload(
   currentPayload: InitialDataPayload | null,
-  update: MaybeWorkspaceUpdatePayload,
+  update: WorkspaceUpdatePayload,
 ): InitialDataPayload | null {
   if (currentPayload === null) {
     return currentPayload;
@@ -55,26 +31,10 @@ export function mergeWorkspaceUpdatePayload(
     ...(update.profiles === undefined ? {} : { profiles: update.profiles }),
     ...(update.configs === undefined ? {} : { configs: update.configs }),
     issues: nextIssues,
-    generateReadiness:
-      update.generateReadiness === undefined
-        ? currentPayload.generateReadiness
-        : normalizeGenerateReadiness(update.generateReadiness),
+    generateReadiness: update.generateReadiness,
     ...(update.editorRevision === undefined
       ? {}
       : { editorRevision: update.editorRevision }),
-  };
-}
-
-export function normalizeGenerateReadiness(
-  value: MaybeGenerateReadiness | undefined,
-): GenerateReadiness {
-  if (value === undefined) {
-    return DEFAULT_GENERATE_READINESS;
-  }
-
-  return {
-    ...value,
-    diagnostics: value.diagnostics ?? [],
   };
 }
 

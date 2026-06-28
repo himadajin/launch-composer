@@ -9,52 +9,7 @@ import {
   getFieldDiagnosticMessages,
   mergeHelperMessages,
   mergeWorkspaceUpdatePayload,
-  normalizeInitialDataPayload,
-  normalizeGenerateReadiness,
 } from '../src/components/generateReadiness.js';
-
-test('normalizeInitialDataPayload fills missing generateReadiness for persisted state', () => {
-  const payload = normalizeInitialDataPayload({
-    profiles: [],
-    configs: [],
-    issues: [],
-    editor: {
-      kind: 'profile',
-      file: 'profile.json',
-      index: 0,
-    },
-    editorRevision: null,
-    autoSaveDelay: 1000,
-  });
-
-  assert.deepEqual(payload.generateReadiness, DEFAULT_GENERATE_READINESS);
-});
-
-test('normalizeGenerateReadiness fills missing diagnostics for old persisted state', () => {
-  assert.deepEqual(
-    normalizeGenerateReadiness({
-      ready: false,
-      errors: [
-        {
-          file: 'profile.json',
-          field: 'configuration.type',
-          message: 'Profile type is required.',
-        },
-      ],
-    }),
-    {
-      ready: false,
-      errors: [
-        {
-          file: 'profile.json',
-          field: 'configuration.type',
-          message: 'Profile type is required.',
-        },
-      ],
-      diagnostics: [],
-    },
-  );
-});
 
 test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace update', () => {
   const merged = mergeWorkspaceUpdatePayload(

@@ -22,8 +22,6 @@ import type {
 import {
   getEditorDiagnostics,
   mergeWorkspaceUpdatePayload,
-  normalizeGenerateReadiness,
-  normalizeInitialDataPayload,
 } from './components/generateReadiness.js';
 import { RpcClient } from './utils/rpc.js';
 import { vscode } from './utils/vscode.js';
@@ -32,8 +30,7 @@ const rpc = new RpcClient();
 
 export function App() {
   const [payload, setPayload] = useState<InitialDataPayload | null>(() => {
-    const restored = vscode.getState<InitialDataPayload>() ?? null;
-    return restored === null ? null : normalizeInitialDataPayload(restored);
+    return vscode.getState<InitialDataPayload>() ?? null;
   });
   const updateQueueRef = useRef<Promise<void>>(Promise.resolve());
   const revisionRef = useRef<string | null>(payload?.editorRevision ?? null);
@@ -49,7 +46,7 @@ export function App() {
     }
 
     startTransition(() => {
-      setPayload(normalizeInitialDataPayload(result));
+      setPayload(result);
     });
   }, []);
 
@@ -139,7 +136,7 @@ export function App() {
               generateReadiness:
                 result.generateReadiness === undefined
                   ? currentPayload.generateReadiness
-                  : normalizeGenerateReadiness(result.generateReadiness),
+                  : result.generateReadiness,
             };
           });
         })
@@ -157,7 +154,7 @@ export function App() {
       const message = event.data;
       if (message.type === 'initial-data') {
         startTransition(() => {
-          setPayload(normalizeInitialDataPayload(message.payload));
+          setPayload(message.payload);
         });
         return;
       }
