@@ -93,6 +93,40 @@ textarea {
   word-break: break-word;
 }
 
+.composer-generate-status {
+  max-width: min(100%, 1200px);
+  margin: 0 auto 8px;
+  padding: 10px 24px 12px;
+  border-top: 1px solid var(--vscode-widget-border, transparent);
+  border-bottom: 1px solid var(--vscode-widget-border, transparent);
+  background: var(--vscode-settings-rowHoverBackground, transparent);
+}
+
+.composer-generate-status-warning {
+  border-left: 3px solid var(--vscode-list-warningForeground);
+}
+
+.composer-generate-status-label {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.composer-generate-status-message {
+  margin: 3px 0 0;
+  color: var(--vscode-foreground);
+  font-size: 13px;
+}
+
+.composer-generate-status-detail {
+  margin: 3px 0 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
 .composer-form {
   max-width: min(100%, 1200px);
   margin: 0 auto;
@@ -112,6 +146,12 @@ textarea {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+
+.composer-diagnostic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .composer-json-hint {
@@ -165,6 +205,7 @@ textarea {
 
 @media (max-width: 720px) {
   .composer-editor-header,
+  .composer-generate-status,
   .composer-form {
     padding-left: 12px;
     padding-right: 12px;

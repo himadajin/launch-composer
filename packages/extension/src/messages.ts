@@ -1,9 +1,23 @@
-import type {
-  ConfigFileData,
-  ProfileFileData,
-  ValidationError,
-} from '@launch-composer/core';
+import type { ConfigFileData, ProfileFileData } from '@launch-composer/core';
 import type { ComposerDataIssue } from './io/workspaceStore.js';
+
+export interface GenerateDiagnosticTarget {
+  kind: 'profile' | 'config' | 'file';
+  index?: number;
+  name?: string;
+  field?: string;
+}
+
+export interface GenerateDiagnostic {
+  source: 'core-validation' | 'invalid-file';
+  file: string;
+  message: string;
+  target: GenerateDiagnosticTarget;
+}
+
+export interface GenerateReadiness {
+  diagnostics: GenerateDiagnostic[];
+}
 
 export interface EditorTarget {
   kind: 'profile' | 'config';
@@ -15,6 +29,7 @@ export interface InitialDataPayload {
   profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
+  generateReadiness: GenerateReadiness;
   editor: EditorTarget;
   editorRevision: string | null;
   autoSaveDelay: number;
@@ -25,6 +40,7 @@ export interface WorkspaceUpdatePayload {
   profiles?: ProfileFileData[];
   configs?: ConfigFileData[];
   issues: ComposerDataIssue[];
+  generateReadiness: GenerateReadiness;
   editorRevision?: string | null;
 }
 
@@ -102,12 +118,18 @@ export type HostMessage =
   | {
       type: 'update-result';
       requestId: string;
-      payload: {
-        success: boolean;
-        conflict?: boolean;
-        revision?: string | null;
-        error?: string;
-      };
+      payload:
+        | {
+            success: true;
+            revision: string | null;
+            generateReadiness: GenerateReadiness;
+          }
+        | {
+            success: false;
+            conflict?: boolean;
+            revision?: string | null;
+            error?: string;
+          };
     }
   | {
       type: 'rename-result';
@@ -125,7 +147,7 @@ export type HostMessage =
   | {
       type: 'generate-result';
       requestId: string;
-      payload: { success: boolean; errors?: ValidationError[] };
+      payload: { success: boolean };
     }
   | {
       type: 'file-selected';

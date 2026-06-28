@@ -59,6 +59,13 @@ invalid file:
 - Add Entry は提供しない
 - Open / Copy Path / Copy Relative Path / Rename / Delete は提供する
 
+valid file に file-level generate diagnostic がある場合:
+
+- warning icon を表示する
+- description は `1 issue` または `N issues`
+- tooltip は 1 件なら diagnostic message、複数件なら issue count と最初の diagnostic message
+- collapsible と children は通常の valid file と同じ
+
 ### entry node
 
 profile entry:
@@ -86,6 +93,15 @@ config entry の状態:
     - description: `excluded`
 
 config entry の `excluded` 省略時は Generate 上も TreeView 上も included として扱う。
+
+entry に generate diagnostic がある場合:
+
+- warning icon を表示する
+- description は `1 issue` または `N issues`
+- excluded config entry では `excluded, N issues` のように excluded state と issue count を併記する
+- tooltip は 1 件なら diagnostic message、複数件なら issue count と最初の diagnostic message
+- command と checkbox は通常の entry と同じ
+- descendant entry diagnostic は file node に集約表示しない
 
 ### view title actions
 
@@ -188,6 +204,29 @@ Webview の editor title action `Open JSON` は `launch-composer.openActiveEdito
 
 対象 entry が削除されて存在しなくなった場合は panel を閉じる。Webview 側で current entry がなく、invalid issue もない場合は `The selected item no longer exists. Reopen it from the sidebar.` を表示する。
 
+### Generate Status
+
+Webview は editor header 直下に `Generate Status` を表示する。
+
+- `generateReadiness.diagnostics.length === 0` の場合: `Ready to generate launch.json.` を表示する
+- diagnostics が 1 件以上ある場合: Generate を block している issue count を表示する
+
+Generate Status は workspace 全体の summary であり、現在開いている editor entry だけに絞らない。詳細な修正内容は `Entry Issues` または field-level helper に表示する。
+
+### Entry Issues と field-level helper
+
+Webview は current editor target に一致する generate diagnostic をフォーム内に表示する。
+
+- field に対応する diagnostic: 該当 `FormGroup` の helper に表示する
+- field に対応しない current entry の diagnostic: フォーム先頭の `Entry Issues` row に表示する
+- invalid file issue: 従来の `JSON Status` を優先し、entry-level inline diagnostics は表示しない
+
+field-level helper は diagnostic error を local helper より優先する。同じ field に diagnostic と local helper が両方ある場合、diagnostic を表示し、local helper は重複表示しない。
+
+config 側で GUI 管理しない `configuration.type`、`configuration.request`、`configuration.program` などの blocked override は `Entry Issues` に表示し、`Edit in <sourceFile>` で JSON 編集へ誘導する。
+
+Generate command の disabled 制御はこの仕様では扱わない。
+
 ## Profile Editor
 
 profile editor のフォーム項目:
@@ -196,6 +235,15 @@ profile editor のフォーム項目:
   - JSON path: `name`
   - control: `TextInput`
   - 保存方法: blur / Enter で rename request
+- 表示ラベル: `Profile: Type`
+  - JSON path: `configuration.type`
+  - control: `TextInput`
+  - 保存方法: debounce 後 patch
+- 表示ラベル: `Profile: Request`
+  - JSON path: `configuration.request`
+  - control: `Select`
+  - options: `launch`, `attach`
+  - 保存方法: 即時 patch
 - 表示ラベル: `Profile: Program`
   - JSON path: `configuration.program`
   - control: `TextInput`
@@ -213,12 +261,14 @@ profile editor のフォーム項目:
   - control: `ListEditor`
   - 保存方法: 変更操作完了時に即時 patch
 
-profile editor は `configuration.type` と `configuration.request` をフォーム項目として表示しない。Generate には必須なので、必要に応じて JSON を直接編集する。
+profile editor は `configuration.type` と `configuration.request` をフォーム項目として表示する。`type` が空文字または空白だけの場合、または `request` が未設定か `launch` / `attach` 以外の場合、Generate に必要な field として warning helper を表示する。
 
 保存挙動:
 
 - `name` は patch ではなく rename request を使う
 - profile rename 成功時、Extension Host は参照している config entry の `profile` も更新する
+- Type は空文字でも leaf key を削除せず `configuration.type` に保存する
+- Request は `launch` / `attach` の選択値だけを保存する。不正な既存値や placeholder 値は保存しない
 - Program / Working Directory は空白だけになった場合、対応する leaf key を削除する patch を送る
 - Stop At Entry は checked 値を `true` / `false` として書く
 - Args は空配列になった場合、top-level `args` を削除する
@@ -310,6 +360,7 @@ Webview は patch 保存要求を直列化する。前回の `update-result` を
 保存結果:
 
 - success: Webview は `editorRevision` を更新する
+- success: Webview は response の `generateReadiness` を最新状態として採用する
 - conflict: Webview は `request-initial-data` で最新状態を再取得する
 - rename success / failure: Webview は結果に関わらず最新状態を再取得する
 

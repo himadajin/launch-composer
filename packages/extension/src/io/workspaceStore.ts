@@ -1,14 +1,22 @@
 import {
   generate,
+  validateGenerateInput,
+  type ArgsFileLoadResult,
   type ConfigData,
   type ConfigFileData,
-  type GenerateResult,
+  type GenerateInput,
+  type GenerateSuccess,
   type ProfileData,
   type ProfileFileData,
+  type ValidationError,
 } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
-import type { EditorTarget } from '../messages.js';
+import type {
+  EditorTarget,
+  GenerateDiagnostic,
+  GenerateReadiness,
+} from '../messages.js';
 import {
   appendJsonArrayValue,
   applyJsonDocumentPatches,
@@ -51,6 +59,13 @@ export interface WorkspaceDataSnapshot {
   profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
+  generateReadiness: GenerateReadiness;
+}
+
+export interface WorkspaceDataWithoutReadiness {
+  profiles: ProfileFileData[];
+  configs: ConfigFileData[];
+  issues: ComposerDataIssue[];
 }
 
 export interface ProfileWorkspaceData {
@@ -62,6 +77,13 @@ export interface ConfigWorkspaceData {
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
 }
+
+export type WorkspaceGenerateResult =
+  | GenerateSuccess
+  | {
+      success: false;
+      issueCount: number;
+    };
 
 type ArrayFileReadResult<T> =
   | { status: 'ok'; data: T[] }
@@ -117,11 +139,159 @@ export class WorkspaceStore {
       this.readConfigsWithIssues(),
     ]);
 
-    return {
+    return this.withGenerateReadiness({
       profiles: profilesResult.profiles,
       configs: configsResult.configs,
       issues: [...profilesResult.issues, ...configsResult.issues],
+    });
+  }
+
+  async withGenerateReadiness(
+    snapshot: WorkspaceDataWithoutReadiness,
+  ): Promise<WorkspaceDataSnapshot> {
+    return {
+      ...snapshot,
+      generateReadiness: await this.getGenerateReadiness(snapshot),
     };
+  }
+
+  private async getGenerateReadiness(
+    snapshot: WorkspaceDataWithoutReadiness,
+  ): Promise<GenerateReadiness> {
+    if (snapshot.issues.length > 0) {
+      return {
+        diagnostics: snapshot.issues.map((issue) =>
+          this.createInvalidFileDiagnostic(issue),
+        ),
+      };
+    }
+
+    const errors = await validateGenerateInput(
+      this.createGenerateInput(snapshot),
+    );
+
+    return {
+      diagnostics: errors.map((error) =>
+        this.createCoreValidationDiagnostic(error, snapshot),
+      ),
+    };
+  }
+
+  private createInvalidFileDiagnostic(
+    issue: ComposerDataIssue,
+  ): GenerateDiagnostic {
+    return {
+      source: 'invalid-file',
+      file: issue.file,
+      message: issue.message,
+      target: { kind: 'file' },
+    };
+  }
+
+  private createCoreValidationDiagnostic(
+    error: ValidationError,
+    snapshot: WorkspaceDataWithoutReadiness,
+  ): GenerateDiagnostic {
+    if (error.target.kind === 'profile') {
+      const profile = findProfileEntry(
+        snapshot.profiles,
+        error.file,
+        error.target.index,
+      );
+      const target: GenerateDiagnostic['target'] = {
+        kind: 'profile',
+      };
+      if (error.target.index !== undefined) {
+        target.index = error.target.index;
+      }
+      if (profile?.name !== undefined) {
+        target.name = profile.name;
+      }
+      if (error.field !== undefined) {
+        target.field = error.field;
+      }
+      return {
+        source: 'core-validation',
+        file: error.file,
+        message: error.message,
+        target,
+      };
+    }
+
+    if (error.target.kind === 'config') {
+      const config = findConfigEntry(
+        snapshot.configs,
+        error.file,
+        error.target.index,
+      );
+      const target: GenerateDiagnostic['target'] = {
+        kind: 'config',
+      };
+      if (error.target.index !== undefined) {
+        target.index = error.target.index;
+      }
+      const name = config?.data.name ?? error.configName;
+      if (name !== undefined) {
+        target.name = name;
+      }
+      if (error.field !== undefined) {
+        target.field = error.field;
+      }
+      return {
+        source: 'core-validation',
+        file: error.file,
+        message: error.message,
+        target,
+      };
+    }
+
+    const target: GenerateDiagnostic['target'] = {
+      kind: 'file',
+    };
+    if (error.field !== undefined) {
+      target.field = error.field;
+    }
+
+    return {
+      source: 'core-validation',
+      file: error.file,
+      message: error.message,
+      target,
+    };
+  }
+
+  private createGenerateInput(
+    snapshot: Pick<WorkspaceDataSnapshot, 'profiles' | 'configs'>,
+  ): GenerateInput {
+    return {
+      profiles: snapshot.profiles,
+      configs: snapshot.configs,
+      variables: {
+        workspaceFolder: this.workspaceRoot.fsPath,
+      },
+      readArgsFile: (resolvedPath) => this.readArgsFile(resolvedPath),
+    };
+  }
+
+  private async readArgsFile(
+    resolvedPath: string,
+  ): Promise<ArgsFileLoadResult> {
+    try {
+      const uri = vscode.Uri.file(resolvedPath);
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const value = parseJsonc<unknown>(decodeText(bytes), resolvedPath);
+      return { kind: 'success', data: value };
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return { kind: 'not-found' };
+      }
+
+      return {
+        kind: 'error',
+        message:
+          error instanceof Error ? error.message : 'Failed to read argsFile.',
+      };
+    }
   }
 
   async readProfilesWithIssues(): Promise<ProfileWorkspaceData> {
@@ -604,50 +774,28 @@ export class WorkspaceStore {
     );
   }
 
-  async generateLaunchJson(): Promise<GenerateResult> {
-    const { profiles, configs, issues } = await this.readAll();
-    if (issues.length > 0) {
+  async generateLaunchJson(): Promise<WorkspaceGenerateResult> {
+    const snapshot = await this.readAll();
+    const readiness = snapshot.generateReadiness;
+    if (readiness.diagnostics.length > 0) {
       return {
         success: false,
-        errors: issues.map((issue) => ({
-          file: issue.file,
-          message: issue.message,
-        })),
+        issueCount: readiness.diagnostics.length,
       };
     }
 
-    return generate({
-      profiles,
-      configs,
-      variables: {
-        workspaceFolder: this.workspaceRoot.fsPath,
-      },
-      readArgsFile: async (resolvedPath) => {
-        try {
-          const uri = vscode.Uri.file(resolvedPath);
-          const bytes = await vscode.workspace.fs.readFile(uri);
-          const value = parseJsonc<unknown>(decodeText(bytes), resolvedPath);
-          return { kind: 'success' as const, data: value };
-        } catch (error) {
-          if (isMissingFileSystemError(error)) {
-            return { kind: 'not-found' as const };
-          }
+    const result = await generate(this.createGenerateInput(snapshot));
+    if (!result.success) {
+      return {
+        success: false,
+        issueCount: result.errors.length,
+      };
+    }
 
-          return {
-            kind: 'error' as const,
-            message:
-              error instanceof Error
-                ? error.message
-                : 'Failed to read argsFile.',
-          };
-        }
-      },
-    });
+    return result;
   }
 
-  async writeLaunchJson(
-    result: Exclude<GenerateResult, { success: false }>,
-  ): Promise<void> {
+  async writeLaunchJson(result: GenerateSuccess): Promise<void> {
     const content =
       '// This file is auto-generated by Launch Composer.\n' +
       '// Do not edit manually. Changes will be overwritten.\n' +
@@ -1252,6 +1400,33 @@ function assertIndex(entries: unknown[], index: number, file: string): void {
   if (index < 0 || index >= entries.length) {
     throw new Error(`Entry index ${index} is out of bounds for ${file}.`);
   }
+}
+
+function findProfileEntry(
+  files: ProfileFileData[],
+  file: string,
+  index: number | undefined,
+): ProfileData | undefined {
+  if (index === undefined) {
+    return undefined;
+  }
+
+  return files.find((fileData) => fileData.file === file)?.profiles[index];
+}
+
+function findConfigEntry(
+  files: ConfigFileData[],
+  file: string,
+  index: number | undefined,
+): { index: number; data: ConfigData } | undefined {
+  if (index === undefined) {
+    return undefined;
+  }
+
+  const data = files.find((fileData) => fileData.file === file)?.configurations[
+    index
+  ];
+  return data === undefined ? undefined : { index, data };
 }
 
 function decodeText(bytes: Uint8Array): string {

@@ -41,10 +41,10 @@ JSON file data と Generate 入出力の shape は `packages/core/src/types.ts` 
   - behavior spec: [../specs/core.md](../specs/core.md), [../specs/extension.md](../specs/extension.md)
   - 注意: Extension Host は固定コメントを付けてファイル全体を再生成する
 - 契約: validation error
-  - 用途: Generate failure と Webview への error 表示に使う
+  - 用途: core Generate failure と Extension Host の diagnostic 生成に使う
   - canonical source: `ValidationError` in `packages/core/src/types.ts`
   - behavior spec: [../specs/core.md](../specs/core.md), [../specs/communication.md](../specs/communication.md)
-  - 注意: invalid file issue は Extension Host で validation-style error に変換される
+  - 注意: `target` は必須。invalid file issue は core validation error ではなく、Extension Host が直接 generate diagnostic に変換する
 
 ## Ownership
 

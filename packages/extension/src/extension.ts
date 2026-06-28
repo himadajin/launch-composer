@@ -1,6 +1,5 @@
 import * as path from 'node:path';
 
-import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
 import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from './commands.js';
@@ -8,6 +7,7 @@ import {
   WorkspaceStore,
   type ComposerDataIssue,
   type WorkspaceDataSnapshot,
+  type WorkspaceDataWithoutReadiness,
 } from './io/workspaceStore.js';
 import type { EditorTarget } from './messages.js';
 import {
@@ -135,7 +135,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   };
 
-  const getCachedSnapshot = (): WorkspaceDataSnapshot | undefined => {
+  const getCachedSnapshot = (): WorkspaceDataWithoutReadiness | undefined => {
     if (
       snapshotCache.profiles === undefined ||
       snapshotCache.configs === undefined ||
@@ -172,7 +172,7 @@ export function activate(context: vscode.ExtensionContext): void {
       snapshotCache.configIssues = configData.issues;
     }
 
-    return getCachedSnapshot() ?? cachedSnapshot;
+    return store.withGenerateReadiness(getCachedSnapshot() ?? cachedSnapshot);
   };
 
   const syncUiWithWorkspace = async (options?: {
@@ -263,17 +263,12 @@ export function activate(context: vscode.ExtensionContext): void {
     ]);
   };
 
-  const handleGenerate = async (): Promise<{
-    success: boolean;
-    errors?: ValidationError[];
-  }> => {
+  const handleGenerate = async (): Promise<{ success: boolean }> => {
     const generated = await store.generateLaunchJson();
     if (!generated.success) {
-      showValidationErrors(generated.errors);
-      return {
-        success: false,
-        errors: generated.errors,
-      };
+      await syncUiWithWorkspace({ notifyIssues: false, kind: 'both' });
+      showGenerateBlockedWarning(generated.issueCount);
+      return { success: false };
     }
 
     if (!(await confirmOverwrite(store))) {
@@ -944,22 +939,12 @@ async function confirmOverwrite(store: WorkspaceStore): Promise<boolean> {
   return result === 'Yes';
 }
 
-function showValidationErrors(errors: ValidationError[]): void {
-  const message = errors
-    .map((error) => {
-      const details = [error.file];
-      if (error.configName !== undefined) {
-        details.push(error.configName);
-      }
-      if (error.field !== undefined) {
-        details.push(error.field);
-      }
-
-      return `${details.join(' / ')}: ${error.message}`;
-    })
-    .join('\n');
-
-  void vscode.window.showErrorMessage(message);
+function showGenerateBlockedWarning(issueCount: number): void {
+  void vscode.window.showWarningMessage(
+    `Generate is blocked by ${issueCount} issue${
+      issueCount === 1 ? '' : 's'
+    }. Open Launch Composer to review highlighted fields and JSON status.`,
+  );
 }
 
 function showError(error: unknown): void {

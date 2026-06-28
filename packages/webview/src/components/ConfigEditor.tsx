@@ -10,7 +10,13 @@ import {
 } from '@himadajin/vscode-components';
 import { useEffect, useRef, useState } from 'react';
 
-import type { ComposerDataIssue, ConfigData, ProfileData } from '../types.js';
+import type {
+  ComposerDataIssue,
+  ConfigData,
+  GenerateDiagnostic,
+  ProfileData,
+} from '../types.js';
+import { EntryIssuesRow, renderHelperMessages } from './DiagnosticMessages.js';
 import type { EntryChange } from './entryChanges.js';
 import {
   updateConfigArgs,
@@ -23,15 +29,31 @@ import {
 import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 import {
+  getEntryIssueDiagnostics,
+  getFieldDiagnosticMessages,
+  mergeHelperMessages,
+} from './generateReadiness.js';
+import {
   isInternalProfileSelectValue,
   resolveConfigProfileSelectState,
 } from './profileSelect.js';
+
+const CONFIG_VISIBLE_DIAGNOSTIC_FIELDS = [
+  'name',
+  'profile',
+  'excluded',
+  'argsFile',
+  'args',
+  'configuration.cwd',
+  'configuration.stopAtEntry',
+] as const;
 
 interface ConfigEditorProps {
   data: ConfigData;
   sourceFile: string;
   profiles: ProfileData[];
   autoSaveDelay: number;
+  diagnostics?: GenerateDiagnostic[];
   onBrowseFile: () => Promise<string | null>;
   onChange: (change: EntryChange<ConfigData>) => void;
   onRename: (name: string) => Promise<void>;
@@ -44,6 +66,7 @@ export function ConfigEditor({
   sourceFile,
   profiles,
   autoSaveDelay,
+  diagnostics = [],
   onBrowseFile,
   onChange,
   onRename,
@@ -79,6 +102,32 @@ export function ConfigEditor({
   );
   const profileSelect = resolveConfigProfileSelectState(profiles, data.profile);
   const argsFileDisabled = currentProfile?.args !== undefined;
+  const nameHelperMessages = getFieldDiagnosticMessages(diagnostics, 'name');
+  const profileHelperMessages = mergeHelperMessages(
+    getFieldDiagnosticMessages(diagnostics, 'profile'),
+    [profileSelect.helperMessage],
+  );
+  const excludedHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'excluded',
+  );
+  const cwdHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.cwd',
+  );
+  const stopAtEntryHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.stopAtEntry',
+  );
+  const argsFileDiagnosticMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'argsFile',
+  );
+  const argsHelperMessages = getFieldDiagnosticMessages(diagnostics, 'args');
+  const entryIssueDiagnostics = getEntryIssueDiagnostics(
+    diagnostics,
+    CONFIG_VISIBLE_DIAGNOSTIC_FIELDS,
+  );
 
   const handleCwdChange = (value: string) => {
     cwdChangedByUserRef.current = true;
@@ -141,10 +190,17 @@ export function ConfigEditor({
           </FormGroup>
         ) : null}
 
+        <EntryIssuesRow
+          diagnostics={entryIssueDiagnostics}
+          sourceFile={sourceFile}
+          onOpenJson={onOpenJson}
+        />
+
         <FormGroup
           category="Launch Composer"
           label="Config: Name"
           description="Configuration name written to the generated launch.json entry."
+          helper={renderHelperMessages(nameHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -167,13 +223,7 @@ export function ConfigEditor({
         <FormGroup
           label="Config: Profile"
           description="Profile used as the base for this config."
-          helper={
-            profileSelect.helperMessage === undefined ? undefined : (
-              <FormHelper tone="warning">
-                {profileSelect.helperMessage}
-              </FormHelper>
-            )
-          }
+          helper={renderHelperMessages(profileHelperMessages)}
         >
           <Select
             disabled={readOnly || profileSelect.disabled}
@@ -194,6 +244,7 @@ export function ConfigEditor({
           label="Config: Include"
           description="Include this config when generating launch.json."
           modified={data.excluded === true}
+          helper={renderHelperMessages(excludedHelperMessages)}
         >
           <Checkbox
             toggle
@@ -213,6 +264,7 @@ export function ConfigEditor({
         <FormGroup
           label="Config: Working Directory"
           description="Working directory passed to the debug adapter."
+          helper={renderHelperMessages(cwdHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -225,6 +277,7 @@ export function ConfigEditor({
           label="Config: Stop At Entry"
           description="Pause execution immediately after the program starts."
           modified={data.configuration?.stopAtEntry === true}
+          helper={renderHelperMessages(stopAtEntryHelperMessages)}
         >
           <Checkbox
             toggle
@@ -247,7 +300,9 @@ export function ConfigEditor({
           label="Config: Args File"
           description="Path to an argument file loaded before launch."
           helper={
-            argsFileDisabled ? (
+            argsFileDiagnosticMessages.length > 0 ? (
+              renderHelperMessages(argsFileDiagnosticMessages)
+            ) : argsFileDisabled ? (
               <FormHelper tone="info">
                 The selected profile already defines args.
               </FormHelper>
@@ -289,6 +344,7 @@ export function ConfigEditor({
         <FormGroup
           label="Config: Args"
           description="Arguments appended to the debug configuration."
+          helper={renderHelperMessages(argsHelperMessages)}
           fill
         >
           {readOnly ? (

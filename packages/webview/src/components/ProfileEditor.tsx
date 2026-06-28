@@ -4,25 +4,54 @@ import {
   FormGroup,
   FormHelper,
   ListEditor,
+  Select,
   TextInput,
 } from '@himadajin/vscode-components';
 import { useEffect, useRef, useState } from 'react';
 
-import type { ComposerDataIssue, ProfileData } from '../types.js';
+import type {
+  ComposerDataIssue,
+  GenerateDiagnostic,
+  ProfileData,
+} from '../types.js';
+import { EntryIssuesRow, renderHelperMessages } from './DiagnosticMessages.js';
 import type { EntryChange } from './entryChanges.js';
 import {
   updateProfileArgs,
   updateProfileCwd,
   updateProfileProgram,
+  updateProfileRequest,
   updateProfileStopAtEntry,
+  updateProfileType,
 } from './entryChanges.js';
+import {
+  isDebugRequestOption,
+  isInternalProfileRequestSelectValue,
+  resolveProfileRequestSelectState,
+} from './profileRequestSelect.js';
+import {
+  getEntryIssueDiagnostics,
+  getFieldDiagnosticMessages,
+  mergeHelperMessages,
+} from './generateReadiness.js';
 import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
+
+const PROFILE_VISIBLE_DIAGNOSTIC_FIELDS = [
+  'name',
+  'configuration.type',
+  'configuration.request',
+  'configuration.program',
+  'configuration.cwd',
+  'configuration.stopAtEntry',
+  'args',
+] as const;
 
 interface ProfileEditorProps {
   data: ProfileData;
   sourceFile: string;
   autoSaveDelay: number;
+  diagnostics?: GenerateDiagnostic[];
   onChange: (change: EntryChange<ProfileData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
@@ -33,6 +62,7 @@ export function ProfileEditor({
   data,
   sourceFile,
   autoSaveDelay,
+  diagnostics = [],
   onChange,
   onRename,
   onOpenJson,
@@ -40,6 +70,7 @@ export function ProfileEditor({
 }: ProfileEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
   const [name, setName] = useState(data.name);
+  const [type, setType] = useState(stringOrEmpty(data.configuration?.type));
   const [program, setProgram] = useState(
     stringOrEmpty(data.configuration?.program),
   );
@@ -48,12 +79,18 @@ export function ProfileEditor({
   // data prop). Reset to false on external data sync; set to true on user
   // input. Mirrors VS Code's "clear handler → set value → re-register handler"
   // pattern so that opening the editor never causes spurious file writes.
+  const typeChangedByUserRef = useRef(false);
   const programChangedByUserRef = useRef(false);
   const cwdChangedByUserRef = useRef(false);
 
   useEffect(() => {
     setName(data.name);
   }, [data.name]);
+
+  useEffect(() => {
+    typeChangedByUserRef.current = false;
+    setType(stringOrEmpty(data.configuration?.type));
+  }, [data.configuration?.type]);
 
   useEffect(() => {
     programChangedByUserRef.current = false;
@@ -65,6 +102,11 @@ export function ProfileEditor({
     setCwd(stringOrEmpty(data.configuration?.cwd));
   }, [data.configuration?.cwd]);
 
+  const handleTypeChange = (value: string) => {
+    typeChangedByUserRef.current = true;
+    setType(value);
+  };
+
   const handleProgramChange = (value: string) => {
     programChangedByUserRef.current = true;
     setProgram(value);
@@ -74,6 +116,14 @@ export function ProfileEditor({
     cwdChangedByUserRef.current = true;
     setCwd(value);
   };
+
+  useDebouncedCommit(type, autoSaveDelay, (value) => {
+    if (readOnly || !typeChangedByUserRef.current) {
+      return;
+    }
+
+    onChange(updateProfileType(data, value));
+  });
 
   useDebouncedCommit(program, autoSaveDelay, (value) => {
     if (readOnly || !programChangedByUserRef.current) {
@@ -98,6 +148,37 @@ export function ProfileEditor({
 
     await onRename(name);
   };
+  const typeHelperMessage =
+    type.trim() === '' ? 'Profile type is required for Generate.' : undefined;
+  const requestSelect = resolveProfileRequestSelectState(
+    data.configuration?.request,
+  );
+  const nameHelperMessages = getFieldDiagnosticMessages(diagnostics, 'name');
+  const typeHelperMessages = mergeHelperMessages(
+    getFieldDiagnosticMessages(diagnostics, 'configuration.type'),
+    [typeHelperMessage],
+  );
+  const requestHelperMessages = mergeHelperMessages(
+    getFieldDiagnosticMessages(diagnostics, 'configuration.request'),
+    [requestSelect.helperMessage],
+  );
+  const programHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.program',
+  );
+  const cwdHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.cwd',
+  );
+  const stopAtEntryHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.stopAtEntry',
+  );
+  const argsHelperMessages = getFieldDiagnosticMessages(diagnostics, 'args');
+  const entryIssueDiagnostics = getEntryIssueDiagnostics(
+    diagnostics,
+    PROFILE_VISIBLE_DIAGNOSTIC_FIELDS,
+  );
 
   return (
     <div className="composer-editor">
@@ -131,10 +212,17 @@ export function ProfileEditor({
           </FormGroup>
         ) : null}
 
+        <EntryIssuesRow
+          diagnostics={entryIssueDiagnostics}
+          sourceFile={sourceFile}
+          onOpenJson={onOpenJson}
+        />
+
         <FormGroup
           category="Launch Composer"
           label="Profile: Name"
           description="Profile identifier. Config profile references this value."
+          helper={renderHelperMessages(nameHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -155,8 +243,45 @@ export function ProfileEditor({
         </FormGroup>
 
         <FormGroup
+          label="Profile: Type"
+          description="Debug adapter type used in generated launch.json."
+          helper={renderHelperMessages(typeHelperMessages)}
+        >
+          <TextInput
+            disabled={readOnly}
+            value={type}
+            onChange={handleTypeChange}
+          />
+        </FormGroup>
+
+        <FormGroup
+          label="Profile: Request"
+          description="Debug request passed to the adapter."
+          helper={renderHelperMessages(requestHelperMessages)}
+        >
+          <Select
+            disabled={readOnly}
+            enum={requestSelect.options}
+            enumItemLabels={requestSelect.optionLabels}
+            value={requestSelect.value}
+            onChange={(value) => {
+              if (
+                readOnly ||
+                isInternalProfileRequestSelectValue(value) ||
+                !isDebugRequestOption(value)
+              ) {
+                return;
+              }
+
+              onChange(updateProfileRequest(data, value));
+            }}
+          />
+        </FormGroup>
+
+        <FormGroup
           label="Profile: Program"
           description="Program path or expression used by the debugger."
+          helper={renderHelperMessages(programHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -168,6 +293,7 @@ export function ProfileEditor({
         <FormGroup
           label="Profile: Working Directory"
           description="Working directory passed to the debug adapter."
+          helper={renderHelperMessages(cwdHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -180,6 +306,7 @@ export function ProfileEditor({
           label="Profile: Stop At Entry"
           description="Pause execution immediately after the program starts."
           modified={data.configuration?.stopAtEntry === true}
+          helper={renderHelperMessages(stopAtEntryHelperMessages)}
         >
           <Checkbox
             toggle
@@ -201,6 +328,7 @@ export function ProfileEditor({
         <FormGroup
           label="Profile: Args"
           description="Arguments appended to the debug configuration."
+          helper={renderHelperMessages(argsHelperMessages)}
           fill
         >
           {readOnly ? (
@@ -223,7 +351,7 @@ export function ProfileEditor({
 
         <EditInJsonHint
           fileLabel={sourceFile}
-          description='Edit the source file to change JSON-only fields such as "type" and "request", or to add unsupported properties.'
+          description="Edit the source file to add unsupported properties."
           onOpenFileJson={onOpenJson}
         />
       </FormContainer>

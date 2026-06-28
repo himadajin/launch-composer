@@ -80,6 +80,16 @@ issue の分類:
 
 config entry の `excluded` が boolean でないなど、ルート形状として読めるが意味的に不正な値は issue ではなく core validation error として扱う。
 
+## Error Presentation Policy
+
+入力や workspace data の問題は diagnostic state として扱い、Webview の `Generate Status`、field helper、`Entry Issues`、`JSON Status` に表示する。routine validation の詳細を VS Code notification の主表示にはしない。
+
+filesystem、permission、VS Code API、unexpected exception など操作の実行失敗は operation error として扱い、VS Code error notification に表示する。
+
+Generate 成功、initialize 成功、overwrite confirmation など一回限りの操作結果は従来通り information message または modal confirmation で扱う。
+
+Generate validation failure 時は workspace/readiness state を最新化し、notification は `Generate is blocked by N issue(s). Open Launch Composer to review highlighted fields and JSON status.` 形式の短い warning summary だけを表示する。詳細な validation error list は Webview diagnostic UI の責務である。
+
 ## 初期化
 
 `launch-composer.init` は必須セットアップではない。未実行でも、読み取り系処理は空データとして動作し、書き込み系処理は必要なディレクトリを作る。
@@ -220,11 +230,10 @@ patch が空の場合は書き込まず、現在 revision を返す。
 処理順序:
 
 1. profile/config を読み込む。
-2. invalid file issue が 1 件以上あれば、validation-style error として失敗を返す。
-3. `@launch-composer/core.generate()` を呼ぶ。
-4. core validation error があれば VS Code error message に一覧表示して失敗する。
-5. Generate 結果が成功してから overwrite confirmation を評価する。
-6. confirmation が許可された場合、`.vscode/launch.json` を全体上書きする。
+2. readiness diagnostics が 1 件以上あれば、workspace/readiness state を最新化し、短い warning summary を表示して失敗する。
+3. readiness diagnostics が 0 件なら `@launch-composer/core.generate()` を呼ぶ。
+4. Generate 結果が成功してから overwrite confirmation を評価する。
+5. confirmation が許可された場合、`.vscode/launch.json` を全体上書きする。
 
 有効な config が 0 件でも成功とし、`configurations: []` を持つ `launch.json` を書く。
 

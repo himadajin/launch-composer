@@ -18,17 +18,20 @@ import type {
   HostMessage,
   InitialDataPayload,
   ProfileData,
-  WorkspaceUpdatePayload,
 } from './types.js';
+import {
+  getEditorDiagnostics,
+  mergeWorkspaceUpdatePayload,
+} from './components/generateReadiness.js';
 import { RpcClient } from './utils/rpc.js';
 import { vscode } from './utils/vscode.js';
 
 const rpc = new RpcClient();
 
 export function App() {
-  const [payload, setPayload] = useState<InitialDataPayload | null>(
-    () => vscode.getState<InitialDataPayload>() ?? null,
-  );
+  const [payload, setPayload] = useState<InitialDataPayload | null>(() => {
+    return vscode.getState<InitialDataPayload>() ?? null;
+  });
   const updateQueueRef = useRef<Promise<void>>(Promise.resolve());
   const revisionRef = useRef<string | null>(payload?.editorRevision ?? null);
   const editorKey =
@@ -130,6 +133,7 @@ export function App() {
             return {
               ...currentPayload,
               editorRevision: result.revision ?? currentPayload.editorRevision,
+              generateReadiness: result.generateReadiness,
             };
           });
         })
@@ -158,7 +162,7 @@ export function App() {
 
       startTransition(() => {
         setPayload((currentPayload) =>
-          mergeWorkspaceUpdate(currentPayload, message.payload),
+          mergeWorkspaceUpdatePayload(currentPayload, message.payload),
         );
       });
     }
@@ -212,6 +216,10 @@ export function App() {
     (issue) =>
       issue.kind === payload.editor.kind && issue.file === payload.editor.file,
   );
+  const currentDiagnostics =
+    currentIssue === undefined
+      ? getEditorDiagnostics(payload.generateReadiness, payload.editor)
+      : [];
   if (current === undefined && currentIssue === undefined) {
     return (
       <main className="settings-editor composer-shell">
@@ -250,6 +258,7 @@ export function App() {
             <p className="composer-editor-meta">{sourceFile}</p>
           </div>
         </header>
+        <GenerateStatus readiness={payload.generateReadiness} />
         {payload.editor.kind === 'profile' ? (
           <ProfileEditor
             data={
@@ -258,6 +267,7 @@ export function App() {
             }
             sourceFile={payload.editor.file}
             autoSaveDelay={payload.autoSaveDelay}
+            diagnostics={currentDiagnostics}
             {...(currentIssue === undefined
               ? {}
               : {
@@ -294,6 +304,7 @@ export function App() {
             sourceFile={payload.editor.file}
             profiles={profileCatalog}
             autoSaveDelay={payload.autoSaveDelay}
+            diagnostics={currentDiagnostics}
             {...(currentIssue === undefined
               ? {}
               : {
@@ -378,40 +389,22 @@ function isInitialDataPayload(value: unknown): value is InitialDataPayload {
   return typeof value === 'object' && value !== null && 'editor' in value;
 }
 
-function mergeWorkspaceUpdate(
-  currentPayload: InitialDataPayload | null,
-  update: WorkspaceUpdatePayload,
-): InitialDataPayload | null {
-  if (currentPayload === null) {
-    return currentPayload;
-  }
-
-  const nextIssues = [
-    ...currentPayload.issues.filter((issue) => issue.kind !== update.kind),
-    ...update.issues,
-  ];
-
-  return {
-    ...currentPayload,
-    ...(update.profiles === undefined ? {} : { profiles: update.profiles }),
-    ...(update.configs === undefined ? {} : { configs: update.configs }),
-    issues: nextIssues,
-    ...(update.editorRevision === undefined
-      ? {}
-      : { editorRevision: update.editorRevision }),
-  };
-}
-
 function isFileSelected(value: unknown): value is { path: string | null } {
   return typeof value === 'object' && value !== null && 'path' in value;
 }
 
-function isUpdateResult(value: unknown): value is {
-  success: boolean;
-  conflict?: boolean;
-  revision?: string | null;
-  error?: string;
-} {
+function isUpdateResult(value: unknown): value is
+  | {
+      success: true;
+      revision: string | null;
+      generateReadiness: InitialDataPayload['generateReadiness'];
+    }
+  | {
+      success: false;
+      conflict?: boolean;
+      revision?: string | null;
+      error?: string;
+    } {
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -444,4 +437,39 @@ function createPlaceholderConfig(file: string): ConfigData {
     name: file,
     profile: '',
   };
+}
+
+function GenerateStatus({
+  readiness,
+}: {
+  readiness: InitialDataPayload['generateReadiness'];
+}) {
+  const issueCount = readiness.diagnostics.length;
+  const isReady = issueCount === 0;
+
+  return (
+    <section
+      className={
+        isReady
+          ? 'composer-generate-status'
+          : 'composer-generate-status composer-generate-status-warning'
+      }
+      aria-live="polite"
+    >
+      <div>
+        <p className="composer-generate-status-label">Generate Status</p>
+        <p className="composer-generate-status-message">
+          {isReady
+            ? 'Ready to generate launch.json.'
+            : `${issueCount} issue${issueCount === 1 ? '' : 's'} block Generate.`}
+        </p>
+      </div>
+      {issueCount > 0 ? (
+        <p className="composer-generate-status-detail">
+          Fix the highlighted fields, entry issues, or JSON status in the editor
+          below.
+        </p>
+      ) : null}
+    </section>
+  );
 }

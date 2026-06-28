@@ -6,7 +6,93 @@ import {
   updateConfigEnabled,
   updateConfigProfile,
   updateProfileProgram,
+  updateProfileRequest,
+  updateProfileType,
 } from '../src/components/entryChanges.js';
+
+test('updateProfileType emits a required leaf configuration patch', () => {
+  const change = updateProfileType(
+    {
+      name: 'node',
+      configuration: {
+        type: '',
+        request: 'launch',
+      },
+    },
+    'node',
+  );
+
+  assert.deepEqual(change.data, {
+    name: 'node',
+    configuration: {
+      type: 'node',
+      request: 'launch',
+    },
+  });
+  assert.deepEqual(change.patches, [
+    {
+      type: 'set',
+      path: ['configuration', 'type'],
+      value: 'node',
+    },
+  ]);
+});
+
+test('updateProfileType preserves an empty required value', () => {
+  const change = updateProfileType(
+    {
+      name: 'node',
+      configuration: {
+        type: 'node',
+        request: 'launch',
+      },
+    },
+    '',
+  );
+
+  assert.deepEqual(change.data, {
+    name: 'node',
+    configuration: {
+      type: '',
+      request: 'launch',
+    },
+  });
+  assert.deepEqual(change.patches, [
+    {
+      type: 'set',
+      path: ['configuration', 'type'],
+      value: '',
+    },
+  ]);
+});
+
+test('updateProfileRequest emits a required leaf configuration patch', () => {
+  const change = updateProfileRequest(
+    {
+      name: 'node',
+      configuration: {
+        type: 'node',
+        request: 'launch',
+      },
+    },
+    'attach',
+  );
+
+  assert.deepEqual(change.data, {
+    name: 'node',
+    configuration: {
+      type: 'node',
+      request: 'attach',
+    },
+  });
+  assert.deepEqual(change.patches, [
+    {
+      type: 'set',
+      path: ['configuration', 'request'],
+      value: 'attach',
+    },
+  ]);
+});
 
 test('updateProfileProgram emits a leaf configuration patch', () => {
   const change = updateProfileProgram(

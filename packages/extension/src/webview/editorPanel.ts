@@ -1,7 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
 import type {
@@ -29,10 +28,7 @@ interface EditorPanelOptions {
     syncEditor?: boolean;
   }) => void;
   onDidReveal: (target: EditorTarget) => Promise<void>;
-  onDidGenerate: () => Promise<{
-    success: boolean;
-    errors?: ValidationError[];
-  }>;
+  onDidGenerate: () => Promise<{ success: boolean }>;
 }
 
 export class EditorPanelController {
@@ -323,12 +319,14 @@ export class EditorPanelController {
         expectedWatchers: [{ kind, file: payload.file }],
         syncEditor: false,
       });
+      const snapshot = await this.options.store.readAll();
       await this.respond(requestId, {
         type: 'update-result',
         requestId,
         payload: {
           success: true,
           revision: result.revision,
+          generateReadiness: snapshot.generateReadiness,
         },
       });
     } catch (error) {
@@ -412,6 +410,7 @@ export class EditorPanelController {
         ? { profiles: data.profiles }
         : { configs: data.configs }),
       issues: data.issues.filter((issue) => issue.kind === kind),
+      generateReadiness: data.generateReadiness,
       ...(this.currentTarget.kind === kind
         ? {
             editorRevision: await this.options.store.getDataFileRevision(

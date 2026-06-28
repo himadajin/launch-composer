@@ -6,7 +6,7 @@ import type {
 } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
-import type { EditorTarget } from '../messages.js';
+import type { EditorTarget, GenerateDiagnostic } from '../messages.js';
 import type {
   ComposerDataIssue,
   WorkspaceDataSnapshot,
@@ -18,6 +18,7 @@ type FileNode = {
   kind: 'profile' | 'config';
   file: string;
   issue?: ComposerDataIssue;
+  diagnostics?: GenerateDiagnostic[];
   profiles?: ProfileData[];
   configurations?: ConfigData[];
 };
@@ -27,6 +28,7 @@ type EntryNode = {
   target: EditorTarget;
   label: string;
   included?: boolean;
+  diagnostics?: GenerateDiagnostic[];
 };
 
 export type TreeNode = FileNode | EntryNode;
@@ -88,6 +90,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
                 index,
               },
               label: (entry as ProfileData).name,
+              diagnostics: getEntryDiagnostics(element.diagnostics, {
+                kind: 'profile',
+                file: element.file,
+                index,
+              }),
             }
           : {
               type: 'entry',
@@ -98,6 +105,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
               },
               label: (entry as ConfigData).name,
               included: (entry as ConfigData).excluded !== true,
+              diagnostics: getEntryDiagnostics(element.diagnostics, {
+                kind: 'config',
+                file: element.file,
+                index,
+              }),
             };
 
       this.entryNodes.set(getEntryKey(node.target), node);
@@ -140,6 +152,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
           new vscode.ThemeColor('list.warningForeground'),
         );
         item.description = getIssueDescription(element.issue);
+      } else {
+        applyDiagnosticDecoration(
+          item,
+          getFileDiagnostics(element.diagnostics),
+        );
       }
 
       return item;
@@ -171,6 +188,8 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
         item.description = 'excluded';
       }
     }
+
+    applyDiagnosticDecoration(item, element.diagnostics);
 
     return item;
   }
@@ -212,18 +231,25 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
         (candidate) => candidate.kind === this.kind && candidate.file === file,
       );
       const fileData = files.find((candidate) => candidate.file === file);
+      const diagnostics = getTreeFileDiagnostics(
+        data.generateReadiness.diagnostics,
+        this.kind,
+        file,
+      );
       const node: FileNode = issue
         ? {
             type: 'file',
             kind: this.kind,
             file,
             issue,
+            diagnostics,
           }
         : this.kind === 'profile'
           ? {
               type: 'file',
               kind: 'profile',
               file,
+              diagnostics,
               profiles:
                 (fileData as ProfileFileData | undefined)?.profiles ?? [],
             }
@@ -231,6 +257,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
               type: 'file',
               kind: 'config',
               file,
+              diagnostics,
               configurations:
                 (fileData as ConfigFileData | undefined)?.configurations ?? [],
             };
@@ -243,6 +270,89 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
 function getEntryKey(target: EditorTarget): string {
   return `${target.kind}:${target.file}:${target.index}`;
+}
+
+function getTreeFileDiagnostics(
+  diagnostics: readonly GenerateDiagnostic[],
+  kind: 'profile' | 'config',
+  file: string,
+): GenerateDiagnostic[] {
+  return diagnostics.filter((diagnostic) => {
+    if (diagnostic.file !== file) {
+      return false;
+    }
+
+    if (diagnostic.target.kind === kind) {
+      return true;
+    }
+
+    return (
+      diagnostic.target.kind === 'file' &&
+      diagnostic.source === 'core-validation' &&
+      kind === 'config'
+    );
+  });
+}
+
+function getEntryDiagnostics(
+  diagnostics: readonly GenerateDiagnostic[] | undefined,
+  target: EditorTarget,
+): GenerateDiagnostic[] {
+  return (diagnostics ?? []).filter(
+    (diagnostic) =>
+      diagnostic.target.kind === target.kind &&
+      diagnostic.file === target.file &&
+      diagnostic.target.index === target.index,
+  );
+}
+
+function getFileDiagnostics(
+  diagnostics: readonly GenerateDiagnostic[] | undefined,
+): GenerateDiagnostic[] {
+  return (diagnostics ?? []).filter(
+    (diagnostic) => diagnostic.target.kind === 'file',
+  );
+}
+
+function applyDiagnosticDecoration(
+  item: vscode.TreeItem,
+  diagnostics: readonly GenerateDiagnostic[] | undefined,
+): void {
+  const count = diagnostics?.length ?? 0;
+  if (count === 0) {
+    return;
+  }
+
+  const firstDiagnostic = diagnostics?.[0];
+  if (firstDiagnostic === undefined) {
+    return;
+  }
+
+  item.iconPath = new vscode.ThemeIcon(
+    'warning',
+    new vscode.ThemeColor('list.warningForeground'),
+  );
+  item.description = appendDescription(
+    item.description,
+    formatIssueCount(count),
+  );
+  item.tooltip =
+    count === 1
+      ? firstDiagnostic.message
+      : `${formatIssueCount(count)}. First: ${firstDiagnostic.message}`;
+}
+
+function appendDescription(
+  current: string | boolean | undefined,
+  next: string,
+): string {
+  return typeof current === 'string' && current !== ''
+    ? `${current}, ${next}`
+    : next;
+}
+
+function formatIssueCount(count: number): string {
+  return `${count} issue${count === 1 ? '' : 's'}`;
 }
 
 function getIssueDescription(issue: ComposerDataIssue): string {

@@ -10,11 +10,16 @@ import {
   testVscode,
   workspaceUri,
   writeConfigFile,
+  writeProfileFile,
 } from './helpers.js';
 
 test.beforeEach(() => {
   testVscode.__testing.reset();
 });
+
+const READY_TO_GENERATE = {
+  diagnostics: [],
+};
 
 test('readAll returns empty data when Launch Composer directories do not exist', async () => {
   const store = new WorkspaceStore(vscode.Uri.file('/workspace/empty-project'));
@@ -25,6 +30,7 @@ test('readAll returns empty data when Launch Composer directories do not exist',
     profiles: [],
     configs: [],
     issues: [],
+    generateReadiness: READY_TO_GENERATE,
   });
 });
 
@@ -40,6 +46,7 @@ test('readAll tolerates ENOENT-style missing directories', async () => {
     profiles: [],
     configs: [],
     issues: [],
+    generateReadiness: READY_TO_GENERATE,
   });
 });
 
@@ -59,6 +66,7 @@ test('readAll skips files that disappear before they can be read', async () => {
     profiles: [],
     configs: [],
     issues: [],
+    generateReadiness: READY_TO_GENERATE,
   });
 });
 
@@ -102,6 +110,96 @@ test('readAll keeps valid files and reports invalid files as issues', async () =
       message: 'profile.json is empty. Expected a JSON array such as [].',
     },
   ]);
+  assert.deepEqual(data.generateReadiness, {
+    diagnostics: [
+      {
+        source: 'invalid-file',
+        file: 'profile.json',
+        message: 'profile.json is empty. Expected a JSON array such as [].',
+        target: { kind: 'file' },
+      },
+    ],
+  });
+});
+
+test('readAll returns ready generateReadiness for valid data', async () => {
+  const workspace = workspaceUri('readiness-valid-project');
+  const store = new WorkspaceStore(workspace);
+
+  await writeProfileFile(
+    workspace,
+    'profile.json',
+    '[\n  {\n    "name": "node",\n    "configuration": {\n      "type": "node",\n      "request": "launch"\n    }\n  }\n]\n',
+  );
+  await writeConfigFile(
+    workspace,
+    'config.json',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "node"\n    }\n  ]\n}\n',
+  );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data.generateReadiness, READY_TO_GENERATE);
+});
+
+test('readAll reports core validation errors in generateReadiness', async () => {
+  const workspace = workspaceUri('readiness-invalid-profile-project');
+  const store = new WorkspaceStore(workspace);
+
+  await writeProfileFile(
+    workspace,
+    'profile.json',
+    '[\n  {\n    "name": "node",\n    "configuration": {\n      "type": "",\n      "request": "launch"\n    }\n  }\n]\n',
+  );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data.generateReadiness, {
+    diagnostics: [
+      {
+        source: 'core-validation',
+        file: 'profile.json',
+        message: 'Profile type is required.',
+        target: {
+          kind: 'profile',
+          index: 0,
+          name: 'node',
+          field: 'configuration.type',
+        },
+      },
+    ],
+  });
+});
+
+test('readAll reports missing argsFile in generateReadiness', async () => {
+  const workspace = workspaceUri('readiness-missing-args-project');
+  const store = new WorkspaceStore(workspace);
+
+  await writeProfileFile(
+    workspace,
+    'profile.json',
+    '[\n  {\n    "name": "node",\n    "configuration": {\n      "type": "node",\n      "request": "launch"\n    }\n  }\n]\n',
+  );
+  await writeConfigFile(
+    workspace,
+    'config.json',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "node",\n      "argsFile": "${workspaceFolder}/missing-args.json"\n    }\n  ]\n}\n',
+  );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data.generateReadiness.diagnostics[0], {
+    source: 'core-validation',
+    file: 'config.json',
+    message:
+      'argsFile does not exist: /workspace/readiness-missing-args-project/missing-args.json',
+    target: {
+      kind: 'config',
+      index: 0,
+      name: 'Launch',
+      field: 'argsFile',
+    },
+  });
 });
 
 test('readProfilesWithIssues reads profile data without requiring config directories', async () => {
@@ -168,7 +266,7 @@ test('readConfigsWithIssues reads config data without requiring profile director
   });
 });
 
-test('generateLaunchJson returns validation-style errors for invalid files', async () => {
+test('generateLaunchJson returns blocked count for invalid files', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/generate-invalid-project'),
   );
@@ -189,13 +287,7 @@ test('generateLaunchJson returns validation-style errors for invalid files', asy
 
   assert.deepEqual(result, {
     success: false,
-    errors: [
-      {
-        file: 'profile.json',
-        message:
-          'Invalid JSON in profile.json. Open the file and fix the syntax.',
-      },
-    ],
+    issueCount: 1,
   });
 });
 

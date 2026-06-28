@@ -19,6 +19,16 @@ Extension Host と Webview の message shape は `packages/extension/src/message
   - mirror source: `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
   - 注意: profile update は open config editor にも送る
+- 契約: generate readiness
+  - canonical source: `GenerateReadiness` in `packages/extension/src/messages.ts`
+  - mirror source: `packages/webview/src/types.ts`
+  - behavior spec: [../specs/communication.md](../specs/communication.md), [../specs/ui.md](../specs/ui.md)
+  - 注意: Generate と同じ判定源から計算する workspace 全体の生成可能性。Host から Webview に送る workspace snapshot payload では必須。`diagnostics` が UI 表示と生成可否判定の source of truth
+- 契約: generate diagnostic
+  - canonical source: `GenerateDiagnostic` in `packages/extension/src/messages.ts`
+  - mirror source: `packages/webview/src/types.ts`
+  - behavior spec: [../specs/communication.md](../specs/communication.md), [../specs/ui.md](../specs/ui.md)
+  - 注意: core validation または invalid file issue から Host が生成する UI diagnostic
 - 契約: entry patch operation
   - canonical source: `EntryPatchOperation` in `packages/extension/src/messages.ts`
   - mirror source: `packages/webview/src/types.ts`
@@ -42,4 +52,4 @@ Extension Host と Webview の message shape は `packages/extension/src/message
 
 ## Ownership
 
-`packages/extension/src/messages.ts` を変更した場合は、`packages/webview/src/types.ts` とこの contract map を同期する。`ProfileData`、`ConfigData`、`ValidationError` を含む payload を変更する場合は `packages/core/src/types.ts` も確認する。
+`packages/extension/src/messages.ts` を変更した場合は、`packages/webview/src/types.ts` とこの contract map を同期する。`ProfileData`、`ConfigData` を含む payload を変更する場合は `packages/core/src/types.ts` も確認する。

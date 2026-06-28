@@ -73,7 +73,7 @@ profile ファイルの root は profile entry の配列である。
 - role: profile entry の `configuration` を Generate の base として使う
 - details: contract map は [JSON file data contract map](../contracts/json-files.md)、Generate 時 validation は [core.md](./core.md)
 
-`configuration` は `launch.json` configuration のベースになるパススルーオブジェクトである。ファイル読み込み上は省略可能だが、Generate 時には各 profile の `configuration.type` が非空文字列であり、`configuration.request` が `launch` または `attach` でなければならない。GUI で profile を追加した直後は `type` が空文字で作られるため、Generate 前に JSON で有効な値へ修正する必要がある。
+`configuration` は `launch.json` configuration のベースになるパススルーオブジェクトである。ファイル読み込み上は省略可能だが、Generate 時には各 profile の `configuration.type` が非空文字列であり、`configuration.request` が `launch` または `attach` でなければならない。GUI では Profile Editor から `type` と `request` を編集できる。profile を追加した直後は `type` が空文字で作られるため、Profile Editor は Generate に必要な field として warning を表示する。
 
 profile 間の継承はない。
 

@@ -218,6 +218,9 @@ test('addConfig command with zero profiles shows Create Profile guidance and cre
     profiles: [],
     configs: [],
     issues: [],
+    generateReadiness: {
+      diagnostics: [],
+    },
   });
 });
 
@@ -261,6 +264,21 @@ test('addConfig command choosing Create Profile starts profile creation without 
     ],
     configs: [],
     issues: [],
+    generateReadiness: {
+      diagnostics: [
+        {
+          source: 'core-validation',
+          file: 'profile.json',
+          message: 'Profile type is required.',
+          target: {
+            kind: 'profile',
+            index: 0,
+            name: 'cpp',
+            field: 'configuration.type',
+          },
+        },
+      ],
+    },
   });
 });
 
@@ -499,6 +517,24 @@ test('generate writes an empty launch.json when no profiles or configs exist', a
       '  "configurations": []\n' +
       '}\n',
   );
+});
+
+test('generate validation failure shows a short warning without detailed error notification', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspace = workspaceUri('generate-validation-blocked-project');
+  testVscode.__testing.setWorkspaceFolders([workspace.fsPath]);
+  const store = new WorkspaceStore(workspace);
+  await store.addProfileEntry('profile.json', 'node');
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.generate);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getWarningMessages(), [
+    'Generate is blocked by 1 issue. Open Launch Composer to review highlighted fields and JSON status.',
+  ]);
+  assert.equal(await store.launchJsonExists(), false);
 });
 
 test('generate tolerates FileSystemError-wrapped ENOENT when launch.json does not exist', async () => {
