@@ -14,7 +14,7 @@
     "url": "https://github.com/himadajin/launch-composer/issues"
   },
   "engines": {
-    "vscode": "^1.99.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Other"
@@ -26,7 +26,7 @@
     "install:vscode": "npm run package && code --install-extension launch-composer.vsix --force",
     "test": "npm run build && npm run build:test && node --test .test-dist/*.test.js",
     "watch": "node esbuild.mjs --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "typecheck": "npm run build -w @launch-composer/core && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
     "package": "vsce package --no-dependencies --out launch-composer.vsix"
   },
   "dependencies": {
@@ -34,9 +34,9 @@
   },
   "devDependencies": {
     "@launch-composer/core": "0.1.1",
-    "@types/vscode": "^1.99.0",
-    "@vscode/vsce": "^3.7.1",
-    "esbuild": "^0.25.11"
+    "@types/vscode": "^1.125.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1"
   },
   "contributes": {
     "viewsContainers": {
