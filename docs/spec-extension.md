@@ -79,13 +79,17 @@ issue の分類:
 
 - 状態: 空ファイル
   - code: `empty`
-  - 補足: profile は `[]`、config は `configurations` 配列を期待する
+  - 期待する形:
+    - profile: `[]`
+    - config: `configurations` 配列を持つオブジェクト
 - 状態: JSON/JSONC parse error
   - code: `invalid-json`
   - 補足: `details` に parse code と offset を含める
 - 状態: ルート形状が仕様と違う
   - code: `invalid-shape`
-  - 補足: profile は配列、config は `configurations` 配列を持つオブジェクト
+  - 期待する形:
+    - profile: 配列
+    - config: `configurations` 配列を持つオブジェクト
 
 config file の `enabled` が boolean でないなど、ルート形状として読めるが意味的に不正な値は issue ではなく core validation error として扱う。
 
@@ -289,11 +293,20 @@ Extension Host は profile と config の JSON ファイルを `FileSystemWatche
 watcher event の扱い:
 
 - event: create
-  - 動作: TreeView と Webview を更新する。issue 通知は出さない
+  - 処理:
+    - TreeView を更新する
+    - Webview を更新する
+  - issue 通知: 評価しない
 - event: change
-  - 動作: TreeView と Webview を更新し、issue 通知を評価する
+  - 処理:
+    - TreeView を更新する
+    - Webview を更新する
+    - issue 通知を評価する
 - event: delete
-  - 動作: TreeView と Webview を更新し、残っている issue を再評価する
+  - 処理:
+    - TreeView を更新する
+    - Webview を更新する
+    - 残っている issue を再評価する
 
 拡張機能自身が書き込んだ直後に発生する watcher event は、期待済み event として 1 回分無視する。
 

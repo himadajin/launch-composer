@@ -73,34 +73,48 @@ file-level と entry-level の `enabled` は、省略時に Generate 上 `true` 
 
 `launch.json` の `args` は profile の `args`、argsFile の `args`、config の `args` から決まる。profile の `args` と config の `argsFile` は同時に使えない。
 
-- profile.args: なし
-  - argsFile: なし
-  - config.args: なし
+- case: profile args なし、argsFile なし、config args なし
+  - 条件:
+    - profile.args: なし
+    - argsFile: なし
+    - config.args: なし
   - 出力: `args` キーを出力しない
-- profile.args: なし
-  - argsFile: なし
-  - config.args: あり
+- case: profile args なし、argsFile なし、config args あり
+  - 条件:
+    - profile.args: なし
+    - argsFile: なし
+    - config.args: あり
   - 出力: `config.args`
-- profile.args: なし
-  - argsFile: あり
-  - config.args: なし
+- case: profile args なし、argsFile あり、config args なし
+  - 条件:
+    - profile.args: なし
+    - argsFile: あり
+    - config.args: なし
   - 出力: `argsFile.args`
-- profile.args: なし
-  - argsFile: あり
-  - config.args: あり
+- case: profile args なし、argsFile あり、config args あり
+  - 条件:
+    - profile.args: なし
+    - argsFile: あり
+    - config.args: あり
   - 出力: `[...argsFile.args, ...args]`
-- profile.args: あり
-  - argsFile: なし
-  - config.args: なし
+- case: profile args あり、argsFile なし、config args なし
+  - 条件:
+    - profile.args: あり
+    - argsFile: なし
+    - config.args: なし
   - 出力: `profile.args`
-- profile.args: あり
-  - argsFile: なし
-  - config.args: あり
+- case: profile args あり、argsFile なし、config args あり
+  - 条件:
+    - profile.args: あり
+    - argsFile: なし
+    - config.args: あり
   - 出力: `[...profile.args, ...args]`
-- profile.args: あり
-  - argsFile: あり
-  - config.args: 任意
-  - 出力: エラー
+- case: profile args あり、argsFile あり、config args 任意
+  - 条件:
+    - profile.args: あり
+    - argsFile: あり
+    - config.args: 任意
+  - 結果: エラー
 
 出力する場合は新しい配列を作る。入力配列を破壊しない。
 
