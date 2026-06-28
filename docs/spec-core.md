@@ -1,6 +1,6 @@
 # Launch Composer - コアロジック仕様
 
-このファイルは `@launch-composer/core` が実装する生成、マージ、バリデーション、argsFile、変数展開の仕様を定める。JSON ファイルの形は [spec.md](./spec.md) を参照する。
+このファイルは `@launch-composer/core` が実装する生成、マージ、バリデーション、argsFile、変数展開の仕様を定める。JSON file data と Generate 入出力の contract map は [contracts/json-files.md](./contracts/json-files.md) を参照する。
 
 `@launch-composer/core` は VS Code API と Node.js ファイルシステム API に依存しない。ファイル読み書きは extension が行い、core は `ProfileFileData[]`、`ConfigFileData[]`、変数、argsFile 読み取りコールバックを受け取って結果を返す。
 
@@ -10,11 +10,7 @@
 
 `generate(input)` は全入力を検証し、エラーがなければ `LaunchJson` を返す。
 
-```typescript
-type GenerateResult =
-  | { success: true; launchJson: LaunchJson }
-  | { success: false; errors: ValidationError[] };
-```
+`GenerateInput`、`GenerateResult`、`LaunchJson`、`ValidationError` の canonical source は `packages/core/src/types.ts` である。
 
 処理順序:
 
@@ -210,14 +206,7 @@ profile と config entry の `name` は、全 profile と全 config entry を通
 
 ## 出力
 
-Generate 成功時の出力型:
-
-```typescript
-interface LaunchJson {
-  version: '0.2.0';
-  configurations: LaunchConfig[];
-}
-```
+Generate 成功時は `LaunchJson` を返す。出力 shape の canonical source は `packages/core/src/types.ts` の `LaunchJson` / `LaunchConfig` である。
 
 `configurations` の順序は、core に渡された `configs` 配列の順序と各ファイル内の `configurations` 配列順に従う。extension はファイル名を昇順に読んで core に渡す。
 

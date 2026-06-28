@@ -14,7 +14,7 @@ This repository is an npm workspace with three packages under `packages/`:
 
 Source files live in each package's `src/` directory. Tests live in `packages/core/test`, `packages/webview/test`, and `packages/extension/test`. Static extension assets live in `packages/extension/resources`. Extension-specific build scripts live in `packages/extension/esbuild.mjs` and `packages/extension/test/build-tests.mjs`.
 
-Use `docs/spec*.md` as the product behavior reference when a change affects generation rules, extension behavior, webview flows, or host/webview communication.
+Use `docs/spec*.md` as the product behavior reference when a change affects generation rules, extension behavior, webview flows, or host/webview communication. Use `docs/contracts/` as the data contract map for schema, shared TypeScript types, and Host/Webview message shapes.
 
 ## Spec-First Change Routing
 
@@ -22,12 +22,13 @@ Before implementing user-visible behavior, schema changes, generated `launch.jso
 
 Use this routing when deciding which specs and code surfaces must move together:
 
-- Generation, merge, validation, args handling, and path resolution: `docs/spec-core.md`, plus `docs/spec.md` for JSON file schemas.
+- JSON file data, shared data types, generated `launch.json` shape, and Host/Webview message shapes: start from `docs/contracts/`, then update the canonical TypeScript source it points to.
+- Generation, merge, validation, args handling, and path resolution: `docs/spec-core.md`, plus `docs/spec.md` for JSON file behavior.
 - Extension host behavior, workspace I/O, file watching, command registration, settings, and `launch.json` writing: `docs/spec-extension.md`; use `docs/spec-ui.md` as well when TreeView UI behavior or item actions change.
 - Webview editor UI, form behavior, and VS Code-style interaction details: `docs/spec-ui.md`.
 - Extension Host ↔ Webview messages, editor persistence flow, request/response payloads, and shared data types: `docs/spec-communication.md`.
 
-When changing host/webview communication or shared data shapes, keep the mirrored contract surfaces synchronized: `docs/spec-communication.md`, `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`, and `packages/core/src/types.ts` when `ProfileData`, `ConfigData`, or `ValidationError` changes. Preserve the existing persistence path: Webview state and controls emit changes through the local bridge/RPC utilities, the extension host applies JSONC patches, and the webview never performs workspace file I/O directly.
+When changing schema, shared data shapes, or host/webview communication, keep the mirrored contract surfaces synchronized: `docs/contracts/`, `docs/spec-communication.md`, `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`, and `packages/core/src/types.ts` when `ProfileData`, `ConfigData`, or `ValidationError` changes. TypeScript types are the canonical source for data shapes; `docs/contracts/` maps each contract to the owning type and spec. Preserve the existing persistence path: Webview state and controls emit changes through the local bridge/RPC utilities, the extension host applies JSONC patches, and the webview never performs workspace file I/O directly.
 
 ## Commands
 
