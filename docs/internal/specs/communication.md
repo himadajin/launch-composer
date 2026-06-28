@@ -23,11 +23,14 @@ Editor panel を開いたとき、Host は `initial-data` を送る。
 - 全 profile file data
 - 全 config file data
 - 現在の issue list
+- Generate readiness
 - 現在の editor target
 - editor target file の revision
 - `launch-composer.autoSaveDelay`
 
 workspace file が変化した場合、Host は必要に応じて `workspace-update` を送る。profile update は open config editor にも送る。config editor は profile select 候補を更新する必要があるためである。
+
+Generate readiness は workspace 全体の生成可能性である。`ready` と `errors` を持ち、`errors` は core validation error または invalid file issue を validation-style error に変換したものを含む。Host は Generate と同じ判定源を使って readiness を計算する。
 
 ## 保存と競合
 
@@ -129,6 +132,8 @@ Full snapshot と editor target を送る。Editor panel を開いた直後、`r
 
 Profile または config の部分 snapshot を送る。`kind` は更新対象の領域を示す。payload の `issues` はその `kind` に属する issue だけを含む。
 
+`generateReadiness` は常に workspace 全体の最新 readiness を含める。
+
 `editorRevision` は、現在開いている editor target の file が更新対象 kind と一致する場合に含める。
 
 ### update-result
@@ -137,7 +142,7 @@ Patch 保存結果である。
 
 - payload: `success: true`
   - 意味: 保存成功
-  - response: `revision` を含める
+  - response: `revision` と `generateReadiness` を含める
 - payload: `success: false, conflict: true`
   - 意味: 競合
   - Webview action: 最新データを再取得する

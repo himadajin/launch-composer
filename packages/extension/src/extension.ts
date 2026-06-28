@@ -20,6 +20,10 @@ type ProfileSelectionItem =
   | { label: string; value: string; description?: string }
   | vscode.QuickPickItem;
 type SnapshotKind = 'profile' | 'config' | 'both';
+type WorkspaceDataWithoutReadiness = Omit<
+  WorkspaceDataSnapshot,
+  'generateReadiness'
+>;
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = getWorkspaceRoot();
@@ -135,7 +139,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   };
 
-  const getCachedSnapshot = (): WorkspaceDataSnapshot | undefined => {
+  const getCachedSnapshot = (): WorkspaceDataWithoutReadiness | undefined => {
     if (
       snapshotCache.profiles === undefined ||
       snapshotCache.configs === undefined ||
@@ -172,7 +176,7 @@ export function activate(context: vscode.ExtensionContext): void {
       snapshotCache.configIssues = configData.issues;
     }
 
-    return getCachedSnapshot() ?? cachedSnapshot;
+    return store.withGenerateReadiness(getCachedSnapshot() ?? cachedSnapshot);
   };
 
   const syncUiWithWorkspace = async (options?: {

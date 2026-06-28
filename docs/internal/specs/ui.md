@@ -188,6 +188,17 @@ Webview の editor title action `Open JSON` は `launch-composer.openActiveEdito
 
 対象 entry が削除されて存在しなくなった場合は panel を閉じる。Webview 側で current entry がなく、invalid issue もない場合は `The selected item no longer exists. Reopen it from the sidebar.` を表示する。
 
+### Generate Status
+
+Webview は editor header 直下に `Generate Status` を表示する。
+
+- readiness が ready の場合: `Ready to generate launch.json.` を表示する
+- readiness が not ready の場合: Generate を block している issue count と error list を表示する
+
+error list は `file / configName / field: message` の形式で表示する。`configName` または `field` がない場合は省略する。
+
+Generate Status は workspace 全体の状態であり、現在開いている editor entry だけに絞らない。field-level inline error 表示、TreeView item decoration、Generate command の disabled 制御はこの仕様では扱わない。
+
 ## Profile Editor
 
 profile editor のフォーム項目:

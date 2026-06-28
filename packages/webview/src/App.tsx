@@ -18,17 +18,23 @@ import type {
   HostMessage,
   InitialDataPayload,
   ProfileData,
-  WorkspaceUpdatePayload,
 } from './types.js';
+import {
+  formatValidationError,
+  mergeWorkspaceUpdatePayload,
+  normalizeGenerateReadiness,
+  normalizeInitialDataPayload,
+} from './components/generateReadiness.js';
 import { RpcClient } from './utils/rpc.js';
 import { vscode } from './utils/vscode.js';
 
 const rpc = new RpcClient();
 
 export function App() {
-  const [payload, setPayload] = useState<InitialDataPayload | null>(
-    () => vscode.getState<InitialDataPayload>() ?? null,
-  );
+  const [payload, setPayload] = useState<InitialDataPayload | null>(() => {
+    const restored = vscode.getState<InitialDataPayload>() ?? null;
+    return restored === null ? null : normalizeInitialDataPayload(restored);
+  });
   const updateQueueRef = useRef<Promise<void>>(Promise.resolve());
   const revisionRef = useRef<string | null>(payload?.editorRevision ?? null);
   const editorKey =
@@ -43,7 +49,7 @@ export function App() {
     }
 
     startTransition(() => {
-      setPayload(result);
+      setPayload(normalizeInitialDataPayload(result));
     });
   }, []);
 
@@ -130,6 +136,10 @@ export function App() {
             return {
               ...currentPayload,
               editorRevision: result.revision ?? currentPayload.editorRevision,
+              generateReadiness:
+                result.generateReadiness === undefined
+                  ? currentPayload.generateReadiness
+                  : normalizeGenerateReadiness(result.generateReadiness),
             };
           });
         })
@@ -147,7 +157,7 @@ export function App() {
       const message = event.data;
       if (message.type === 'initial-data') {
         startTransition(() => {
-          setPayload(message.payload);
+          setPayload(normalizeInitialDataPayload(message.payload));
         });
         return;
       }
@@ -158,7 +168,7 @@ export function App() {
 
       startTransition(() => {
         setPayload((currentPayload) =>
-          mergeWorkspaceUpdate(currentPayload, message.payload),
+          mergeWorkspaceUpdatePayload(currentPayload, message.payload),
         );
       });
     }
@@ -250,6 +260,7 @@ export function App() {
             <p className="composer-editor-meta">{sourceFile}</p>
           </div>
         </header>
+        <GenerateStatus readiness={payload.generateReadiness} />
         {payload.editor.kind === 'profile' ? (
           <ProfileEditor
             data={
@@ -378,30 +389,6 @@ function isInitialDataPayload(value: unknown): value is InitialDataPayload {
   return typeof value === 'object' && value !== null && 'editor' in value;
 }
 
-function mergeWorkspaceUpdate(
-  currentPayload: InitialDataPayload | null,
-  update: WorkspaceUpdatePayload,
-): InitialDataPayload | null {
-  if (currentPayload === null) {
-    return currentPayload;
-  }
-
-  const nextIssues = [
-    ...currentPayload.issues.filter((issue) => issue.kind !== update.kind),
-    ...update.issues,
-  ];
-
-  return {
-    ...currentPayload,
-    ...(update.profiles === undefined ? {} : { profiles: update.profiles }),
-    ...(update.configs === undefined ? {} : { configs: update.configs }),
-    issues: nextIssues,
-    ...(update.editorRevision === undefined
-      ? {}
-      : { editorRevision: update.editorRevision }),
-  };
-}
-
 function isFileSelected(value: unknown): value is { path: string | null } {
   return typeof value === 'object' && value !== null && 'path' in value;
 }
@@ -410,6 +397,7 @@ function isUpdateResult(value: unknown): value is {
   success: boolean;
   conflict?: boolean;
   revision?: string | null;
+  generateReadiness?: InitialDataPayload['generateReadiness'];
   error?: string;
 } {
   return (
@@ -444,4 +432,41 @@ function createPlaceholderConfig(file: string): ConfigData {
     name: file,
     profile: '',
   };
+}
+
+function GenerateStatus({
+  readiness,
+}: {
+  readiness: InitialDataPayload['generateReadiness'];
+}) {
+  return (
+    <section
+      className={
+        readiness.ready
+          ? 'composer-generate-status'
+          : 'composer-generate-status composer-generate-status-warning'
+      }
+      aria-live="polite"
+    >
+      <div>
+        <p className="composer-generate-status-label">Generate Status</p>
+        <p className="composer-generate-status-message">
+          {readiness.ready
+            ? 'Ready to generate launch.json.'
+            : `${readiness.errors.length} issue${
+                readiness.errors.length === 1 ? '' : 's'
+              } block Generate.`}
+        </p>
+      </div>
+      {readiness.errors.length > 0 ? (
+        <ul className="composer-generate-status-list">
+          {readiness.errors.map((error, index) => (
+            <li key={`${error.file}:${error.field ?? ''}:${index}`}>
+              {formatValidationError(error)}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
 }

@@ -5,6 +5,11 @@ import type {
 } from '@launch-composer/core';
 import type { ComposerDataIssue } from './io/workspaceStore.js';
 
+export interface GenerateReadiness {
+  ready: boolean;
+  errors: ValidationError[];
+}
+
 export interface EditorTarget {
   kind: 'profile' | 'config';
   file: string;
@@ -15,6 +20,7 @@ export interface InitialDataPayload {
   profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
+  generateReadiness: GenerateReadiness;
   editor: EditorTarget;
   editorRevision: string | null;
   autoSaveDelay: number;
@@ -25,6 +31,7 @@ export interface WorkspaceUpdatePayload {
   profiles?: ProfileFileData[];
   configs?: ConfigFileData[];
   issues: ComposerDataIssue[];
+  generateReadiness: GenerateReadiness;
   editorRevision?: string | null;
 }
 
@@ -106,6 +113,7 @@ export type HostMessage =
         success: boolean;
         conflict?: boolean;
         revision?: string | null;
+        generateReadiness?: GenerateReadiness;
         error?: string;
       };
     }

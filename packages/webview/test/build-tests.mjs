@@ -15,6 +15,7 @@ await build({
   bundle: true,
   entryPoints: [
     'test/entryChanges.test.ts',
+    'test/generateReadiness.test.ts',
     'test/profileRequestSelect.test.ts',
     'test/profileSelect.test.ts',
   ],

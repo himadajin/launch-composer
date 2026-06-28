@@ -21,6 +21,11 @@ test.beforeEach(() => {
   testVscode.__testing.reset();
 });
 
+const READY_TO_GENERATE = {
+  ready: true,
+  errors: [],
+};
+
 test('open sets the panel title to the current profile name', async () => {
   const store = {
     async readAll() {
@@ -412,6 +417,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
       ],
       configs: [],
       issues: [],
+      generateReadiness: READY_TO_GENERATE,
       editor: {
         kind: 'profile',
         file: 'profile.json',
@@ -592,6 +598,7 @@ test('update-config message refreshes only config views through onDidMutate', as
     payload: {
       success: true,
       revision: 'rev:7',
+      generateReadiness: READY_TO_GENERATE,
     },
   });
 });
@@ -749,6 +756,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
             'other.json must contain an object with a "configurations" array.',
         },
       ],
+      generateReadiness: READY_TO_GENERATE,
       editorRevision: 'rev:config-update',
     },
   });
@@ -835,6 +843,7 @@ test('syncWithWorkspaceData sends profile workspace updates to an open config ed
         },
       ],
       issues: [],
+      generateReadiness: READY_TO_GENERATE,
     },
   });
 });

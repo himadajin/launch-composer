@@ -1,14 +1,17 @@
 import {
   generate,
+  validateGenerateInput,
+  type ArgsFileLoadResult,
   type ConfigData,
   type ConfigFileData,
+  type GenerateInput,
   type GenerateResult,
   type ProfileData,
   type ProfileFileData,
 } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
-import type { EditorTarget } from '../messages.js';
+import type { EditorTarget, GenerateReadiness } from '../messages.js';
 import {
   appendJsonArrayValue,
   applyJsonDocumentPatches,
@@ -51,7 +54,13 @@ export interface WorkspaceDataSnapshot {
   profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
+  generateReadiness?: GenerateReadiness;
 }
+
+type WorkspaceDataWithoutReadiness = Omit<
+  WorkspaceDataSnapshot,
+  'generateReadiness'
+>;
 
 export interface ProfileWorkspaceData {
   profiles: ProfileFileData[];
@@ -117,11 +126,77 @@ export class WorkspaceStore {
       this.readConfigsWithIssues(),
     ]);
 
-    return {
+    return this.withGenerateReadiness({
       profiles: profilesResult.profiles,
       configs: configsResult.configs,
       issues: [...profilesResult.issues, ...configsResult.issues],
+    });
+  }
+
+  async withGenerateReadiness(
+    snapshot: WorkspaceDataWithoutReadiness,
+  ): Promise<WorkspaceDataSnapshot> {
+    return {
+      ...snapshot,
+      generateReadiness: await this.getGenerateReadiness(snapshot),
     };
+  }
+
+  private async getGenerateReadiness(
+    snapshot: WorkspaceDataWithoutReadiness,
+  ): Promise<GenerateReadiness> {
+    if (snapshot.issues.length > 0) {
+      return {
+        ready: false,
+        errors: snapshot.issues.map((issue) => ({
+          file: issue.file,
+          message: issue.message,
+        })),
+      };
+    }
+
+    const errors = await validateGenerateInput(
+      this.createGenerateInput(snapshot),
+    );
+
+    return {
+      ready: errors.length === 0,
+      errors,
+    };
+  }
+
+  private createGenerateInput(
+    snapshot: Pick<WorkspaceDataSnapshot, 'profiles' | 'configs'>,
+  ): GenerateInput {
+    return {
+      profiles: snapshot.profiles,
+      configs: snapshot.configs,
+      variables: {
+        workspaceFolder: this.workspaceRoot.fsPath,
+      },
+      readArgsFile: (resolvedPath) => this.readArgsFile(resolvedPath),
+    };
+  }
+
+  private async readArgsFile(
+    resolvedPath: string,
+  ): Promise<ArgsFileLoadResult> {
+    try {
+      const uri = vscode.Uri.file(resolvedPath);
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const value = parseJsonc<unknown>(decodeText(bytes), resolvedPath);
+      return { kind: 'success', data: value };
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return { kind: 'not-found' };
+      }
+
+      return {
+        kind: 'error',
+        message:
+          error instanceof Error ? error.message : 'Failed to read argsFile.',
+      };
+    }
   }
 
   async readProfilesWithIssues(): Promise<ProfileWorkspaceData> {
@@ -605,44 +680,17 @@ export class WorkspaceStore {
   }
 
   async generateLaunchJson(): Promise<GenerateResult> {
-    const { profiles, configs, issues } = await this.readAll();
-    if (issues.length > 0) {
+    const snapshot = await this.readAll();
+    const readiness =
+      snapshot.generateReadiness ?? (await this.getGenerateReadiness(snapshot));
+    if (!readiness.ready) {
       return {
         success: false,
-        errors: issues.map((issue) => ({
-          file: issue.file,
-          message: issue.message,
-        })),
+        errors: readiness.errors,
       };
     }
 
-    return generate({
-      profiles,
-      configs,
-      variables: {
-        workspaceFolder: this.workspaceRoot.fsPath,
-      },
-      readArgsFile: async (resolvedPath) => {
-        try {
-          const uri = vscode.Uri.file(resolvedPath);
-          const bytes = await vscode.workspace.fs.readFile(uri);
-          const value = parseJsonc<unknown>(decodeText(bytes), resolvedPath);
-          return { kind: 'success' as const, data: value };
-        } catch (error) {
-          if (isMissingFileSystemError(error)) {
-            return { kind: 'not-found' as const };
-          }
-
-          return {
-            kind: 'error' as const,
-            message:
-              error instanceof Error
-                ? error.message
-                : 'Failed to read argsFile.',
-          };
-        }
-      },
-    });
+    return generate(this.createGenerateInput(snapshot));
   }
 
   async writeLaunchJson(
