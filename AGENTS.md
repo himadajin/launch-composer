@@ -1,40 +1,59 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Instruction Scope
+
+This file is a durable working contract for coding agents in this repository. Keep it focused on repository-specific build, test, architecture, and verification rules. Do not add product overview content, issue-specific notes, or generic TypeScript/React/PR advice that belongs in `README.md`, `docs/`, or the current task prompt.
+
+## Project Structure
 
 This repository is an npm workspace with three packages under `packages/`:
 
-- `packages/core`: shared TypeScript logic for validating and generating `launch.json`.
-- `packages/extension`: the VS Code extension package published as `launch-composer`, including commands, tree views, workspace I/O, bundled assets, and extension tests.
-- `packages/webview`: the React webview UI bundled with Vite and shared VS Code-flavored components.
+- `packages/core`: shared TypeScript logic for validating, merging, and generating `launch.json`. Keep it independent of VS Code APIs.
+- `packages/extension`: the VS Code extension package published as `launch-composer`. It owns commands, tree views, workspace I/O, VS Code integration, bundled assets, and extension tests.
+- `packages/webview`: the React webview UI bundled with Vite. It owns editor UI and communicates with the extension host through the existing VS Code bridge/RPC utilities.
 
-Source files live in each package's `src/` directory. Tests live in `packages/core/test` and `packages/extension/test`. Static assets for the extension live in `packages/extension/resources`, and the extension-specific build scripts live alongside the package in `packages/extension/esbuild.mjs` and `packages/extension/test/build-tests.mjs`.
+Source files live in each package's `src/` directory. Tests live in `packages/core/test`, `packages/webview/test`, and `packages/extension/test`. Static extension assets live in `packages/extension/resources`. Extension-specific build scripts live in `packages/extension/esbuild.mjs` and `packages/extension/test/build-tests.mjs`.
 
-## Build, Test, and Development Commands
+Use `docs/spec*.md` as the product behavior reference when a change affects generation rules, extension behavior, webview flows, or host/webview communication.
 
-Install dependencies with `npm install` at the repo root.
+## Commands
+
+Install dependencies from the repository root with `npm install`.
+
+Full verification gate before considering an implementation change complete:
+
+- `npm run format`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run test`
+
+Use focused checks while iterating, then run the full gate at the end:
 
 - `npm run build`: builds `core`, `webview`, and `extension` in order.
-- `npm run build:core`, `npm run build:webview`, `npm run build:extension`: build an individual workspace from the repo root.
-- `npm run typecheck`: runs `tsc --noEmit` across all packages.
-- `npm run lint`: runs ESLint on workspace sources and test files.
-- `npm run lint:fix`: applies ESLint fixes across the workspace.
-- `npm run format`: formats the repository with Prettier.
-- `npm run format:check`: verifies Prettier formatting.
-- `npm run test`: runs the `core` and `extension` test suites.
-- `npm run build -w @launch-composer/webview`: rebuild only the webview package.
+- `npm run build:core`, `npm run build:webview`, `npm run build:extension`: build one workspace through the root scripts.
+- `npm run test -w @launch-composer/core`: build and run core tests from `dist/test`.
+- `npm run test -w @launch-composer/webview`: compile and run webview tests from `.test-dist`.
+- `npm run test -w launch-composer`: build the extension, compile extension tests, and run `node --test` on `.test-dist/*.test.js`.
 - `npm run watch -w @launch-composer/webview`: rebuild the webview in watch mode.
 - `npm run watch -w launch-composer`: rebuild the VS Code extension in watch mode.
-- `npm run test -w launch-composer`: rebuilds the extension, compiles extension tests, and runs `node --test` on `.test-dist/*.test.js`.
 
-## Coding Style & Naming Conventions
+## Coding Rules
 
-Use TypeScript with ES modules and explicit `.js` import specifiers in source. Prettier defines the formatting baseline: semicolons enabled, single quotes, trailing commas. Follow existing style: 2-space indentation, `PascalCase` for React components, `camelCase` for functions and variables, and descriptive file names such as `workspaceStore.ts` or `bundle.test.ts`.
+Use TypeScript with ES modules and explicit `.js` import specifiers in source. Follow the repository's Prettier baseline: semicolons, single quotes, trailing commas, and 2-space indentation. Use `PascalCase` for React components, `camelCase` for functions and variables, and descriptive file names such as `workspaceStore.ts` or `bundle.test.ts`.
 
-When implementing or changing VS Code extension behavior, consult the official VS Code documentation first and follow the documented patterns. Do not guess at API behavior or replace standard extension APIs with custom implementations unless the docs clearly require a different approach.
-When adding features or fixing bugs around core editor behavior such as file operations, view state, or UI lifecycle, also inspect the VS Code source code and prefer implementations that align with how VS Code itself handles the same class of problem.
+Respect package boundaries:
 
-Start from these official URLs:
+- Keep VS Code API usage and workspace file operations in `packages/extension`.
+- Keep reusable launch composition and validation logic in `packages/core`.
+- Keep browser-side UI logic in `packages/webview`; do not reach around the existing host/webview messaging layer.
+
+For JSON or JSONC reads, writes, edits, and diagnostics, use the existing structured parsing/editing approach based on `jsonc-parser` or nearby helpers. Do not manipulate JSON files with ad hoc regular expressions or manual string concatenation.
+
+## VS Code Extension Work
+
+When implementing or changing VS Code extension behavior in `packages/extension`, consult the official VS Code documentation first and follow documented APIs and lifecycle patterns. For core editor behavior such as file operations, view state, tree views, webview panels, or UI lifecycle, also inspect the VS Code source code and align with the way VS Code handles the same class of problem.
+
+Start from these official references:
 
 - Extension API overview: `https://code.visualstudio.com/api`
 - VS Code API reference: `https://code.visualstudio.com/api/references/vscode-api`
@@ -42,14 +61,18 @@ Start from these official URLs:
 - VS Code source repository: `https://github.com/microsoft/vscode`
 - VS Code source code organization: `https://github.com/microsoft/vscode/wiki/source-code-organization`
 
-After each completed task or implementation change, run `npm run format`, `npm run lint`, `npm run typecheck`, and `npm run test` before considering the work done.
+Do not replace standard VS Code APIs with custom implementations unless the docs or source clearly require a different approach.
 
-## Testing Guidelines
+## Webview UI Work
 
-Tests use Node's built-in runner via `node --test`. Name test files `*.test.ts` in package-level `test/` directories. The `core` package runs tests from built output in `dist/test`, and the extension package compiles tests into `.test-dist` before execution. Keep new tests close to the package they verify, and cover both success and failure paths for generation, manifest wiring, editor panel behavior, and extension commands.
+When changing `packages/webview`, preserve the VS Code extension feel. Prefer the existing `@himadajin/vscode-components` components and local UI patterns. Avoid introducing a new design system, decorative marketing-style UI, or visual treatments that would feel out of place inside VS Code.
 
-## Commit & Pull Request Guidelines
+## Testing
 
-Recent history favors short, imperative commit messages such as `implement packages/core` and `chore(.gitignore): add initial .gitignore file`. Keep commits focused and use a scope when it adds clarity.
+Tests use Node's built-in runner via `node --test`. Name test files `*.test.ts` and keep them close to the package they verify.
 
-PRs should include a short summary, linked issue or task when applicable, and screenshots or recordings for webview or VS Code UI changes. Note any manual verification steps, especially for extension behavior inside VS Code.
+Add or update tests for behavior changes in generation, validation, manifest wiring, workspace I/O, tree views, editor panel behavior, webview entry editing, and host/webview communication. Cover both success and failure paths when the changed behavior has meaningful invalid or error cases.
+
+## Commits
+
+Only commit when explicitly asked. Use Conventional Commits for commit messages. Use `feat:` for new features, `fix:` for bug fixes, `chore:` for maintenance, and add a scope when it clarifies the touched package or area.
