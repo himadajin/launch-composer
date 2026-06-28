@@ -15,3 +15,15 @@ adapter defaults.
 
 If this changes later, update the internal specs, core validation and merge
 behavior, UI editor fields, tests, README examples, and user guide together.
+
+## Should `WorkspaceDataSnapshot.generateReadiness` be required?
+
+Current state: `WorkspaceDataSnapshot.generateReadiness` is optional, so
+EditorPanel keeps a fallback readiness value when a snapshot lacks readiness.
+
+Reason to revisit: readiness is now a first-class UI state. The extension could
+make `WorkspaceDataSnapshot` require readiness and use a separate
+`WorkspaceDataWithoutReadiness` type only for partial cache/read inputs.
+
+If this changes later, update `WorkspaceStore`, `EditorPanelController`,
+extension tests, and any snapshot cache helpers together.
