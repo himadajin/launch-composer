@@ -1,6 +1,6 @@
 # Launch Composer - コアロジック仕様
 
-このファイルは `@launch-composer/core` が実装する生成、マージ、バリデーション、argsFile、変数展開の仕様を定める。JSON file data と Generate 入出力の contract map は [contracts/json-files.md](./contracts/json-files.md) を参照する。
+このファイルは `@launch-composer/core` が実装する生成、マージ、バリデーション、argsFile、変数展開の仕様を定める。JSON file data と Generate 入出力の contract map は [JSON file data contract map](../contracts/json-files.md) を参照する。
 
 `@launch-composer/core` は VS Code API と Node.js ファイルシステム API に依存しない。ファイル読み書きは extension が行い、core は `ProfileFileData[]`、`ConfigFileData[]`、変数、argsFile 読み取りコールバックを受け取って結果を返す。
 

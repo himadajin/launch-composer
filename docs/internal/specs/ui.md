@@ -1,6 +1,6 @@
 # Launch Composer - UI 仕様
 
-このファイルは Launch Composer の TreeView と Webview 編集フォームのユーザー向け挙動を定める。ファイル I/O と Generate の詳細は [spec-extension.md](./spec-extension.md)、通信契約は [spec-communication.md](./spec-communication.md)、生成規則は [spec-core.md](./spec-core.md) を参照する。
+このファイルは Launch Composer の TreeView と Webview 編集フォームのユーザー向け挙動を定める。ファイル I/O と Generate の詳細は [extension.md](./extension.md)、通信契約は [communication.md](./communication.md)、生成規則は [core.md](./core.md) を参照する。
 
 ## UI 構成
 
@@ -239,7 +239,8 @@ config editor のフォーム項目:
   - control: `Select`
   - 保存方法: 即時 patch
 - 表示ラベル: `Config: Include`
-  - JSON path: `excluded`
+  - UI state: included
+  - JSON path: `excluded`（inverse persistence）
   - control: `Checkbox`
   - 保存方法: 即時 patch
 - 表示ラベル: `Config: Working Directory`
@@ -265,7 +266,7 @@ config editor は `configuration.type`、`configuration.request`、`configuratio
 
 - `name` は patch ではなく rename request を使う
 - Profile select は internal placeholder 値を選んだ場合は保存しない
-- Enabled は checked 値を `true` / `false` として書く
+- Config: Include は checked のとき included として扱い、`excluded` key を削除する。unchecked のとき excluded として扱い、`excluded: true` を書く
 - Working Directory は空白だけになった場合、対応する leaf key を削除する patch を送る
 - Args File は trim して保存する。空白だけになった場合は top-level `argsFile` を削除する
 - Args は空配列になった場合、top-level `args` を削除する

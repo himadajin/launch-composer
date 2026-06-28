@@ -6,8 +6,9 @@ This file is a durable working contract for coding agents in this repository. Ke
 
 ## Start Here
 
-- Product behavior, package responsibilities, and spec routing are defined in `docs/spec.md`.
-- Data contract routing is defined in `docs/contracts/README.md`.
+- Product behavior, package responsibilities, and spec routing are defined in `docs/internal/specs/README.md`.
+- Data contract routing is defined in `docs/internal/contracts/README.md`.
+- Pending product-design questions are tracked in `docs/internal/pending.md`; they are not canonical behavior until promoted into the specs.
 - npm script definitions are in `package.json`; the required agent verification gate is listed in this file.
 - This file is the canonical source for agent workflow, coding guardrails, verification expectations, external reference policy, testing policy, and commit policy.
 
@@ -21,21 +22,21 @@ This repository is an npm workspace with three packages under `packages/`:
 
 Source files live in each package's `src/` directory. Tests live in `packages/core/test`, `packages/webview/test`, and `packages/extension/test`. Static extension assets live in `packages/extension/resources`. Extension-specific build scripts live in `packages/extension/esbuild.mjs` and `packages/extension/test/build-tests.mjs`.
 
-Use `docs/spec*.md` as the product behavior reference when a change affects generation rules, extension behavior, webview flows, or host/webview communication. Use `docs/contracts/` as the data contract map for schema, shared TypeScript types, and Host/Webview message shapes.
+Use `docs/internal/specs/` as the product behavior reference when a change affects generation rules, extension behavior, webview flows, or host/webview communication. Use `docs/internal/contracts/` as the data contract map for schema, shared TypeScript types, and Host/Webview message shapes.
 
 ## Spec-First Change Routing
 
-Before implementing user-visible behavior, schema changes, generated `launch.json` changes, extension commands, TreeView actions, or host/webview messages, verify that the relevant `docs/spec*.md` file already defines the behavior. If the spec is silent, update the spec or make the task's acceptance criteria explicit before coding. Do not silently infer product semantics such as duplicate naming, insertion position, disabled-entry behavior, whether state flags are preserved or reset, post-action selection/reveal/open behavior, default values, empty-value deletion, validation timing, JSONC comment cloning versus preservation, or whether a new field is an extension-specific top-level key or a `configuration` pass-through key.
+Before implementing user-visible behavior, schema changes, generated `launch.json` changes, extension commands, TreeView actions, or host/webview messages, verify that the relevant file under `docs/internal/specs/` already defines the behavior. If the spec is silent, update the spec or make the task's acceptance criteria explicit before coding. Do not silently infer product semantics such as duplicate naming, insertion position, disabled-entry behavior, whether state flags are preserved or reset, post-action selection/reveal/open behavior, default values, empty-value deletion, validation timing, JSONC comment cloning versus preservation, or whether a new field is an extension-specific top-level key or a `configuration` pass-through key.
 
 Use this routing when deciding which specs and code surfaces must move together:
 
-- JSON file data, shared data types, generated `launch.json` shape, and Host/Webview message shapes: start from `docs/contracts/`, then update the canonical TypeScript source it points to.
-- Generation, merge, validation, args handling, and path resolution: `docs/spec-core.md`, plus `docs/spec.md` for JSON file behavior.
-- Extension host behavior, workspace I/O, file watching, command registration, settings, and `launch.json` writing: `docs/spec-extension.md`; use `docs/spec-ui.md` as well when TreeView UI behavior or item actions change.
-- Webview editor UI, form behavior, and VS Code-style interaction details: `docs/spec-ui.md`.
-- Extension Host ↔ Webview messages, editor persistence flow, request/response payloads, and shared data types: `docs/spec-communication.md`.
+- JSON file data, shared data types, generated `launch.json` shape, and Host/Webview message shapes: start from `docs/internal/contracts/`, then update the canonical TypeScript source it points to.
+- Generation, merge, validation, args handling, and path resolution: `docs/internal/specs/core.md`, plus `docs/internal/specs/README.md` for JSON file behavior.
+- Extension host behavior, workspace I/O, file watching, command registration, settings, and `launch.json` writing: `docs/internal/specs/extension.md`; use `docs/internal/specs/ui.md` as well when TreeView UI behavior or item actions change.
+- Webview editor UI, form behavior, and VS Code-style interaction details: `docs/internal/specs/ui.md`.
+- Extension Host ↔ Webview messages, editor persistence flow, request/response payloads, and shared data types: `docs/internal/specs/communication.md`.
 
-When changing schema, shared data shapes, or host/webview communication, keep the mirrored contract surfaces synchronized: `docs/contracts/`, `docs/spec-communication.md`, `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`, and `packages/core/src/types.ts` when `ProfileData`, `ConfigData`, or `ValidationError` changes. TypeScript types are the canonical source for data shapes; `docs/contracts/` maps each contract to the owning type and spec. Preserve the existing persistence path: Webview state and controls emit changes through the local bridge/RPC utilities, the extension host applies JSONC patches, and the webview never performs workspace file I/O directly.
+When changing schema, shared data shapes, or host/webview communication, keep the mirrored contract surfaces synchronized: `docs/internal/contracts/`, `docs/internal/specs/communication.md`, `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`, and `packages/core/src/types.ts` when `ProfileData`, `ConfigData`, or `ValidationError` changes. TypeScript types are the canonical source for data shapes; `docs/internal/contracts/` maps each contract to the owning type and spec. Preserve the existing persistence path: Webview state and controls emit changes through the local bridge/RPC utilities, the extension host applies JSONC patches, and the webview never performs workspace file I/O directly.
 
 ## Commands
 
