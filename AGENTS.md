@@ -49,19 +49,26 @@ Respect package boundaries:
 
 For JSON or JSONC reads, writes, edits, and diagnostics, use the existing structured parsing/editing approach based on `jsonc-parser` or nearby helpers. Do not manipulate JSON files with ad hoc regular expressions or manual string concatenation.
 
+## External References
+
+Use external documentation when it materially reduces guesswork about APIs, lifecycle, contribution metadata, or component behavior. Keep the lookup narrow: read the minimum official or local reference needed for the implementation decision, then continue working.
+
+For VS Code extension behavior, use this order:
+
+1. Prefer official AI-readable or Markdown-oriented entry points when available. Use `https://code.visualstudio.com/llms.txt` as the VS Code documentation index.
+2. Read only the relevant official guide, UX guideline, or reference page for the changed API or contribution point.
+3. Use `https://code.visualstudio.com/api/references/vscode-api` when exact types, events, arguments, or return values matter.
+4. If docs leave lifecycle, workbench behavior, or file-operation semantics ambiguous, use `https://github.com/microsoft/vscode` as the source reference. Start from the documented API name, contribution point, command id, or workbench concept, and inspect only the relevant implementation or test files.
+
+Do not require external docs for small refactors, tests, or changes where the behavior is already established by nearby code. Do not use general React or DOM documentation unless the task specifically depends on an unclear React or browser behavior.
+
+For `@himadajin/vscode-components`, consult local package references when adding components or changing component props, styling contracts, or event behavior. Start with `node_modules/@himadajin/vscode-components/README.md` and `node_modules/@himadajin/vscode-components/dist/index.d.ts`; if those are insufficient and the adjacent source checkout exists, inspect `../vscode-components` narrowly.
+
+When external references affect the implementation, mention the specific page or source area used and the decision it informed. Do not paste long documentation summaries into comments or final reports.
+
 ## VS Code Extension Work
 
-When implementing or changing VS Code extension behavior in `packages/extension`, consult the official VS Code documentation first and follow documented APIs and lifecycle patterns. For core editor behavior such as file operations, view state, tree views, webview panels, or UI lifecycle, also inspect the VS Code source code and align with the way VS Code handles the same class of problem.
-
-Start from these official references:
-
-- Extension API overview: `https://code.visualstudio.com/api`
-- VS Code API reference: `https://code.visualstudio.com/api/references/vscode-api`
-- VS Code documentation home: `https://code.visualstudio.com/docs`
-- VS Code source repository: `https://github.com/microsoft/vscode`
-- VS Code source code organization: `https://github.com/microsoft/vscode/wiki/source-code-organization`
-
-Do not replace standard VS Code APIs with custom implementations unless the docs or source clearly require a different approach.
+When implementing or changing VS Code extension behavior in `packages/extension`, follow documented APIs and lifecycle patterns. Do not replace standard VS Code APIs with custom implementations unless the docs or source clearly require a different approach.
 
 ## Webview UI Work
 
