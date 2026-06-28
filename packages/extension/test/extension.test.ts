@@ -770,6 +770,87 @@ test('toggle config exclusion preserves unrelated comments', async () => {
   assert.match(text, /"excluded": true/);
 });
 
+test('setConfigFileExcluded excludes and includes all configs while preserving comments', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/bulk-config-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/bulk-config-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/bulk-config-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '{\n' +
+        '  // keep file comment\n' +
+        '  "configurations": [\n' +
+        '    {\n' +
+        '      "name": "Launch",\n' +
+        '      // keep first comment\n' +
+        '      "profile": "cpp"\n' +
+        '    },\n' +
+        '    {\n' +
+        '      "name": "Skip",\n' +
+        '      "excluded": true,\n' +
+        '      // keep second comment\n' +
+        '      "profile": "cpp"\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n',
+    ),
+  );
+
+  await store.setConfigFileExcluded('config.json', true);
+
+  let text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.match(text, /\/\/ keep file comment/);
+  assert.match(text, /\/\/ keep first comment/);
+  assert.match(text, /\/\/ keep second comment/);
+  assert.equal((text.match(/"excluded": true/g) ?? []).length, 2);
+
+  await store.setConfigFileExcluded('config.json', false);
+
+  text = new TextDecoder().decode(await vscode.workspace.fs.readFile(fileUri));
+  assert.match(text, /\/\/ keep file comment/);
+  assert.match(text, /\/\/ keep first comment/);
+  assert.match(text, /\/\/ keep second comment/);
+  assert.doesNotMatch(text, /"excluded"/);
+});
+
+test('setConfigFileExcluded no-ops when config file has no entries to change', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/bulk-noop-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/bulk-noop-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/bulk-noop-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode('{\n  "configurations": []\n}\n'),
+  );
+
+  await store.setConfigFileExcluded('config.json', true);
+  await store.setConfigFileExcluded('config.json', false);
+
+  const text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.equal(text, '{\n  "configurations": []\n}\n');
+});
+
 test('config tree checkbox toggles the entry excluded flag', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
@@ -811,6 +892,60 @@ test('config tree checkbox toggles the entry excluded flag', async () => {
     new TextDecoder().decode(bytes),
     '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "cpp",\n      "excluded": true\n    }\n  ]\n}\n',
   );
+});
+
+test('config file bulk commands update only the selected config file entries', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/config-bulk-command']);
+
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/config-bulk-command'),
+  );
+  await store.addConfigEntry('config.json', 'Launch', 'cpp');
+  await store.addConfigEntry('other.json', 'Other', 'cpp');
+
+  activate(context);
+
+  await vscode.commands.executeCommand('launch-composer.excludeAllConfigs', {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+    configurations: [],
+  });
+
+  let selectedText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/config-bulk-command/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  );
+  const otherText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/config-bulk-command/.vscode/launch-composer/configs/other.json',
+      ),
+    ),
+  );
+  assert.match(selectedText, /"excluded": true/);
+  assert.doesNotMatch(otherText, /"excluded"/);
+
+  await vscode.commands.executeCommand('launch-composer.includeAllConfigs', {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+    configurations: [],
+  });
+
+  selectedText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/config-bulk-command/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  );
+  assert.doesNotMatch(selectedText, /"excluded"/);
 });
 
 test('createDataFile supports unicode file names without stat-ing the target path', async () => {

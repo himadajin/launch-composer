@@ -632,6 +632,18 @@ export function activate(context: vscode.ExtensionContext): void {
         showError(error);
       }
     }),
+    registerCommand(COMMANDS.includeAllConfigs, async (node?: TreeNode) => {
+      await setConfigFileIncluded(node, true, store, async (file) => {
+        queueWatcherEvent('config', file);
+        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
+      });
+    }),
+    registerCommand(COMMANDS.excludeAllConfigs, async (node?: TreeNode) => {
+      await setConfigFileIncluded(node, false, store, async (file) => {
+        queueWatcherEvent('config', file);
+        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
+      });
+    }),
     registerCommand(COMMANDS.editItem, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {
@@ -1013,6 +1025,25 @@ async function setConfigIncluded(
       !included,
     );
     await onDidChange(entryNode.target.file);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function setConfigFileIncluded(
+  node: TreeNode | undefined,
+  included: boolean,
+  store: WorkspaceStore,
+  onDidChange: (file: string) => Promise<void>,
+): Promise<void> {
+  const fileNode = getFileNode(node, 'config');
+  if (fileNode === undefined || fileNode.issue !== undefined) {
+    return;
+  }
+
+  try {
+    await store.setConfigFileExcluded(fileNode.file, !included);
+    await onDidChange(fileNode.file);
   } catch (error) {
     showError(error);
   }

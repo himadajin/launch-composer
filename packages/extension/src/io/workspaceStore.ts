@@ -424,6 +424,39 @@ export class WorkspaceStore {
     await this.writeDataFileText('config', file, nextText);
   }
 
+  async setConfigFileExcluded(file: string, excluded: boolean): Promise<void> {
+    const text = await this.readRequiredDataFileText('config', file);
+    const fileData = this.parseConfigFileContent(file, text);
+    const patches: JsonObjectPatchOperation[] = [];
+
+    fileData.configurations.forEach((config, index) => {
+      if (excluded) {
+        if (config.excluded !== true) {
+          patches.push({
+            type: 'set',
+            path: ['configurations', index, 'excluded'],
+            value: true,
+          });
+        }
+        return;
+      }
+
+      if (Object.hasOwn(config, 'excluded')) {
+        patches.push({
+          type: 'delete',
+          path: ['configurations', index, 'excluded'],
+        });
+      }
+    });
+
+    if (patches.length === 0) {
+      return;
+    }
+
+    const nextText = applyJsonDocumentPatches(text, patches);
+    await this.writeDataFileText('config', file, nextText);
+  }
+
   async deleteEntry(target: EditorTarget): Promise<void> {
     if (target.kind === 'profile') {
       const text = await this.readRequiredDataFileText('profile', target.file);

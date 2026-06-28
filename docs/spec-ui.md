@@ -46,6 +46,7 @@ config file:
 - collapsible: expanded
 - checkbox は表示しない
 - 生成対象状態は持たない
+- context menu の一括操作は、配下の config entry の `excluded` だけを更新する
 
 invalid file:
 
@@ -109,10 +110,11 @@ profile file:
 config file:
 
 - Add Config
+- Include All Configs
+- Exclude All Configs
 - Open
 - Copy Path
 - Copy Relative Path
-- Enable または Disable
 - Rename
 - Delete
 

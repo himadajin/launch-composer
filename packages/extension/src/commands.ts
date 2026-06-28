@@ -16,6 +16,8 @@ export const COMMANDS = {
   renameConfigFile: 'launch-composer.renameConfigFile',
   deleteConfigFile: 'launch-composer.deleteConfigFile',
   addConfigEntry: 'launch-composer.addConfigEntry',
+  includeAllConfigs: 'launch-composer.includeAllConfigs',
+  excludeAllConfigs: 'launch-composer.excludeAllConfigs',
   editItem: 'launch-composer.editItem',
   openActiveEditorJson: 'launch-composer.openActiveEditorJson',
   openItemJson: 'launch-composer.openItemJson',

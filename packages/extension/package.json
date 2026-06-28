@@ -155,6 +155,16 @@
         "icon": "$(add)"
       },
       {
+        "command": "launch-composer.includeAllConfigs",
+        "title": "Include All Configs",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.excludeAllConfigs",
+        "title": "Exclude All Configs",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
         "command": "launch-composer.editItem",
         "title": "Edit",
         "enablement": "workspaceFolderCount == 1",
@@ -290,6 +300,16 @@
           "group": "4_modify@1"
         },
         {
+          "command": "launch-composer.includeAllConfigs",
+          "when": "view == launchComposer.configs && viewItem == configFile",
+          "group": "0_state@1"
+        },
+        {
+          "command": "launch-composer.excludeAllConfigs",
+          "when": "view == launchComposer.configs && viewItem == configFile",
+          "group": "0_state@2"
+        },
+        {
           "command": "launch-composer.includeConfig",
           "when": "viewItem == configEntryDisabled",
           "group": "0_state@1"
@@ -400,6 +420,14 @@
         },
         {
           "command": "launch-composer.addConfigEntry",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.includeAllConfigs",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.excludeAllConfigs",
           "when": "false"
         },
         {
