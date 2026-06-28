@@ -5,8 +5,8 @@ references.
 
 ## Users
 
-- [User guide](./user/guide.md): setup, file layout, profiles, configs, and
-  generation behavior.
+- [User guide](./user/guide.md): practical setup, file layout, profiles,
+  configs, and generation notes.
 
 ## Agents And Maintainers
 
@@ -16,3 +16,5 @@ references.
   responsibilities.
 - [Data contracts](./internal/contracts/README.md): canonical data-shape routing
   for JSON files and Host/Webview messages.
+- [Pending decisions](./internal/pending.md): internal product-design questions
+  to revisit.

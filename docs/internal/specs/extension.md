@@ -1,6 +1,6 @@
 # Launch Composer - 拡張機能ホスト仕様
 
-このファイルは `launch-composer` パッケージの Extension Host 側仕様を定める。JSON file data の contract map は [contracts/json-files.md](../contracts/json-files.md)、生成と validation は [core.md](./core.md)、Webview 通信は [communication.md](./communication.md)、UI 表示は [ui.md](./ui.md) を参照する。
+このファイルは `launch-composer` パッケージの Extension Host 側仕様を定める。JSON file data の contract map は [JSON file data contract map](../contracts/json-files.md)、生成と validation は [core.md](./core.md)、Webview 通信は [communication.md](./communication.md)、UI 表示は [ui.md](./ui.md) を参照する。
 
 ## 役割
 
@@ -47,7 +47,7 @@ workspace folder が 0 件または複数件の場合:
 
 `WorkspaceStore.readAll()` は profile と config をそれぞれ読み、正常データと issue を返す。
 
-snapshot の data shape は [contracts/json-files.md](../contracts/json-files.md) と [contracts/host-webview.md](../contracts/host-webview.md) を参照する。
+snapshot の data shape は [JSON file data contract map](../contracts/json-files.md) と [Host/Webview contract map](../contracts/host-webview.md) を参照する。
 
 未作成ディレクトリは空として扱う。たとえば `.vscode/launch-composer/` がない場合、`profiles: []`、`configs: []`、`issues: []` を返す。
 
@@ -59,7 +59,7 @@ snapshot の data shape は [contracts/json-files.md](../contracts/json-files.md
 
 読み込み時の invalid file はファイル単位の `ComposerDataIssue` として扱い、他の正常ファイルの読み込みは継続する。
 
-`ComposerDataIssue` の shape は [contracts/host-webview.md](../contracts/host-webview.md) を参照する。
+`ComposerDataIssue` の shape は [Host/Webview contract map](../contracts/host-webview.md) を参照する。
 
 issue の分類:
 

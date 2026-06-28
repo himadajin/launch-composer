@@ -9,7 +9,7 @@ you edit by hand.
 
 Launch Composer works with exactly one workspace folder.
 
-## Install Locally
+## Install From Source
 
 From this repository:
 
@@ -57,6 +57,7 @@ Copy this as `.vscode/launch-composer/profiles/profile.json`:
       "request": "launch",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
+      "program": "${workspaceFolder}/src/server.ts",
       "skipFiles": ["<node_internals>/**"],
       "env": {
         "NODE_ENV": "development",
@@ -84,7 +85,7 @@ Copy this as `.vscode/launch-composer/configs/config.json`:
       "excluded": false,
       "args": ["--config", "config/local.json"],
       "configuration": {
-        "program": "${workspaceFolder}/src/server.ts",
+        "cwd": "${workspaceFolder}",
         "sourceMaps": true,
         "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       },
@@ -101,14 +102,17 @@ its profile and written to `.vscode/launch.json`.
 - Source files are JSONC, so comments and trailing commas are allowed.
 - `configuration` is shallow-merged: config keys replace profile keys with the
   same name.
-- Use `argsFile` when an argument list is too long to keep inline.
+- Use `argsFile` when an argument list is too long to keep inline. It must be an
+  absolute path or start with `${workspaceFolder}`, and it cannot be used with a
+  profile that already defines `args`.
 - `launch.json` is generated output. Existing contents are replaced when
   generation succeeds.
 - Use `excluded: true` on a config entry to keep it out of the generated
-  `launch.json`.
+  `launch.json`. Excluded entries are still validated.
 
 ## More Information
 
-- User guide: [../../docs/user/guide.md](../../docs/user/guide.md)
-- Documentation index: [../../docs/README.md](../../docs/README.md)
-- Repository workflow and development instructions: [../../AGENTS.md](../../AGENTS.md)
+- User guide:
+  [github.com/himadajin/launch-composer/blob/main/docs/user/guide.md](https://github.com/himadajin/launch-composer/blob/main/docs/user/guide.md)
+- Documentation index:
+  [github.com/himadajin/launch-composer/blob/main/docs/README.md](https://github.com/himadajin/launch-composer/blob/main/docs/README.md)
