@@ -13,7 +13,11 @@ await mkdir(outDir, { recursive: true });
 await build({
   absWorkingDir: rootDir,
   bundle: true,
-  entryPoints: ['test/entryChanges.test.ts', 'test/profileSelect.test.ts'],
+  entryPoints: [
+    'test/entryChanges.test.ts',
+    'test/profileRequestSelect.test.ts',
+    'test/profileSelect.test.ts',
+  ],
   format: 'esm',
   outdir: outDir,
   platform: 'node',

@@ -4,6 +4,7 @@ import {
   FormGroup,
   FormHelper,
   ListEditor,
+  Select,
   TextInput,
 } from '@himadajin/vscode-components';
 import { useEffect, useRef, useState } from 'react';
@@ -14,8 +15,15 @@ import {
   updateProfileArgs,
   updateProfileCwd,
   updateProfileProgram,
+  updateProfileRequest,
   updateProfileStopAtEntry,
+  updateProfileType,
 } from './entryChanges.js';
+import {
+  isDebugRequestOption,
+  isInternalProfileRequestSelectValue,
+  resolveProfileRequestSelectState,
+} from './profileRequestSelect.js';
 import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
@@ -40,6 +48,7 @@ export function ProfileEditor({
 }: ProfileEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
   const [name, setName] = useState(data.name);
+  const [type, setType] = useState(stringOrEmpty(data.configuration?.type));
   const [program, setProgram] = useState(
     stringOrEmpty(data.configuration?.program),
   );
@@ -48,12 +57,18 @@ export function ProfileEditor({
   // data prop). Reset to false on external data sync; set to true on user
   // input. Mirrors VS Code's "clear handler → set value → re-register handler"
   // pattern so that opening the editor never causes spurious file writes.
+  const typeChangedByUserRef = useRef(false);
   const programChangedByUserRef = useRef(false);
   const cwdChangedByUserRef = useRef(false);
 
   useEffect(() => {
     setName(data.name);
   }, [data.name]);
+
+  useEffect(() => {
+    typeChangedByUserRef.current = false;
+    setType(stringOrEmpty(data.configuration?.type));
+  }, [data.configuration?.type]);
 
   useEffect(() => {
     programChangedByUserRef.current = false;
@@ -65,6 +80,11 @@ export function ProfileEditor({
     setCwd(stringOrEmpty(data.configuration?.cwd));
   }, [data.configuration?.cwd]);
 
+  const handleTypeChange = (value: string) => {
+    typeChangedByUserRef.current = true;
+    setType(value);
+  };
+
   const handleProgramChange = (value: string) => {
     programChangedByUserRef.current = true;
     setProgram(value);
@@ -74,6 +94,14 @@ export function ProfileEditor({
     cwdChangedByUserRef.current = true;
     setCwd(value);
   };
+
+  useDebouncedCommit(type, autoSaveDelay, (value) => {
+    if (readOnly || !typeChangedByUserRef.current) {
+      return;
+    }
+
+    onChange(updateProfileType(data, value));
+  });
 
   useDebouncedCommit(program, autoSaveDelay, (value) => {
     if (readOnly || !programChangedByUserRef.current) {
@@ -98,6 +126,11 @@ export function ProfileEditor({
 
     await onRename(name);
   };
+  const typeHelperMessage =
+    type.trim() === '' ? 'Profile type is required for Generate.' : undefined;
+  const requestSelect = resolveProfileRequestSelectState(
+    data.configuration?.request,
+  );
 
   return (
     <div className="composer-editor">
@@ -150,6 +183,52 @@ export function ProfileEditor({
 
               event.preventDefault();
               event.currentTarget.blur();
+            }}
+          />
+        </FormGroup>
+
+        <FormGroup
+          label="Profile: Type"
+          description="Debug adapter type used in generated launch.json."
+          helper={
+            typeHelperMessage === undefined ? undefined : (
+              <FormHelper tone="warning">{typeHelperMessage}</FormHelper>
+            )
+          }
+        >
+          <TextInput
+            disabled={readOnly}
+            value={type}
+            onChange={handleTypeChange}
+          />
+        </FormGroup>
+
+        <FormGroup
+          label="Profile: Request"
+          description="Debug request passed to the adapter."
+          helper={
+            requestSelect.helperMessage === undefined ? undefined : (
+              <FormHelper tone="warning">
+                {requestSelect.helperMessage}
+              </FormHelper>
+            )
+          }
+        >
+          <Select
+            disabled={readOnly}
+            enum={requestSelect.options}
+            enumItemLabels={requestSelect.optionLabels}
+            value={requestSelect.value}
+            onChange={(value) => {
+              if (
+                readOnly ||
+                isInternalProfileRequestSelectValue(value) ||
+                !isDebugRequestOption(value)
+              ) {
+                return;
+              }
+
+              onChange(updateProfileRequest(data, value));
             }}
           />
         </FormGroup>
@@ -223,7 +302,7 @@ export function ProfileEditor({
 
         <EditInJsonHint
           fileLabel={sourceFile}
-          description='Edit the source file to change JSON-only fields such as "type" and "request", or to add unsupported properties.'
+          description="Edit the source file to add unsupported properties."
           onOpenFileJson={onOpenJson}
         />
       </FormContainer>
