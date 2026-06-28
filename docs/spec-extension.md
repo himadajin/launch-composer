@@ -107,7 +107,6 @@ default config file:
 // Configure this file and add entries to "configurations".
 // Set "profile" to reference a profile.
 {
-  "enabled": true,
   "configurations": [],
 }
 ```
@@ -183,9 +182,9 @@ config entry delete は `configurations` 配列から対象要素を削除する
 
 file delete は VS Code `WorkspaceEdit.deleteFile` を使い、対象ファイルがすでに存在しなくても成功扱いにする。
 
-### enabled toggle
+### included toggle
 
-config file の checkbox または `Enable` / `Disable` は file-level `enabled` を切り替える。config entry の checkbox または `Enable` / `Disable` は entry-level `enabled` を切り替える。
+config entry の checkbox または `Include` / `Exclude` は entry-level `enabled` を切り替える。config file は生成対象状態を持たず、単なるグループとして扱う。
 
 切り替えは JSONC 部分更新で行う。関係しないコメントは保持する。
 

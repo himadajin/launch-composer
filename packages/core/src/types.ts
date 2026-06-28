@@ -28,7 +28,6 @@ export interface ProfileFileData {
 
 export interface ConfigFileData {
   file: string;
-  enabled?: boolean;
   configurations: ConfigData[];
 }
 

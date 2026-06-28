@@ -23,11 +23,11 @@ JSON file data と Generate 入出力の shape は `packages/core/src/types.ts` 
   - behavior spec: [../spec.md](../spec.md), [../spec-core.md](../spec-core.md)
   - 注意: `configuration` は config 側の上書き用パススルーオブジェクト
 - 契約: config file
-  - 用途: config entry と file-level enabled state をまとめる入力ファイル
+  - 用途: config entry をまとめる入力ファイル
   - canonical source: `ConfigFileData` in `packages/core/src/types.ts`
   - file shape: `configs/*.json` の root object
   - behavior spec: [../spec.md](../spec.md), [../spec-extension.md](../spec-extension.md)
-  - 注意: file-level `enabled` はファイル内の全 config の生成対象判定に使う
+  - 注意: 生成対象判定は config entry の `enabled` で行う
 - 契約: argsFile data
   - 用途: config entry から参照する外部 args source
   - canonical source: `ArgsFileData` in `packages/core/src/types.ts`

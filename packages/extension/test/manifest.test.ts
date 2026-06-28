@@ -95,6 +95,7 @@ test('package.json command contributions stay aligned with the extension impleme
     itemContextMenu.some(
       (item) =>
         item.command === 'launch-composer.enableConfig' &&
+        item.when === 'viewItem == configEntryDisabled' &&
         item.group === '0_state@1',
     ),
   );
@@ -102,7 +103,22 @@ test('package.json command contributions stay aligned with the extension impleme
     itemContextMenu.some(
       (item) =>
         item.command === 'launch-composer.disableConfig' &&
+        item.when === 'viewItem == configEntryEnabled' &&
         item.group === '0_state@1',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.every(
+      (item) =>
+        item.command !== 'launch-composer.enableConfig' ||
+        !(item.when ?? '').includes('configFile'),
+    ),
+  );
+  assert.ok(
+    itemContextMenu.every(
+      (item) =>
+        item.command !== 'launch-composer.disableConfig' ||
+        !(item.when ?? '').includes('configFile'),
     ),
   );
   const inlineMenu = itemContextMenu.filter((item) => item.group === 'inline');

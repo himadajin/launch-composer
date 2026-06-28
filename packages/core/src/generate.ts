@@ -1,7 +1,6 @@
 import { buildLaunchConfig } from './merge.js';
 import type {
   ConfigRef,
-  ConfigFileData,
   GenerateInput,
   GenerateResult,
   LaunchConfig,
@@ -20,18 +19,8 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
   }
 
   const configurations: LaunchConfig[] = [];
-  const fileEnabledByPath = new Map<string, boolean>(
-    input.configs.map((fileData: ConfigFileData) => [
-      fileData.file,
-      fileData.enabled !== false,
-    ]),
-  );
 
   for (const configRef of state.configRefs) {
-    if (fileEnabledByPath.get(configRef.file) === false) {
-      continue;
-    }
-
     if (configRef.data.enabled === false) {
       continue;
     }

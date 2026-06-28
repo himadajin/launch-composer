@@ -18,7 +18,6 @@ type FileNode = {
   kind: 'profile' | 'config';
   file: string;
   issue?: ComposerDataIssue;
-  enabled?: boolean;
   profiles?: ProfileData[];
   configurations?: ConfigData[];
 };
@@ -28,15 +27,9 @@ type EntryNode = {
   target: EditorTarget;
   label: string;
   enabled?: boolean;
-  inheritedDisabled?: boolean;
 };
 
 export type TreeNode = FileNode | EntryNode;
-
-const DISABLED_BY_FILE_ICON = new vscode.ThemeIcon(
-  'circle-slash',
-  new vscode.ThemeColor('disabledForeground'),
-);
 
 function toCheckboxState(
   checked: boolean,
@@ -105,7 +98,6 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
               },
               label: (entry as ConfigData).name,
               enabled: (entry as ConfigData).enabled !== false,
-              inheritedDisabled: element.enabled === false,
             };
 
       this.entryNodes.set(getEntryKey(node.target), node);
@@ -126,9 +118,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
         element.issue === undefined
           ? element.kind === 'profile'
             ? 'profileFile'
-            : element.enabled === false
-              ? 'configFileDisabled'
-              : 'configFile'
+            : 'configFile'
           : element.kind === 'profile'
             ? 'profileFileInvalid'
             : 'configFileInvalid';
@@ -150,11 +140,6 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
           new vscode.ThemeColor('list.warningForeground'),
         );
         item.description = getIssueDescription(element.issue);
-      } else if (element.kind === 'config') {
-        item.checkboxState = toCheckboxState(element.enabled !== false);
-        if (element.enabled === false) {
-          item.description = 'disabled';
-        }
       }
 
       return item;
@@ -168,11 +153,9 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     item.contextValue =
       element.target.kind === 'profile'
         ? 'profileEntry'
-        : element.inheritedDisabled
-          ? 'configEntryDisabledByFile'
-          : element.enabled
-            ? 'configEntryEnabled'
-            : 'configEntryDisabled';
+        : element.enabled
+          ? 'configEntryEnabled'
+          : 'configEntryDisabled';
     item.command = {
       command: 'launch-composer.editItem',
       title: 'Edit',
@@ -180,17 +163,12 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     };
 
     if (element.target.kind === 'config') {
-      if (element.inheritedDisabled) {
-        item.iconPath = DISABLED_BY_FILE_ICON;
-        item.description = 'disabled by file';
-      } else {
-        item.checkboxState = {
-          state: toCheckboxState(element.enabled === true),
-          tooltip: 'Include this config when generating launch.json.',
-        };
-        if (!element.enabled) {
-          item.description = 'disabled';
-        }
+      item.checkboxState = {
+        state: toCheckboxState(element.enabled === true),
+        tooltip: 'Include this config when generating launch.json.',
+      };
+      if (!element.enabled) {
+        item.description = 'excluded';
       }
     }
 
@@ -253,12 +231,6 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
               type: 'file',
               kind: 'config',
               file,
-              ...((fileData as ConfigFileData | undefined)?.enabled ===
-              undefined
-                ? {}
-                : {
-                    enabled: (fileData as ConfigFileData).enabled,
-                  }),
               configurations:
                 (fileData as ConfigFileData | undefined)?.configurations ?? [],
             };

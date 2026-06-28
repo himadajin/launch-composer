@@ -83,20 +83,6 @@ function validateConfigFiles(
   errors: ValidationError[],
 ): void {
   for (const configFile of configFiles) {
-    if (
-      Object.hasOwn(configFile, 'enabled') &&
-      configFile.enabled !== undefined &&
-      typeof configFile.enabled !== 'boolean'
-    ) {
-      errors.push(
-        createValidationError({
-          file: configFile.file,
-          field: 'enabled',
-          message: 'Config file enabled must be a boolean.',
-        }),
-      );
-    }
-
     if (!Array.isArray(configFile.configurations)) {
       errors.push(
         createValidationError({

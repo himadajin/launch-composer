@@ -14,7 +14,6 @@ const DEFAULT_CONFIG_TEXT =
   '// Configure this file and add entries to "configurations".\n' +
   '// Set "profile" to reference a profile.\n' +
   '{\n' +
-  '  "enabled": true,\n' +
   '  "configurations": []\n' +
   '}\n';
 
@@ -374,7 +373,6 @@ test('readConfigsWithIssues reads config data without requiring profile director
     configs: [
       {
         file: 'config.json',
-        enabled: true,
         configurations: [{ name: 'Launch' }],
       },
     ],
@@ -463,7 +461,7 @@ test('addConfigEntry creates its backing file when it does not exist', async () 
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Basic Test",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}',
+    '{\n  "configurations": [\n    {\n      "name": "Basic Test",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}',
   );
 });
 
@@ -580,23 +578,22 @@ test('addConfig command shows available profiles in selection order', async () =
   });
 });
 
-test('toggleConfigFileEnabled updates the file-level enabled flag', async () => {
+test('addConfigEntry creates config files without root enabled state', async () => {
   const store = new WorkspaceStore(
-    vscode.Uri.file('/workspace/toggle-config-file-project'),
+    vscode.Uri.file('/workspace/new-config-file-project'),
   );
 
   await store.addConfigEntry('config.json', 'Launch', 'cpp');
-  await store.toggleConfigFileEnabled('config.json');
 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
-      '/workspace/toggle-config-file-project/.vscode/launch-composer/configs/config.json',
+      '/workspace/new-config-file-project/.vscode/launch-composer/configs/config.json',
     ),
   );
 
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
   );
 });
 
@@ -771,7 +768,6 @@ test('toggle config flags preserve unrelated comments', async () => {
   );
 
   await store.toggleConfigEnabled('config.json', 0);
-  await store.toggleConfigFileEnabled('config.json');
 
   const text = new TextDecoder().decode(
     await vscode.workspace.fs.readFile(fileUri),
@@ -781,7 +777,7 @@ test('toggle config flags preserve unrelated comments', async () => {
   assert.match(text, /"enabled": false/);
 });
 
-test('config tree checkbox toggles the file-level enabled flag', async () => {
+test('config tree checkbox toggles the entry enabled flag', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders(['/workspace/config-checkbox-view']);
@@ -802,9 +798,9 @@ test('config tree checkbox toggles the file-level enabled flag', async () => {
     items: [
       [
         {
-          type: 'file',
-          kind: 'config',
-          file: 'config.json',
+          type: 'entry',
+          target: { kind: 'config', file: 'config.json', index: 0 },
+          label: 'Launch',
           enabled: true,
         },
         vscode.TreeItemCheckboxState.Unchecked,
@@ -820,7 +816,7 @@ test('config tree checkbox toggles the file-level enabled flag', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "profile": "cpp"\n    }\n  ]\n}\n',
   );
 });
 

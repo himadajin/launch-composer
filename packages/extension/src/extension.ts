@@ -233,19 +233,7 @@ export function activate(context: vscode.ExtensionContext): void {
       for (const [node, checkboxState] of event.items) {
         const enabled = checkboxState === vscode.TreeItemCheckboxState.Checked;
 
-        if (node.type === 'file' && node.kind === 'config') {
-          if (node.enabled !== enabled) {
-            await store.toggleConfigFileEnabled(node.file);
-            changedFiles.add(node.file);
-          }
-          continue;
-        }
-
         if (node.type !== 'entry' || node.target.kind !== 'config') {
-          continue;
-        }
-
-        if (node.inheritedDisabled) {
           continue;
         }
 
@@ -758,10 +746,6 @@ export function activate(context: vscode.ExtensionContext): void {
           await store.toggleConfigEnabled(node.target.file, node.target.index);
           queueWatcherEvent('config', node.target.file);
           await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-        } else if (node?.type === 'file' && node.kind === 'config') {
-          await store.toggleConfigFileEnabled(node.file);
-          queueWatcherEvent('config', node.file);
-          await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
         }
       } catch (error) {
         showError(error);
@@ -1009,20 +993,6 @@ async function setConfigEnabled(
   store: WorkspaceStore,
   onDidChange: (file: string) => Promise<void>,
 ): Promise<void> {
-  if (node?.type === 'file' && node.kind === 'config') {
-    if (node.enabled === enabled) {
-      return;
-    }
-
-    try {
-      await store.toggleConfigFileEnabled(node.file);
-      await onDidChange(node.file);
-    } catch (error) {
-      showError(error);
-    }
-    return;
-  }
-
   const entryNode = getEntryNode(node);
   if (entryNode === undefined || entryNode.target.kind !== 'config') {
     return;

@@ -59,7 +59,7 @@ test('tree provider keeps invalid files visible as warning nodes', async () => {
   );
 });
 
-test('tree provider marks config entries as disabled when their file is disabled', async () => {
+test('tree provider ignores legacy file enabled state for config entries', async () => {
   const store = new WorkspaceStore(vscode.Uri.file('/workspace/config-tree'));
 
   await vscode.workspace.fs.createDirectory(
@@ -81,8 +81,8 @@ test('tree provider marks config entries as disabled when their file is disabled
   assert.ok(fileNode);
   assert.equal(fileNode?.type, 'file');
   const fileItem = provider.getTreeItem(fileNode);
-  assert.equal(fileItem.contextValue, 'configFileDisabled');
-  assert.equal(fileItem.checkboxState, vscode.TreeItemCheckboxState.Unchecked);
+  assert.equal(fileItem.contextValue, 'configFile');
+  assert.equal(fileItem.checkboxState, undefined);
   assert.equal(fileItem.label, 'config.json');
 
   const childNodes = await provider.getChildren(fileNode);
@@ -91,16 +91,13 @@ test('tree provider marks config entries as disabled when their file is disabled
   assert.ok(entryNode);
   assert.equal(entryNode?.type, 'entry');
   const item = provider.getTreeItem(entryNode);
-  assert.equal(item.contextValue, 'configEntryDisabledByFile');
-  assert.equal(item.description, 'disabled by file');
-  assert.equal(item.checkboxState, undefined);
-  assert.deepEqual(
-    item.iconPath,
-    new vscode.ThemeIcon(
-      'circle-slash',
-      new vscode.ThemeColor('disabledForeground'),
-    ),
-  );
+  assert.equal(item.contextValue, 'configEntryEnabled');
+  assert.deepEqual(item.checkboxState, {
+    state: vscode.TreeItemCheckboxState.Checked,
+    tooltip: 'Include this config when generating launch.json.',
+  });
+  assert.equal(item.description, undefined);
+  assert.equal(item.iconPath, undefined);
   assert.equal(item.label, 'Launch');
   assert.deepEqual(item.command, {
     command: 'launch-composer.editItem',
@@ -109,7 +106,7 @@ test('tree provider marks config entries as disabled when their file is disabled
   });
 });
 
-test('tree provider preserves entry checkbox state when a disabled file contains a disabled entry', async () => {
+test('tree provider keeps entry checkbox state when legacy file enabled is false', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/config-tree-preserve-state'),
   );
@@ -139,16 +136,13 @@ test('tree provider preserves entry checkbox state when a disabled file contains
   assert.equal(entryNode.type, 'entry');
 
   const item = provider.getTreeItem(entryNode);
-  assert.equal(item.contextValue, 'configEntryDisabledByFile');
-  assert.equal(item.description, 'disabled by file');
-  assert.equal(item.checkboxState, undefined);
-  assert.deepEqual(
-    item.iconPath,
-    new vscode.ThemeIcon(
-      'circle-slash',
-      new vscode.ThemeColor('disabledForeground'),
-    ),
-  );
+  assert.equal(item.contextValue, 'configEntryDisabled');
+  assert.equal(item.description, 'excluded');
+  assert.deepEqual(item.checkboxState, {
+    state: vscode.TreeItemCheckboxState.Unchecked,
+    tooltip: 'Include this config when generating launch.json.',
+  });
+  assert.equal(item.iconPath, undefined);
   assert.equal(item.label, 'Launch');
 });
 
@@ -182,8 +176,11 @@ test('tree provider keeps item-level disabled config entries as unchecked checkb
   assert.equal(entryNode.type, 'entry');
 
   const item = provider.getTreeItem(entryNode);
-  assert.equal(item.checkboxState, vscode.TreeItemCheckboxState.Unchecked);
-  assert.equal(item.description, 'disabled');
+  assert.deepEqual(item.checkboxState, {
+    state: vscode.TreeItemCheckboxState.Unchecked,
+    tooltip: 'Include this config when generating launch.json.',
+  });
+  assert.equal(item.description, 'excluded');
   assert.equal(item.iconPath, undefined);
   assert.equal(item.label, 'Launch');
 });

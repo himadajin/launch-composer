@@ -48,7 +48,6 @@ test('generate shallow-merges profile and config for enabled entries only', asyn
     configs: [
       {
         file: 'basic.json',
-        enabled: true,
         configurations: [
           {
             name: 'Basic Test',
@@ -111,7 +110,6 @@ test('generate resolves argsFile via workspaceFolder and appends config args', a
     configs: [
       {
         file: 'configs.json',
-        enabled: true,
         configurations: [
           {
             name: 'Replay',
@@ -178,7 +176,6 @@ test('validateGenerateInput reports spec violations together', async () => {
     configs: [
       {
         file: 'configs.json',
-        enabled: true,
         configurations: [
           {
             name: 'cpp',
@@ -245,7 +242,6 @@ test('generate fails when config.profile is missing', async () => {
     configs: [
       {
         file: 'config.json',
-        enabled: true,
         configurations: [
           {
             name: 'Draft',
@@ -286,7 +282,6 @@ test('generate fails when profile args and config argsFile are combined', async 
     configs: [
       {
         file: 'config.json',
-        enabled: true,
         configurations: [
           {
             name: 'Test',
@@ -310,7 +305,7 @@ test('generate fails when profile args and config argsFile are combined', async 
   assert.match(result.errors[0]?.message ?? '', /cannot specify argsFile/);
 });
 
-test('generate excludes all configs when the config file is disabled', async () => {
+test('generate ignores root enabled when deciding included configs', async () => {
   const result = await generate({
     profiles: [
       {
@@ -337,7 +332,7 @@ test('generate excludes all configs when the config file is disabled', async () 
             profile: 'cpp',
           },
         ],
-      },
+      } as unknown as ConfigFileData,
     ],
   });
 
@@ -346,7 +341,13 @@ test('generate excludes all configs when the config file is disabled', async () 
     throw new Error('Expected success');
   }
 
-  assert.deepEqual(result.launchJson.configurations, []);
+  assert.deepEqual(result.launchJson.configurations, [
+    {
+      name: 'Draft',
+      type: 'cppdbg',
+      request: 'launch',
+    },
+  ]);
 });
 
 test('generate treats omitted enabled values as enabled', async () => {

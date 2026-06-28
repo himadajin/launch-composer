@@ -42,13 +42,10 @@ profile file:
 
 config file:
 
-- context: `configFile` または `configFileDisabled`
+- context: `configFile`
 - collapsible: expanded
-- checkbox を表示する
-- `enabled === false` の場合:
-  - checkbox: unchecked
-  - description: `disabled`
-- `enabled` 省略時は Generate 上も TreeView 上も enabled として扱う
+- checkbox は表示しない
+- 生成対象状態は持たない
 
 invalid file:
 
@@ -77,23 +74,17 @@ config entry:
 
 config entry の状態:
 
-- 状態: entry enabled、file enabled
+- 状態: included
   - context: `configEntryEnabled`
   - 表示:
     - checkbox: checked
-- 状態: entry disabled、file enabled
+- 状態: excluded
   - context: `configEntryDisabled`
   - 表示:
     - checkbox: unchecked
-    - description: `disabled`
-- 状態: file disabled 配下の entry
-  - context: `configEntryDisabledByFile`
-  - 表示:
-    - checkbox: なし
-    - icon: `circle-slash`
-    - description: `disabled by file`
+    - description: `excluded`
 
-file disabled 配下の entry は、entry 自身の `enabled` が true/false のどちらでも `disabled by file` 表示にする。entry 自身の値は JSON に残り、file を再度 enabled にしたときに使われる。
+config entry の `enabled` 省略時は Generate 上も TreeView 上も included として扱う。
 
 ### view title actions
 
@@ -133,7 +124,7 @@ profile/config entry:
 - Rename
 - Delete
 
-config entry では状態に応じて Enable / Disable を最上段に表示する。ただし `configEntryDisabledByFile` には Enable / Disable を表示しない。
+config entry では状態に応じて Include / Exclude を最上段に表示する。
 
 inline actions:
 
@@ -148,9 +139,7 @@ CONFIGS TreeView は `manageCheckboxStateManually: true` で作成する。
 
 checkbox 操作は即座に JSONC file へ書き込む。
 
-- config file checkbox: file-level `enabled` を切り替える
 - config entry checkbox: entry-level `enabled` を切り替える
-- `disabled by file` entry には checkbox を出さない
 
 ## Webview Editor
 
@@ -247,7 +236,7 @@ config editor のフォーム項目:
   - JSON path: `profile`
   - control: `Select`
   - 保存方法: 即時 patch
-- 表示ラベル: `Config: Enabled`
+- 表示ラベル: `Config: Include`
   - JSON path: `enabled`
   - control: `Checkbox`
   - 保存方法: 即時 patch
@@ -279,8 +268,6 @@ config editor は `configuration.type`、`configuration.request`、`configuratio
 - Args File は trim して保存する。空白だけになった場合は top-level `argsFile` を削除する
 - Args は空配列になった場合、top-level `args` を削除する
 - Browse は `showOpenDialog` を開き、ファイルが選ばれたら選択 path を `argsFile` として即時保存する
-
-親 config file の `enabled === false` の場合、`Config: Enabled` row に info helper として `This config is currently disabled by the file-level setting.` を表示する。config editor は file-level `enabled` を直接編集しない。
 
 選択中 profile に `args` が定義されている場合、Args File control は disabled になり、`The selected profile already defines args.` を表示する。
 

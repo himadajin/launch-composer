@@ -36,7 +36,6 @@ const DEFAULT_CONFIG_CONTENT =
   '// Configure this file and add entries to "configurations".\n' +
   '// Set "profile" to reference a profile.\n' +
   '{\n' +
-  '  "enabled": true,\n' +
   '  "configurations": []\n' +
   '}\n';
 
@@ -382,19 +381,6 @@ export class WorkspaceStore {
     await this.writeDataFileText('config', file, nextText);
   }
 
-  async toggleConfigFileEnabled(file: string): Promise<void> {
-    const text = await this.readRequiredDataFileText('config', file);
-    const fileData = this.parseConfigFileContent(file, text);
-    const nextText = applyJsonDocumentPatches(text, [
-      {
-        type: 'set',
-        path: ['enabled'],
-        value: fileData.enabled === false,
-      },
-    ]);
-    await this.writeDataFileText('config', file, nextText);
-  }
-
   async deleteEntry(target: EditorTarget): Promise<void> {
     if (target.kind === 'profile') {
       const text = await this.readRequiredDataFileText('profile', target.file);
@@ -712,11 +698,6 @@ export class WorkspaceStore {
       status: 'ok',
       data: {
         file,
-        ...(Object.hasOwn(parsed.value, 'enabled')
-          ? {
-              enabled: parsed.value.enabled as boolean,
-            }
-          : {}),
         configurations: parsed.value.configurations as ConfigData[],
       },
     };
@@ -758,11 +739,6 @@ export class WorkspaceStore {
     }
 
     return {
-      ...(Object.hasOwn(parsed.value, 'enabled')
-        ? {
-            enabled: parsed.value.enabled as boolean,
-          }
-        : {}),
       configurations: parsed.value.configurations as ConfigData[],
     };
   }
@@ -1216,7 +1192,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function createEmptyConfigFile(): Omit<ConfigFileData, 'file'> {
   return {
-    enabled: true,
     configurations: [],
   };
 }
