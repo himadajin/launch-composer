@@ -28,14 +28,18 @@ workspace folder が 0 件または複数件の場合:
 
 固定パス:
 
-| 用途              | パス                                            |
-| ----------------- | ----------------------------------------------- |
-| composer root     | `.vscode/launch-composer`                       |
-| profile directory | `.vscode/launch-composer/profiles`              |
-| config directory  | `.vscode/launch-composer/configs`               |
-| generated launch  | `.vscode/launch.json`                           |
-| default profile   | `.vscode/launch-composer/profiles/profile.json` |
-| default config    | `.vscode/launch-composer/configs/config.json`   |
+- 用途: composer root
+  - パス: `.vscode/launch-composer`
+- 用途: profile directory
+  - パス: `.vscode/launch-composer/profiles`
+- 用途: config directory
+  - パス: `.vscode/launch-composer/configs`
+- 用途: generated launch
+  - パス: `.vscode/launch.json`
+- 用途: default profile
+  - パス: `.vscode/launch-composer/profiles/profile.json`
+- 用途: default config
+  - パス: `.vscode/launch-composer/configs/config.json`
 
 読み込み対象は profile/config directory 直下の `.json` ファイルである。ファイル名は昇順に処理する。
 
@@ -73,11 +77,15 @@ interface ComposerDataIssue {
 
 issue の分類:
 
-| 状態                   | code            | 補足                                                              |
-| ---------------------- | --------------- | ----------------------------------------------------------------- |
-| 空ファイル             | `empty`         | profile は `[]`、config は `configurations` 配列を期待する        |
-| JSON/JSONC parse error | `invalid-json`  | `details` に parse code と offset を含める                        |
-| ルート形状が仕様と違う | `invalid-shape` | profile は配列、config は `configurations` 配列を持つオブジェクト |
+- 状態: 空ファイル
+  - code: `empty`
+  - 補足: profile は `[]`、config は `configurations` 配列を期待する
+- 状態: JSON/JSONC parse error
+  - code: `invalid-json`
+  - 補足: `details` に parse code と offset を含める
+- 状態: ルート形状が仕様と違う
+  - code: `invalid-shape`
+  - 補足: profile は配列、config は `configurations` 配列を持つオブジェクト
 
 config file の `enabled` が boolean でないなど、ルート形状として読めるが意味的に不正な値は issue ではなく core validation error として扱う。
 
@@ -280,11 +288,12 @@ Extension Host は profile と config の JSON ファイルを `FileSystemWatche
 
 watcher event の扱い:
 
-| event  | 動作                                                        |
-| ------ | ----------------------------------------------------------- |
-| create | TreeView と Webview を更新する。issue 通知は出さない        |
-| change | TreeView と Webview を更新し、issue 通知を評価する          |
-| delete | TreeView と Webview を更新し、残っている issue を再評価する |
+- event: create
+  - 動作: TreeView と Webview を更新する。issue 通知は出さない
+- event: change
+  - 動作: TreeView と Webview を更新し、issue 通知を評価する
+- event: delete
+  - 動作: TreeView と Webview を更新し、残っている issue を再評価する
 
 拡張機能自身が書き込んだ直後に発生する watcher event は、期待済み event として 1 回分無視する。
 
@@ -303,11 +312,15 @@ profile の更新は、open config editor にも workspace update を送る。co
 
 ### Command Palette に表示する command
 
-| command ID                   | title                  | category          |
-| ---------------------------- | ---------------------- | ----------------- |
-| `launch-composer.generate`   | `Generate launch.json` | `Launch Composer` |
-| `launch-composer.init`       | `Initialize`           | `Launch Composer` |
-| `launch-composer.addProfile` | `Add Profile`          | `Launch Composer` |
+- command ID: `launch-composer.generate`
+  - title: `Generate launch.json`
+  - category: `Launch Composer`
+- command ID: `launch-composer.init`
+  - title: `Initialize`
+  - category: `Launch Composer`
+- command ID: `launch-composer.addProfile`
+  - title: `Add Profile`
+  - category: `Launch Composer`
 
 その他の command は command palette から隠す。
 
@@ -315,39 +328,64 @@ profile の更新は、open config editor にも workspace update を送る。co
 
 ### TreeView / Webview 用 command
 
-| command ID                                    | 主な用途                                        |
-| --------------------------------------------- | ----------------------------------------------- |
-| `launch-composer.addProfileFile`              | profile file 作成                               |
-| `launch-composer.addConfigFile`               | config file 作成                                |
-| `launch-composer.addProfileEntry`             | profile entry 追加                              |
-| `launch-composer.addConfigEntry`              | config entry 追加                               |
-| `launch-composer.openProfileFileJson`         | profile file を開く                             |
-| `launch-composer.openConfigFileJson`          | config file を開く                              |
-| `launch-composer.openItemJson`                | entry の JSON 位置を開く                        |
-| `launch-composer.openActiveEditorJson`        | Webview editor の title action から JSON を開く |
-| `launch-composer.copyProfileFilePath`         | profile file の絶対パスをコピー                 |
-| `launch-composer.copyConfigFilePath`          | config file の絶対パスをコピー                  |
-| `launch-composer.copyItemFilePath`            | entry 所属 file の絶対パスをコピー              |
-| `launch-composer.copyProfileFileRelativePath` | profile file の workspace 相対パスをコピー      |
-| `launch-composer.copyConfigFileRelativePath`  | config file の workspace 相対パスをコピー       |
-| `launch-composer.copyItemFileRelativePath`    | entry 所属 file の workspace 相対パスをコピー   |
-| `launch-composer.renameProfileFile`           | profile file rename                             |
-| `launch-composer.renameConfigFile`            | config file rename                              |
-| `launch-composer.renameItem`                  | entry rename                                    |
-| `launch-composer.deleteProfileFile`           | profile file delete                             |
-| `launch-composer.deleteConfigFile`            | config file delete                              |
-| `launch-composer.deleteItem`                  | entry delete                                    |
-| `launch-composer.enableConfig`                | config file / entry を有効化                    |
-| `launch-composer.disableConfig`               | config file / entry を無効化                    |
-| `launch-composer.toggleEnabled`               | checkbox 操作による enabled toggle              |
+- command ID: `launch-composer.addProfileFile`
+  - 主な用途: profile file 作成
+- command ID: `launch-composer.addConfigFile`
+  - 主な用途: config file 作成
+- command ID: `launch-composer.addProfileEntry`
+  - 主な用途: profile entry 追加
+- command ID: `launch-composer.addConfigEntry`
+  - 主な用途: config entry 追加
+- command ID: `launch-composer.openProfileFileJson`
+  - 主な用途: profile file を開く
+- command ID: `launch-composer.openConfigFileJson`
+  - 主な用途: config file を開く
+- command ID: `launch-composer.openItemJson`
+  - 主な用途: entry の JSON 位置を開く
+- command ID: `launch-composer.openActiveEditorJson`
+  - 主な用途: Webview editor の title action から JSON を開く
+- command ID: `launch-composer.copyProfileFilePath`
+  - 主な用途: profile file の絶対パスをコピー
+- command ID: `launch-composer.copyConfigFilePath`
+  - 主な用途: config file の絶対パスをコピー
+- command ID: `launch-composer.copyItemFilePath`
+  - 主な用途: entry 所属 file の絶対パスをコピー
+- command ID: `launch-composer.copyProfileFileRelativePath`
+  - 主な用途: profile file の workspace 相対パスをコピー
+- command ID: `launch-composer.copyConfigFileRelativePath`
+  - 主な用途: config file の workspace 相対パスをコピー
+- command ID: `launch-composer.copyItemFileRelativePath`
+  - 主な用途: entry 所属 file の workspace 相対パスをコピー
+- command ID: `launch-composer.renameProfileFile`
+  - 主な用途: profile file rename
+- command ID: `launch-composer.renameConfigFile`
+  - 主な用途: config file rename
+- command ID: `launch-composer.renameItem`
+  - 主な用途: entry rename
+- command ID: `launch-composer.deleteProfileFile`
+  - 主な用途: profile file delete
+- command ID: `launch-composer.deleteConfigFile`
+  - 主な用途: config file delete
+- command ID: `launch-composer.deleteItem`
+  - 主な用途: entry delete
+- command ID: `launch-composer.enableConfig`
+  - 主な用途: config file / entry を有効化
+- command ID: `launch-composer.disableConfig`
+  - 主な用途: config file / entry を無効化
+- command ID: `launch-composer.toggleEnabled`
+  - 主な用途: checkbox 操作による enabled toggle
 
 menus と表示条件の詳細は [spec-ui.md](./spec-ui.md) を参照する。
 
 ## 設定
 
-| setting                            | 型      | default | 説明                                                    |
-| ---------------------------------- | ------- | ------- | ------------------------------------------------------- |
-| `launch-composer.confirmOverwrite` | boolean | `true`  | 既存 `launch.json` 上書き前に確認する                   |
-| `launch-composer.autoSaveDelay`    | number  | `1000`  | Webview の text field 編集を保存する debounce delay(ms) |
+- setting: `launch-composer.confirmOverwrite`
+  - 型: boolean
+  - default: `true`
+  - 説明: 既存 `launch.json` 上書き前に確認する
+- setting: `launch-composer.autoSaveDelay`
+  - 型: number
+  - default: `1000`
+  - 説明: Webview の text field 編集を保存する debounce delay(ms)
 
 `autoSaveDelay` は `minimum: 0` として contribution する。

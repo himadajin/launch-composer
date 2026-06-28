@@ -4,13 +4,21 @@
 
 ## 仕様ファイル
 
-| ファイル                                         | 主な内容                                                       | 対象パッケージ                                 |
-| ------------------------------------------------ | -------------------------------------------------------------- | ---------------------------------------------- |
-| `spec.md`（本ファイル）                          | 概要、仕様ファイルの読み分け、JSON ファイルスキーマ、構成      | 全体                                           |
-| [spec-core.md](./spec-core.md)                   | 生成、マージ、バリデーション、argsFile、変数展開               | `@launch-composer/core`                        |
-| [spec-extension.md](./spec-extension.md)         | VS Code 統合、workspace I/O、Generate コマンド、TreeView 操作  | `launch-composer`                              |
-| [spec-ui.md](./spec-ui.md)                       | TreeView 表示、Webview 編集フォーム、ユーザー操作              | `launch-composer` + `@launch-composer/webview` |
-| [spec-communication.md](./spec-communication.md) | Extension Host と Webview のメッセージ、共有データ型、保存契約 | `launch-composer` + `@launch-composer/webview` |
+- ファイル: `spec.md`（本ファイル）
+  - 主な内容: 概要、仕様ファイルの読み分け、JSON ファイルスキーマ、構成
+  - 対象パッケージ: 全体
+- ファイル: [spec-core.md](./spec-core.md)
+  - 主な内容: 生成、マージ、バリデーション、argsFile、変数展開
+  - 対象パッケージ: `@launch-composer/core`
+- ファイル: [spec-extension.md](./spec-extension.md)
+  - 主な内容: VS Code 統合、workspace I/O、Generate コマンド、TreeView 操作
+  - 対象パッケージ: `launch-composer`
+- ファイル: [spec-ui.md](./spec-ui.md)
+  - 主な内容: TreeView 表示、Webview 編集フォーム、ユーザー操作
+  - 対象パッケージ: `launch-composer` + `@launch-composer/webview`
+- ファイル: [spec-communication.md](./spec-communication.md)
+  - 主な内容: Extension Host と Webview のメッセージ、共有データ型、保存契約
+  - 対象パッケージ: `launch-composer` + `@launch-composer/webview`
 
 仕様を変更する場合は、変更対象の実装面に対応する仕様ファイルを同時に更新する。共通スキーマや共有型を変更する場合は、このファイル、[spec-communication.md](./spec-communication.md)、`packages/core/src/types.ts`、`packages/extension/src/messages.ts`、`packages/webview/src/types.ts` の整合性を保つ。
 
@@ -72,10 +80,14 @@ profile ファイルのルートは配列である。各要素が 1 件の profi
 
 profile エントリの拡張機能固有キー:
 
-| キー   | 型         | 必須性                        | 説明                                       |
-| ------ | ---------- | ----------------------------- | ------------------------------------------ |
-| `name` | `string`   | Generate 時に非空文字列が必須 | profile 識別子。`launch.json` へ出力しない |
-| `args` | `string[]` | 任意                          | 生成時に config の `args` と結合する       |
+- key: `name`
+  - 型: `string`
+  - 必須性: Generate 時に非空文字列が必須
+  - 説明: profile 識別子。`launch.json` へ出力しない
+- key: `args`
+  - 型: `string[]`
+  - 必須性: 任意
+  - 説明: 生成時に config の `args` と結合する
 
 `configuration` は `launch.json` configuration のベースになるパススルーオブジェクトである。ファイル読み込み上は省略可能だが、Generate 時には各 profile の `configuration.type` が非空文字列であり、`configuration.request` が `launch` または `attach` でなければならない。GUI で profile を追加した直後は `type` が空文字で作られるため、Generate 前に JSON で有効な値へ修正する必要がある。
 
@@ -106,20 +118,37 @@ config ファイルのルートはオブジェクトであり、`configurations`
 
 config ファイルの拡張機能固有キー:
 
-| キー             | 型        | 必須性                         | 説明                                                     |
-| ---------------- | --------- | ------------------------------ | -------------------------------------------------------- |
-| `enabled`        | `boolean` | 任意。省略時は Generate 上有効 | `false` の場合、ファイル内の全 config を生成対象外にする |
-| `configurations` | `array`   | ファイル形状として必須         | config エントリの配列                                    |
+- key: `enabled`
+  - 型: `boolean`
+  - 必須性: 任意。省略時は Generate 上有効
+  - 説明: `false` の場合、ファイル内の全 config を生成対象外にする
+- key: `configurations`
+  - 型: `array`
+  - 必須性: ファイル形状として必須
+  - 説明: config エントリの配列
 
 config エントリの拡張機能固有キー:
 
-| キー       | 型         | 必須性                         | 説明                                             |
-| ---------- | ---------- | ------------------------------ | ------------------------------------------------ |
-| `name`     | `string`   | Generate 時に非空文字列が必須  | 生成される `launch.json` configuration の name   |
-| `enabled`  | `boolean`  | 任意。省略時は Generate 上有効 | `false` の場合、この config を生成対象外にする   |
-| `profile`  | `string`   | Generate 時に非空文字列が必須  | 参照する profile の `name`                       |
-| `argsFile` | `string`   | 任意                           | 外部 args ファイルへの絶対パスまたは変数付きパス |
-| `args`     | `string[]` | 任意                           | 生成時に profile または argsFile の args に追記  |
+- key: `name`
+  - 型: `string`
+  - 必須性: Generate 時に非空文字列が必須
+  - 説明: 生成される `launch.json` configuration の name
+- key: `enabled`
+  - 型: `boolean`
+  - 必須性: 任意。省略時は Generate 上有効
+  - 説明: `false` の場合、この config を生成対象外にする
+- key: `profile`
+  - 型: `string`
+  - 必須性: Generate 時に非空文字列が必須
+  - 説明: 参照する profile の `name`
+- key: `argsFile`
+  - 型: `string`
+  - 必須性: 任意
+  - 説明: 外部 args ファイルへの絶対パスまたは変数付きパス
+- key: `args`
+  - 型: `string[]`
+  - 必須性: 任意
+  - 説明: 生成時に profile または argsFile の args に追記
 
 `configuration` は `launch.json` configuration に渡すパススルーオブジェクトである。ただし Generate 時、config の `configuration` に `program`、`type`、`request` がある場合はエラーにする。これらは profile 側で管理する。
 
@@ -219,14 +248,19 @@ React 19 + Vite 7 で実装する Webview UI である。ビルド成果物は e
 
 ルートの npm scripts を使う。
 
-| コマンド                 | 内容                                             |
-| ------------------------ | ------------------------------------------------ |
-| `npm run build`          | core、webview、extension を順にビルドする        |
-| `npm run lint`           | ESLint を実行する                                |
-| `npm run typecheck`      | 各 workspace の TypeScript 型チェックを実行する  |
-| `npm run test`           | 各 workspace の Node test を実行する             |
-| `npm run format`         | Prettier で整形する                              |
-| `npm run format:check`   | Prettier の整形チェックを行う                    |
-| `npm run install:vscode` | extension workspace の install script を実行する |
+- コマンド: `npm run build`
+  - 内容: core、webview、extension を順にビルドする
+- コマンド: `npm run lint`
+  - 内容: ESLint を実行する
+- コマンド: `npm run typecheck`
+  - 内容: 各 workspace の TypeScript 型チェックを実行する
+- コマンド: `npm run test`
+  - 内容: 各 workspace の Node test を実行する
+- コマンド: `npm run format`
+  - 内容: Prettier で整形する
+- コマンド: `npm run format:check`
+  - 内容: Prettier の整形チェックを行う
+- コマンド: `npm run install:vscode`
+  - 内容: extension workspace の install script を実行する
 
 テストは Node.js の `node --test` を使う。package ごとの詳細な script は各 `package.json` を参照する。
