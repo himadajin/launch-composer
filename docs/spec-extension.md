@@ -1,202 +1,353 @@
 # Launch Composer - 拡張機能ホスト仕様
 
-`launch-composer`（extension）パッケージの Extension Host 側が実装する仕様を定める。
+このファイルは `launch-composer` パッケージの Extension Host 側仕様を定める。JSON ファイルスキーマは [spec.md](./spec.md)、生成と validation は [spec-core.md](./spec-core.md)、Webview 通信は [spec-communication.md](./spec-communication.md)、UI 表示は [spec-ui.md](./spec-ui.md) を参照する。
 
-前提として読むべきファイル:
+## 役割
 
-- [spec.md](./spec.md) §4 — スキーマ定義（JSON ファイル形式）
-- [spec-communication.md](./spec-communication.md) §1 — Webview との通信契約
+Extension Host は VS Code と Launch Composer のデータモデルを接続する。
 
----
+- `.vscode/launch-composer/` 以下の JSONC ファイルを読む
+- JSONC ファイルへ部分更新を書く
+- `@launch-composer/core` を呼び出して `launch.json` を生成する
+- TreeView と Webview Panel を管理する
+- VS Code コマンド、設定、FileSystemWatcher を登録する
 
-## 概要
+core はファイル I/O を持たない。argsFile の読み取りも Extension Host が行い、core には `readArgsFile` callback として渡す。
 
-Extension Host は Launch Composer の VSCode 統合層であり、ユーザーの設定ファイルと VSCode API を接続する役割を担う。
+## ワークスペース前提
 
-ユーザーが Generate を実行すると、Extension Host は `.vscode/launch-composer/` 以下の JSON ファイルを読み込む。その後、`@launch-composer/core` の生成関数を呼び出してマージとバリデーションを行い、結果を `.vscode/launch.json` に書き込む。GUI 操作（サイドバーの TreeView・編集フォームの Webview Panel）はすべて Extension Host が管理する。Extension Host はファイルの変更を `FileSystemWatcher` で監視し、サイドバーを自動更新する。TreeView の disabled 表示は checkbox と description を基本とする。ただし file-level disabled 配下の config entry だけは例外とし、共通の disabled アイコンで読み取り専用状態を表現する。
+Launch Composer は workspace folder がちょうど 1 件のときだけ通常動作する。
 
-Webview Panel の `title` は、現在編集中の項目名をそのまま使う。`Edit Profile` や `Edit Config` のような固定文字列は使わない。title は、panel を開いた時・rename が成功した時・workspace 同期で対象名が変わった時に再計算する。対象名を解決できない場合、または対象ファイルが invalid な場合は `basename(file)` を使う。
+workspace folder が 0 件または複数件の場合:
 
-`.vscode/launch-composer/`, `profiles/`, `configs/` は事前に存在している必要はない。読み取り時に未作成であれば正常な空状態として扱い、書き込み時に必要なディレクトリを自動作成する。
+- contributed command は登録する
+- TreeView、watcher、store、editor panel は初期化しない
+- command 実行時は `Launch Composer requires exactly one workspace folder.` を表示する
 
-読み込み対象の JSON ファイルが一時的に不正でも、Extension Host は拡張機能全体を失敗させない。正常なファイルは引き続き読み込み、不正なファイルは file 単位の issue として扱う。
+## パス
 
-このファイルが定める仕様は以下のとおり。
+固定パス:
 
-- `launch.json` の生成動作（上書きルール・確認ダイアログ・出力フォーマット）
-- ファイル監視の動作
-- コマンドパレットおよびサイドバーへのコマンド登録
-- 拡張機能の設定項目（`settings.json`）
+| 用途              | パス                                            |
+| ----------------- | ----------------------------------------------- |
+| composer root     | `.vscode/launch-composer`                       |
+| profile directory | `.vscode/launch-composer/profiles`              |
+| config directory  | `.vscode/launch-composer/configs`               |
+| generated launch  | `.vscode/launch.json`                           |
+| default profile   | `.vscode/launch-composer/profiles/profile.json` |
+| default config    | `.vscode/launch-composer/configs/config.json`   |
 
----
+読み込み対象は profile/config directory 直下の `.json` ファイルである。ファイル名は昇順に処理する。
 
-## 1. launch.json 生成動作
+## データ読み込み
 
-Generate 実行時の `.vscode/launch.json` の生成に関する動作を定める。
+`WorkspaceStore.readAll()` は profile と config をそれぞれ読み、正常データと issue を返す。
 
-### 1.1 launch.json の上書き動作
-
-Generate を実行すると、既存の `.vscode/launch.json` の内容をすべて破棄して新しい内容で上書きする。手動で追加した構成やコメントも含め、ファイルの内容は完全に置き換わる。launch.json の一部だけを更新する部分管理は行わない。
-
-有効な config が 0 件の場合は、警告なしで `configurations: []` を持つ launch.json を生成する。有効な config とは、config ファイルの `enabled` と config エントリの `enabled` の両方が `false` でないものを指す。
-
-`.vscode/launch-composer/`, `profiles/`, `configs/` が未作成であっても Generate の前提エラーにはしない。この場合は profile 0 件、config 0 件として扱い、空の `launch.json` を生成する。
-
-既存の `.vscode/launch.json` が存在しない場合も Generate の前提エラーにはしない。上書き確認は表示せず、新規作成としてそのまま書き込む。
-
-Generate は不正な `request` を許容しない。profile の `request` が未指定、空文字、または `launch` / `attach` 以外である場合は失敗結果を返す。
-
-profiles/configs の入力ファイルに invalid な JSON または想定外のルート形状のファイルが1つでもある場合、Generate は例外を投げずに失敗結果を返す。メッセージは file 単位で返し、ユーザーに修正を促す。
-
-### 1.2 上書き確認ダイアログ
-
-既存の launch.json がある場合、Generate のたびに確認ダイアログを表示する。
-
-```
-⚠ launch.json will be overwritten. Continue?
-  [Yes]  [Cancel]
-  ☐ Don't ask again
+```typescript
+interface WorkspaceDataSnapshot {
+  profiles: ProfileFileData[];
+  configs: ConfigFileData[];
+  issues: ComposerDataIssue[];
+}
 ```
 
-- 「Don't ask again」にチェックを入れて Yes を選択した場合、`settings.json` に `launch-composer.confirmOverwrite: false` を保存し、以降は確認なしで上書きする。
-- ダイアログは `vscode.window.showWarningMessage` で実装する。
+未作成ディレクトリは空として扱う。たとえば `.vscode/launch-composer/` がない場合、`profiles: []`、`configs: []`、`issues: []` を返す。
 
-### 1.3 生成時に挿入する自動生成コメント
+一覧取得後にファイルが削除されていた場合、そのファイルは静かに無視する。ユーザー向け issue にはしない。
 
-生成する launch.json の先頭に、自動生成されたファイルであることを示すコメントを挿入する。launch.json は jsonc（コメント付き JSON）形式として出力する。
+### JSONC と issue
+
+入力ファイルは JSONC として読む。コメントと末尾カンマを受け付ける。
+
+読み込み時の invalid file はファイル単位の `ComposerDataIssue` として扱い、他の正常ファイルの読み込みは継続する。
+
+```typescript
+interface ComposerDataIssue {
+  kind: 'profile' | 'config';
+  file: string;
+  code: 'empty' | 'invalid-json' | 'invalid-shape';
+  message: string;
+  details?: string;
+}
+```
+
+issue の分類:
+
+| 状態                   | code            | 補足                                                              |
+| ---------------------- | --------------- | ----------------------------------------------------------------- |
+| 空ファイル             | `empty`         | profile は `[]`、config は `configurations` 配列を期待する        |
+| JSON/JSONC parse error | `invalid-json`  | `details` に parse code と offset を含める                        |
+| ルート形状が仕様と違う | `invalid-shape` | profile は配列、config は `configurations` 配列を持つオブジェクト |
+
+config file の `enabled` が boolean でないなど、ルート形状として読めるが意味的に不正な値は issue ではなく core validation error として扱う。
+
+## 初期化
+
+`launch-composer.init` は必須セットアップではない。未実行でも、読み取り系処理は空データとして動作し、書き込み系処理は必要なディレクトリを作る。
+
+`init` はリセットではなく、不足している既定ディレクトリと既定ファイルを作る補助コマンドである。既存ファイルは上書きしない。
+
+作成対象:
+
+1. `.vscode/launch-composer`
+2. `.vscode/launch-composer/profiles`
+3. `.vscode/launch-composer/configs`
+4. `.vscode/launch-composer/profiles/profile.json`
+5. `.vscode/launch-composer/configs/config.json`
+
+default profile file:
+
+```jsonc
+// Add profile entries to this array.
+// Each profile should have a unique "name".
+[]
+```
+
+default config file:
+
+```jsonc
+// Configure this file and add entries to "configurations".
+// Set "profile" to reference a profile.
+{
+  "enabled": true,
+  "configurations": [],
+}
+```
+
+完了後は InformationMessage で storage が ready になったことを表示する。既定ファイルを作った場合は、そのファイル一覧も message に含める。
+
+## ファイル作成・変更
+
+### ファイル名
+
+ファイル名入力は前後空白を trim する。空文字は拒否する。`.json` で終わらない場合は `.json` を付ける。
+
+拡張機能側で ASCII や英数字だけに制限しない。最終的に有効なファイル名かどうかは VS Code の filesystem に従う。
+
+同名ファイルがすでに存在する場合はエラーにする。
+
+### data file 作成
+
+profile file 作成時の内容:
+
+```jsonc
+[]
+```
+
+config file 作成時の内容:
+
+```jsonc
+{
+  "enabled": true,
+  "configurations": [],
+}
+```
+
+親ディレクトリが未作成の場合は作成してから書き込む。
+
+### entry 追加
+
+profile entry 追加は、対象 profile file がなければ `[]` のファイルを作成してから配列末尾に追加する。
+
+追加する profile entry:
+
+```jsonc
+{
+  "name": "<input>",
+  "configuration": {
+    "type": "",
+    "request": "launch",
+  },
+}
+```
+
+config entry 追加は、対象 config file がなければ空の config file を作成してから `configurations` 末尾に追加する。
+
+追加する config entry:
+
+```jsonc
+{
+  "name": "<input>",
+  "enabled": true,
+  "profile": "<selected-profile>",
+}
+```
+
+config entry 追加時に利用可能な profile が 0 件の場合、config は作らず `Create a profile before adding a config.` を表示する。`Create Profile` action が選ばれた場合は通常の profile 追加フローへ進む。
+
+### rename
+
+entry rename は `name` を trim し、空文字を拒否する。profile と config entry の全体で同じ `name` が使われている場合は拒否する。
+
+profile entry を rename した場合、その profile 名を参照する全 config entry の `profile` も同じ名前へ更新する。更新は JSONC 部分更新で行い、関係しないコメントを保持する。
+
+file rename はファイル内容を変更しない。新しいファイル名へ同じ bytes を書き、元ファイルを削除する。
+
+### delete
+
+profile entry delete は、その profile を参照する config entry が存在する場合に拒否する。参照がない場合は profile 配列から対象要素を削除する。
+
+config entry delete は `configurations` 配列から対象要素を削除する。
+
+file delete は VS Code `WorkspaceEdit.deleteFile` を使い、対象ファイルがすでに存在しなくても成功扱いにする。
+
+### enabled toggle
+
+config file の checkbox または `Enable` / `Disable` は file-level `enabled` を切り替える。config entry の checkbox または `Enable` / `Disable` は entry-level `enabled` を切り替える。
+
+切り替えは JSONC 部分更新で行う。関係しないコメントは保持する。
+
+## Webview からの保存
+
+Webview からの保存はファイル全体の再生成ではなく、編集中 entry への部分更新である。通信契約は [spec-communication.md](./spec-communication.md) を参照する。
+
+`name` の変更は patch ではなく `rename-entry` request で処理する。`patchProfileEntry` / `patchConfigEntry` は patch path の先頭が `name` の場合に拒否する。
+
+`name` 以外の変更は `EntryPatchOperation[]` として受け取り、対象 entry path に prefix して JSONC document へ適用する。
+
+revision 制御:
+
+1. Extension Host は Webview に `editorRevision` を送る。
+2. Webview は patch request に `baseRevision` を付ける。
+3. Host は現在の file revision と一致した場合だけ書き込む。
+4. 不一致なら `conflict: true` を返し、Webview は最新データを再取得する。
+
+patch が空の場合は書き込まず、現在 revision を返す。
+
+## Generate
+
+`launch-composer.generate` は `.vscode/launch.json` を生成する。
+
+処理順序:
+
+1. profile/config を読み込む。
+2. invalid file issue が 1 件以上あれば、validation-style error として失敗を返す。
+3. `@launch-composer/core.generate()` を呼ぶ。
+4. core validation error があれば VS Code error message に一覧表示して失敗する。
+5. Generate 結果が成功してから overwrite confirmation を評価する。
+6. confirmation が許可された場合、`.vscode/launch.json` を全体上書きする。
+
+有効な config が 0 件でも成功とし、`configurations: []` を持つ `launch.json` を書く。
+
+`.vscode/launch-composer/` が未作成でも Generate の前提エラーにしない。この場合は profile 0 件、config 0 件として扱う。既存の `.vscode/launch.json` が存在しない場合も前提エラーにしない。
+
+### overwrite confirmation
+
+設定 `launch-composer.confirmOverwrite` が `true` かつ `.vscode/launch.json` が存在する場合だけ、Generate 成功後の書き込み前に modal warning を表示する。
+
+message:
+
+```text
+launch.json will be overwritten. Continue?
+```
+
+actions:
+
+- `Yes`
+- `Yes, Don't Ask Again`
+
+`Yes` は今回だけ上書きする。`Yes, Don't Ask Again` は workspace setting として `launch-composer.confirmOverwrite: false` を保存し、今回も上書きする。action 未選択または dialog cancel は Generate を中断する。
+
+チェックボックス付きダイアログは使わない。
+
+`launch-composer.confirmOverwrite` が `false` の場合、または `.vscode/launch.json` が存在しない場合は確認を表示しない。
+
+### launch.json 出力
+
+書き込み前に `.vscode/` を作成する。
+
+出力は次の固定コメントを先頭に持つ JSONC である。
 
 ```jsonc
 // This file is auto-generated by Launch Composer.
 // Do not edit manually. Changes will be overwritten.
 {
   "version": "0.2.0",
-  "configurations": [ ... ]
+  "configurations": [],
 }
 ```
 
----
+既存の `.vscode/launch.json` の内容、手動編集、コメント、既存 configurations は保持しない。常に生成結果で全体を置き換える。
 
-### 1.4 未作成ディレクトリの扱い
+## watcher と UI 同期
 
-Extension Host は Launch Composer 用ディレクトリが未作成であることをエラーや警告にしない。未作成時の動作は以下のとおり。
+Extension Host は profile と config の JSON ファイルを `FileSystemWatcher` で監視する。
 
-| 状態                              | 挙動                                    |
-| --------------------------------- | --------------------------------------- |
-| `.vscode/launch-composer/` がない | profiles/configs ともに空として扱う     |
-| `profiles/` のみない              | profiles は空、configs は存在分だけ読む |
-| `configs/` のみない               | configs は空、profiles は存在分だけ読む |
+登録する pattern:
 
-未作成ディレクトリの扱いは、読み取り系 API 全体で一貫させる。TreeView 表示、Generate、profile 選択候補の取得を含む読み取り系処理は、いずれも空データとして振る舞う。
+- `.vscode/launch-composer/profiles/**/*.json`
+- `.vscode/launch-composer/configs/**/*.json`
 
-読み込み時点で対象 JSON ファイルが未存在になっていた場合（一覧取得後に削除された場合を含む）、読み取り系 UI はそのファイルを欠損扱いとして無視する。未存在そのものをユーザー向けエラーにはしない。
+watcher event の扱い:
 
-### 1.5 JSON ファイルの欠損・不正の扱い
+| event  | 動作                                                        |
+| ------ | ----------------------------------------------------------- |
+| create | TreeView と Webview を更新する。issue 通知は出さない        |
+| change | TreeView と Webview を更新し、issue 通知を評価する          |
+| delete | TreeView と Webview を更新し、残っている issue を再評価する |
 
-Extension Host は `profiles/*.json` および `configs/*.json` の各ファイルを独立して評価する。
+拡張機能自身が書き込んだ直後に発生する watcher event は、期待済み event として 1 回分無視する。
 
-| 状態                         | 挙動                                                   |
-| ---------------------------- | ------------------------------------------------------ |
-| 未存在                       | 欠損として扱い、読み込み結果から静かに除外する         |
-| 空ファイル                   | issue として扱う。他の正常ファイルの読み込みは継続する |
-| invalid JSON / JSONC         | issue として扱う。他の正常ファイルの読み込みは継続する |
-| ルート形状が仕様と一致しない | issue として扱う。他の正常ファイルの読み込みは継続する |
-| JSONC コメント / 末尾カンマ  | 有効な入力として受理し、書き込み時も保持する           |
+issue notification:
 
-issue は少なくとも `kind`, `file`, `code`, `message` を持つ。空ファイルは `empty`、構文エラーは `invalid-json`、仕様と一致しないルート形状は `invalid-shape` とする。
+- 同じ `kind:file` の同じ `code:message` は繰り返し通知しない
+- `details` だけが変わっても同じ issue とみなす
+- ファイルが正常化したら通知状態を破棄する
+- 復旧通知は出さない
 
-ユーザー通知は `1 file 1 回` を基本とする。重複判定は issue の `code` と `message` を基準に行い、`details` だけが変化しても警告を繰り返さない。ファイルが正常化した場合は通知状態を破棄し、復旧通知は出さない。
+現在 Webview で開いている entry のファイルが invalid になった場合、panel は閉じず、invalid file の初期データを送って read-only 表示へ切り替える。対象 entry がなくなった場合は panel を閉じる。
 
-## 2. ファイル監視
+profile の更新は、open config editor にも workspace update を送る。config editor は profile selector の候補を更新する必要があるためである。profile editor が開いているときの config-only update は editor へ送らない。
 
-Extension Host は設定ファイルの変更をリアルタイムで検知し、サイドバーを常に最新の状態に保つ。`vscode.workspace.createFileSystemWatcher` を使い、`.vscode/launch-composer/profiles/**/*.json` と `.vscode/launch-composer/configs/**/*.json` のファイル変更を監視する。
+## コマンド
 
-| イベント                        | 動作                                                                                                                      |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `FileSystemWatcher.onDidCreate` | サイドバーの TreeView と編集パネルを自動更新する。issue 通知は出さない                                                    |
-| `FileSystemWatcher.onDidChange` | サイドバーの TreeView と編集パネルを自動更新し、issue 通知を評価する                                                      |
-| `FileSystemWatcher.onDidDelete` | サイドバーの TreeView と編集パネルを自動更新し、残っている issue の再評価も行う。対象エントリが消えた場合はパネルを閉じる |
+### Command Palette に表示する command
 
-現在開いているエントリの所属ファイルが invalid になった場合、編集パネルは閉じず read-only 状態に切り替える。対象ファイルが未存在になった場合のみ、編集対象なしとしてパネルを閉じる。
+| command ID                   | title                  | category          |
+| ---------------------------- | ---------------------- | ----------------- |
+| `launch-composer.generate`   | `Generate launch.json` | `Launch Composer` |
+| `launch-composer.init`       | `Initialize`           | `Launch Composer` |
+| `launch-composer.addProfile` | `Add Profile`          | `Launch Composer` |
 
-### 2.1 GUI 保存と直接編集の競合
+その他の command は command palette から隠す。
 
-Webview からの保存は、対象ファイル全体の再生成ではなく、編集中エントリ単位で適用する。`name` 以外の GUI 編集は差分パッチとして扱い、Extension Host は保存要求ごとに `baseRevision` と現在の file revision を照合し、一致した場合のみ JSONC の該当エントリへ部分更新を書く。
+すべての contributed command は `workspaceFolderCount == 1` の enablement を持つ。
 
-`name` の変更は差分パッチでは扱わず、専用の rename 要求として処理する。Extension Host はこの要求を `renameEntry()` に委譲し、空文字拒否・前後空白の trim・一意性検証を行う。profile 名の変更時は、その profile を参照するすべての config エントリの `profile` を同じ名前へ更新する。
+### TreeView / Webview 用 command
 
-revision が一致しない場合、Extension Host は差分パッチ保存を拒否して conflict を返す。Webview はその結果を受けて最新のワークスペース状態を再取得し、直接編集された内容を優先して UI を更新する。rename 要求の成功後も、Webview は最新のワークスペース状態を再取得して表示名・profile候補・参照更新結果を同期する。
+| command ID                                    | 主な用途                                        |
+| --------------------------------------------- | ----------------------------------------------- |
+| `launch-composer.addProfileFile`              | profile file 作成                               |
+| `launch-composer.addConfigFile`               | config file 作成                                |
+| `launch-composer.addProfileEntry`             | profile entry 追加                              |
+| `launch-composer.addConfigEntry`              | config entry 追加                               |
+| `launch-composer.openProfileFileJson`         | profile file を開く                             |
+| `launch-composer.openConfigFileJson`          | config file を開く                              |
+| `launch-composer.openItemJson`                | entry の JSON 位置を開く                        |
+| `launch-composer.openActiveEditorJson`        | Webview editor の title action から JSON を開く |
+| `launch-composer.copyProfileFilePath`         | profile file の絶対パスをコピー                 |
+| `launch-composer.copyConfigFilePath`          | config file の絶対パスをコピー                  |
+| `launch-composer.copyItemFilePath`            | entry 所属 file の絶対パスをコピー              |
+| `launch-composer.copyProfileFileRelativePath` | profile file の workspace 相対パスをコピー      |
+| `launch-composer.copyConfigFileRelativePath`  | config file の workspace 相対パスをコピー       |
+| `launch-composer.copyItemFileRelativePath`    | entry 所属 file の workspace 相対パスをコピー   |
+| `launch-composer.renameProfileFile`           | profile file rename                             |
+| `launch-composer.renameConfigFile`            | config file rename                              |
+| `launch-composer.renameItem`                  | entry rename                                    |
+| `launch-composer.deleteProfileFile`           | profile file delete                             |
+| `launch-composer.deleteConfigFile`            | config file delete                              |
+| `launch-composer.deleteItem`                  | entry delete                                    |
+| `launch-composer.enableConfig`                | config file / entry を有効化                    |
+| `launch-composer.disableConfig`               | config file / entry を無効化                    |
+| `launch-composer.toggleEnabled`               | checkbox 操作による enabled toggle              |
 
----
+menus と表示条件の詳細は [spec-ui.md](./spec-ui.md) を参照する。
 
-## 3. コマンド登録
+## 設定
 
-拡張機能が VSCode に登録するコマンドの一覧を定める。コマンドは、コマンドパレットに表示するものと、TreeView 専用のものに分類する。
+| setting                            | 型      | default | 説明                                                    |
+| ---------------------------------- | ------- | ------- | ------------------------------------------------------- |
+| `launch-composer.confirmOverwrite` | boolean | `true`  | 既存 `launch.json` 上書き前に確認する                   |
+| `launch-composer.autoSaveDelay`    | number  | `1000`  | Webview の text field 編集を保存する debounce delay(ms) |
 
-### 3.1 コマンドパレットに表示するコマンド
-
-ユーザーがコマンドパレットから直接呼び出せるコマンドは以下のとおり。
-
-| コマンド ID                  | 表示名                                | トリガー                                             |
-| ---------------------------- | ------------------------------------- | ---------------------------------------------------- |
-| `launch-composer.generate`   | Launch Composer: Generate launch.json | コマンドパレット、CONFIGS ビューヘッダーの `$(play)` |
-| `launch-composer.init`       | Launch Composer: Initialize           | コマンドパレット                                     |
-| `launch-composer.addProfile` | Launch Composer: Add Profile          | コマンドパレット                                     |
-
-`launch-composer.init` は必須セットアップではなく、Launch Composer を使い始めるための保存先と雛形ファイルを先に揃えたい場合の任意の補助コマンドとする。未実行でも、Generate と TreeView の表示・操作は通常どおり利用できる。
-
-`launch-composer.init` はリセットではなく、不足している既定の保存先と雛形を補うコマンドとする。既存のファイル・ディレクトリは一切変更せず、存在しないものだけを作成する。作成対象:
-
-1. `.vscode/launch-composer/`
-2. `.vscode/launch-composer/profiles/`
-3. `.vscode/launch-composer/configs/`
-4. `.vscode/launch-composer/profiles/profile.json`
-5. `.vscode/launch-composer/configs/config.json`
-
-`profile.json` は JSONC コメント付きの空配列、`config.json` は JSONC コメント付きの `{ "enabled": true, "configurations": [] }` を初期内容とする。これらのファイルがすでに存在する場合、その内容の確認・追記・上書きは行わない。
-
-処理完了後、Extension Host は通知バーで保存先が利用可能になったことを報告する。不足していた既定ファイルを作成した場合は、そのことも併せて簡潔に報告する。
-
-### 3.2 TreeView 専用コマンド（コマンドパレットには非表示）
-
-サイドバーの操作（ボタン・右クリックメニュー）からのみ呼び出されるコマンドは以下のとおり。
-
-| コマンド ID                                   | 動作                                                                                                                                                                                                                                                                                                                                                                                                                        | トリガー                                                            |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `launch-composer.addProfileFile`              | InputBox でファイル名入力 → 空の profiles ファイルを作成                                                                                                                                                                                                                                                                                                                                                                    | PROFILES ビューヘッダーの `$(add)`、welcomeContent のリンク         |
-| `launch-composer.openProfileFileJson`         | profile ファイルを VSCode エディタで開く                                                                                                                                                                                                                                                                                                                                                                                    | ファイルアイテム右クリック                                          |
-| `launch-composer.copyProfileFilePath`         | profile ファイルの絶対パスをクリップボードにコピー                                                                                                                                                                                                                                                                                                                                                                          | ファイルアイテム右クリック                                          |
-| `launch-composer.copyProfileFileRelativePath` | profile ファイルのワークスペース相対パスをクリップボードにコピー                                                                                                                                                                                                                                                                                                                                                            | ファイルアイテム右クリック                                          |
-| `launch-composer.renameProfileFile`           | profile ファイル名を変更                                                                                                                                                                                                                                                                                                                                                                                                    | ファイルアイテム右クリック                                          |
-| `launch-composer.deleteProfileFile`           | profiles ファイルを削除（確認ダイアログ付き）                                                                                                                                                                                                                                                                                                                                                                               | ファイルアイテム右クリック                                          |
-| `launch-composer.addProfileEntry`             | InputBox で profile 名を入力（空文字は拒否） → JSON に最小構成のエントリを書き込む（`name`, `configuration: { type: "", request: "launch" }`） → エディタパネルを開く                                                                                                                                                                                                                                                       | ファイルアイテムの `$(add)` インラインアクション（ホバー時）        |
-| `launch-composer.openItemJson`                | 対応する JSON ファイルを VSCode エディタで開き、対象エントリ位置を表示                                                                                                                                                                                                                                                                                                                                                      | 構成/profileアイテム右クリック、または `$(go-to-file)` インライン   |
-| `launch-composer.copyItemFilePath`            | 対応する JSON ファイルの絶対パスをクリップボードにコピー                                                                                                                                                                                                                                                                                                                                                                    | 構成/profileアイテム右クリック                                      |
-| `launch-composer.copyItemFileRelativePath`    | 対応する JSON ファイルのワークスペース相対パスをクリップボードにコピー                                                                                                                                                                                                                                                                                                                                                      | 構成/profileアイテム右クリック                                      |
-| `launch-composer.renameItem`                  | 構成エントリまたは profile エントリの `name` を変更する。profile 名の変更時は、その profile を参照する config の `profile` も同時に更新する                                                                                                                                                                                                                                                                                 | 構成/profile アイテム右クリック                                     |
-| `launch-composer.addConfigFile`               | InputBox でファイル名入力 → `enabled: true` と空の `configurations` 配列を持つ config ファイルを作成                                                                                                                                                                                                                                                                                                                        | CONFIGS ビューヘッダーの `$(add)`、welcomeContent のリンク          |
-| `launch-composer.openConfigFileJson`          | config ファイルを VSCode エディタで開く                                                                                                                                                                                                                                                                                                                                                                                     | ファイルアイテム右クリック                                          |
-| `launch-composer.copyConfigFilePath`          | config ファイルの絶対パスをクリップボードにコピー                                                                                                                                                                                                                                                                                                                                                                           | ファイルアイテム右クリック                                          |
-| `launch-composer.copyConfigFileRelativePath`  | config ファイルのワークスペース相対パスをクリップボードにコピー                                                                                                                                                                                                                                                                                                                                                             | ファイルアイテム右クリック                                          |
-| `launch-composer.renameConfigFile`            | config ファイル名を変更                                                                                                                                                                                                                                                                                                                                                                                                     | ファイルアイテム右クリック                                          |
-| `launch-composer.deleteConfigFile`            | config ファイルを削除（確認ダイアログ付き）                                                                                                                                                                                                                                                                                                                                                                                 | ファイルアイテム右クリック                                          |
-| `launch-composer.addConfigEntry`              | 先に利用可能な profile を読み込む。profile が 1 件以上ある場合は QuickPick で profile を選択 → InputBox で name 入力（空文字は拒否） → `configurations` 配列に `name`, `enabled: true`, `profile` を含む最小構成のエントリを書き込む → エディタパネルを開く。profile が 0 件の場合は config を作らず、`Create a profile before adding a config.` を表示し、`Create Profile` アクションで通常の profile 作成フローへ遷移する | ファイルアイテムの `$(add)` インラインアクション（ホバー時）        |
-| `launch-composer.editItem`                    | 編集画面を開く                                                                                                                                                                                                                                                                                                                                                                                                              | アイテムクリック                                                    |
-| `launch-composer.deleteItem`                  | 構成エントリまたはprofileエントリを削除（確認ダイアログ付き）                                                                                                                                                                                                                                                                                                                                                               | 構成/profileアイテム右クリック                                      |
-| `launch-composer.enableConfig`                | 構成アイテムまたは config ファイルの enabled を `true` にする                                                                                                                                                                                                                                                                                                                                                               | disabled な構成アイテムまたは disabled な config ファイル右クリック |
-| `launch-composer.disableConfig`               | 構成アイテムまたは config ファイルの enabled を `false` にする                                                                                                                                                                                                                                                                                                                                                              | enabled な構成アイテムまたは enabled な config ファイル右クリック   |
-| `launch-composer.toggleEnabled`               | 構成アイテムまたは config ファイルの enabled を切り替える                                                                                                                                                                                                                                                                                                                                                                   | config ファイルまたは構成アイテムの checkbox 操作                   |
-
-ファイル作成またはエントリ追加を行うコマンドは、親ディレクトリが未作成であれば実行前に自動作成する。ファイル一覧の表示やprofile候補の読み取りだけを目的とする処理では、ディレクトリを自動作成しない。
-
-invalid file ノードには、Open / Copy Path / Copy Relative Path / Rename / Delete を提供する。config ファイルでは、`configurations` 配列の存在を前提とする Add Entry を提供しない。
-
----
-
-## 4. 設定項目（settings.json）
-
-ユーザーが `settings.json` で設定できる拡張機能固有の設定項目は以下のとおり。
-
-| 設定キー                           | 型      | デフォルト | 説明                                                                                                   |
-| ---------------------------------- | ------- | ---------- | ------------------------------------------------------------------------------------------------------ |
-| `launch-composer.confirmOverwrite` | boolean | `true`     | `true` の場合、Generate 実行時に上書き確認ダイアログを表示する。`false` の場合は確認なしで上書きする。 |
-| `launch-composer.autoSaveDelay`    | number  | `1000`     | `<TextInput>` フィールド変更後、JSON ファイルへの書き込みまでの debounce 遅延時間（ミリ秒）。          |
+`autoSaveDelay` は `minimum: 0` として contribution する。

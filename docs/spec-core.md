@@ -1,162 +1,181 @@
 # Launch Composer - コアロジック仕様
 
-`@launch-composer/core` パッケージが実装するロジックの仕様を定める。VSCode にも Node.js にも依存しない純粋な関数として実装する。
+このファイルは `@launch-composer/core` が実装する生成、マージ、バリデーション、argsFile、変数展開の仕様を定める。JSON ファイルの形は [spec.md](./spec.md) を参照する。
 
-データ型の定義は [spec-communication.md](./spec-communication.md) §1.5 を参照する。スキーマ（JSON ファイル形式）は [spec.md](./spec.md) §4 を参照する。
+`@launch-composer/core` は VS Code API と Node.js ファイルシステム API に依存しない。ファイル読み書きは extension が行い、core は `ProfileFileData[]`、`ConfigFileData[]`、変数、argsFile 読み取りコールバックを受け取って結果を返す。
 
----
+## 公開 API
 
-## 概要
+### generate(input)
 
-`@launch-composer/core` は、`.vscode/launch-composer/` 以下に配置された `profiles/*.json` と `configs/*.json` を入力として受け取り、`.vscode/launch.json` に書き込むデバッグ構成を生成するパッケージである。マージとバリデーションもこのパッケージが担う。
+`generate(input)` は全入力を検証し、エラーがなければ `LaunchJson` を返す。
 
-ファイルの読み書きは `launch-composer`（extension）側が担い、`@launch-composer/core` はデータの変換だけを行う。VSCode API にも Node.js のファイルシステム API にも依存せず、入力データを受け取って出力データを返す純粋な関数として実装する。
-
-主な処理の流れは次のとおり。
-
-1. profile エントリ（`profiles/*.json`）と config ファイルオブジェクト（`configs/*.json`）を入力として受け取る。
-2. config の `profile` が指定する profile をベースに、config の値でオーバーライドしてマージする。
-3. `argsFile` が指定されている場合は、外部ファイルの `args` と config の `args` を結合する。
-4. バリデーションエラーがあれば、生成を中断してエラーリストを返す。
-5. バリデーションエラーがなければ、ファイル単位の `enabled` と config 単位の `enabled` のどちらも `false` でない config だけを `launch.json` の `configurations` 配列として返す。
-
----
-
-## 1. マージルール
-
-profileと config をマージして launch.json のエントリを生成するルールを定める。
-
-### 1.1 マージの優先順位
-
-profileと config のマージ優先順位を以下に示す。
-
-```
-profile（ベース） < config（オーバーライド）
+```typescript
+type GenerateResult =
+  | { success: true; launchJson: LaunchJson }
+  | { success: false; errors: ValidationError[] };
 ```
 
-profile をベースとし、config の値で上書きする。argsFile はマージの対象外として扱い、launch.json の args を決定するルール（1.3 を参照）で別途処理する。
+処理順序:
 
-config は常に `profile` を参照する。launch.json のエントリは profile の `configuration` をベースにし、config の `configuration` で上書きする。
+1. profile と config をファイル順、配列順に展開する。
+2. Generate 時バリデーションを全エントリに対して行う。
+3. エラーが 1 件以上ある場合は `success: false` とすべてのエラーを返す。
+4. エラーがなければ、file-level と entry-level の `enabled` がどちらも `false` でない config だけを生成対象にする。
+5. 各 config の `profile` が指す profile をベースにマージし、`LaunchJson` を返す。
 
-config を生成対象にするか否かは、config ファイルの `enabled` と config エントリの `enabled` の論理積で決まる。どちらか一方でも `false` であれば、その config は生成対象外とする。どちらも省略されている場合は両方とも `true` として扱う。
+disabled な config や disabled な config ファイル内の config も、Generate 時バリデーションの対象である。`enabled` は出力対象から除外するためのフラグであり、入力の不正を隠すためのフラグではない。
 
-config の `configuration` に `program`、`type`、`request` のいずれかのパススルーキーが存在する場合、Launch Composer は Generate 時にエラーを返す。これら 3 つのキーはデバッグ対象のバイナリとデバッガの種類を定義するフィールドであり、profile で一元管理する。
+### validateGenerateInput(input)
 
-生成される各 configuration には `type` と `request` を必ず出力する。`request` の値は `launch` または `attach` のいずれかでなければならない。
+`validateGenerateInput(input)` は `generate(input)` と同じ検証を実行し、`ValidationError[]` だけを返す。`launch.json` は生成しない。
 
-### 1.2 キーの型ごとのマージ動作
+## マージルール
 
-キーの値の型ごとに、適用するマージ戦略が異なる。
+### profile と config
 
-| 値の型                                  | 戦略                    | 備考                       |
-| --------------------------------------- | ----------------------- | -------------------------- |
-| プリミティブ（string, number, boolean） | config で上書き         |                            |
-| オブジェクト（env を含む）              | config で上書き（置換） | profile の値は引き継がない |
-| 配列（args 以外）                       | config で上書き（置換） |                            |
-| args                                    | 特殊処理（1.3 参照）    |                            |
+生成される 1 件の `launch.json` configuration は、profile の `configuration` をベースにし、config の `configuration` で shallow merge する。
 
-Launch Composer はすべてのキーに shallow merge を適用する。config に同じキーが存在する場合、値の型に関わらず config の値で profile の値を丸ごと上書きする。config に存在しないキーは、profile の値をそのまま継承する。
+```text
+profile.configuration < config.configuration
+```
+
+shallow merge はキー単位の置換である。オブジェクト、配列、プリミティブのいずれも、config に同じキーがあれば config の値で丸ごと上書きする。deep merge はしない。
 
 例:
 
 ```jsonc
-// profile
+// profile.configuration
 { "env": { "PATH": "/usr/bin", "DEBUG": "1" } }
 
-// config（env を指定）
-{ "env": { "PATH": "/usr/bin", "MY_VAR": "hello" } }
+// config.configuration
+{ "env": { "DEBUG": "0" } }
 
-// 結果: config の env がそのまま使われる
-{ "env": { "PATH": "/usr/bin", "MY_VAR": "hello" } }
-// → DEBUG は消える。必要なら config 側に全キーを書く。
+// output
+{ "env": { "DEBUG": "0" } }
 ```
 
-```jsonc
-// config（env を指定しない）
-{ "cwd": "${workspaceFolder}/test" }
+config に存在しないキーは profile から継承する。生成結果の `name` は常に config の `name` を使う。profile の `name` は `launch.json` に出力しない。
 
-// 結果: profile の env がそのまま継承される
-{ "env": { "PATH": "/usr/bin", "DEBUG": "1" }, "cwd": "${workspaceFolder}/test" }
+config の `configuration` に `program`、`type`、`request` が存在する場合は Generate 時エラーにする。これらは profile 側で管理する。
+
+### enabled
+
+生成対象になる条件:
+
+```text
+configFile.enabled !== false && config.enabled !== false
 ```
 
-### 1.3 launch.json の args を決定するルール
+file-level と entry-level の `enabled` は、省略時に Generate 上 `true` として扱う。
 
-launch.json の `args` は、profile の `args`（ベース）と config の `argsFile`（外部ファイル参照）と config の `args`（直接指定）の組み合わせで決定する。profile の `args` と argsFile は同時に使用できない。
+### args
 
-| profile.args | argsFile | args | 結果                          |
-| ------------ | -------- | ---- | ----------------------------- |
-| なし         | なし     | なし | `args` キー自体を出力しない   |
-| なし         | なし     | あり | `config.args`                 |
-| なし         | あり     | なし | `argsFile.args`               |
-| なし         | あり     | あり | `[...argsFile.args, ...args]` |
-| あり         | あり     | —    | エラー（Generate を中断）     |
-| あり         | なし     | なし | `profile.args`                |
-| あり         | なし     | あり | `[...profile.args, ...args]`  |
+`launch.json` の `args` は profile の `args`、argsFile の `args`、config の `args` から決まる。profile の `args` と config の `argsFile` は同時に使えない。
 
----
+| profile.args | argsFile | config.args | 出力                          |
+| ------------ | -------- | ----------- | ----------------------------- |
+| なし         | なし     | なし        | `args` キーを出力しない       |
+| なし         | なし     | あり        | `config.args`                 |
+| なし         | あり     | なし        | `argsFile.args`               |
+| なし         | あり     | あり        | `[...argsFile.args, ...args]` |
+| あり         | なし     | なし        | `profile.args`                |
+| あり         | なし     | あり        | `[...profile.args, ...args]`  |
+| あり         | あり     | 任意        | エラー                        |
 
-## 2. パス解決
+出力する場合は新しい配列を作る。入力配列を破壊しない。
 
-config の `argsFile` に指定するファイルパスの解決ルールを定める。
+## argsFile
 
-### 2.1 argsFile パスでサポートする変数
+### パス解決
 
-argsFile のパスで使用できる変数は以下のとおり。
+argsFile のパスは、絶対パスか `${workspaceFolder}` を含むパスでなければならない。
 
-| 変数                 | 展開先                        |
-| -------------------- | ----------------------------- |
-| `${workspaceFolder}` | VSCode のワークスペースルート |
+対応する絶対パス:
 
-`argsFile` のパスには、絶対パスか `${workspaceFolder}` を含むパスのどちらかを指定する。相対パスを指定した場合、Launch Composer はエラーとして生成を中断する。
+- `/tmp/args.json` のような Unix 形式
+- `C:\tmp\args.json` のような Windows drive 形式
+- `\\server\share\args.json` のような UNC 形式
 
-### 2.2 ${workspaceFolder} の展開手順
+対応する変数は `${workspaceFolder}` のみである。core は `variables.workspaceFolder` の値で文字列置換する。未対応の変数、または `${workspaceFolder}` が指定されたのに `variables.workspaceFolder` が渡されていない場合はエラーにする。
 
-`${workspaceFolder}` を含むパスは、以下の手順で展開する。
+置換後のパスが絶対パスでない場合もエラーにする。
 
-1. `${workspaceFolder}` をワークスペースルートのパスに置換する。
-2. 置換後のパスが絶対パスであることを検証する。絶対パスでなければ、Launch Composer はエラーとして生成を中断する。
+### 読み取り
 
-変数解決では、呼び出し側が `variables: Record<string, string>` を渡し、コアは文字列置換のみを行う。
+core 自身はファイルを読まない。`argsFile` が指定された config を検証するには、呼び出し側が `readArgsFile(resolvedPath)` を渡す必要がある。
 
-### 2.3 エラーハンドリング
+`readArgsFile` の結果:
 
-argsFile のパス解決でエラーが発生した場合の挙動を定める。
+| 結果          | 扱い                                                |
+| ------------- | --------------------------------------------------- |
+| `success`     | `data` を argsFile データとして検証する             |
+| `not-found`   | `argsFile does not exist` の validation error       |
+| `error`       | 読み取り失敗の validation error                     |
+| reader 未指定 | `args file reader was provided` の validation error |
 
-- argsFile のパスを指定した場合、展開後のパスにファイルが存在しなければ、Launch Composer はエラーとして生成を中断する。
-- ファイルの存在を任意（optional）にする仕組みは設けない。ファイルが不要な構成では、`argsFile` キー自体を省略する。
+argsFile の `data` は JSON オブジェクトで、`args` が文字列配列でなければならない。`args` 以外のキーは無視する。
 
----
+同じ解決済みパスが複数 config から参照される場合、検証中に読み取った argsFile データをキャッシュして再利用する。
 
-## 3. バリデーション
+## Generate 時バリデーション
 
-Generate 実行時に行う入力データのバリデーションルールを定める。
+core は Generate 前に入力全体を検証し、エラーをまとめて返す。最初のエラーで打ち切らない。
 
-### 3.1 Generate 時の検証
+### profile
 
-Launch Composer はバリデーションを Generate 実行時にまとめて行う。リアルタイムのバリデーションは行わない。
+| 条件                                                  | エラー |
+| ----------------------------------------------------- | ------ |
+| `name` が非空文字列でない                             | はい   |
+| `args` が存在し、文字列配列でない                     | はい   |
+| `configuration` が存在し、オブジェクトでない          | はい   |
+| `configuration.request` が `launch` / `attach` でない | はい   |
+| `configuration.type` が非空文字列でない               | はい   |
 
-| 検証内容                                                                                                             | 表示方法        |
-| -------------------------------------------------------------------------------------------------------------------- | --------------- |
-| profileまたは構成エントリの `name` が空文字または未指定                                                              | VSCode 通知バー |
-| 構成エントリの `profile` が存在しない profile 名を参照している                                                       | VSCode 通知バー |
-| 構成エントリの `configuration` が `program`, `type`, `request` のいずれかを持っている                                | VSCode 通知バー |
-| `name` が他の profile または構成エントリと重複している（profile はファイルをまたいだ重複を含む）                     | VSCode 通知バー |
-| `argsFile` で指定したファイルが存在しない                                                                            | VSCode 通知バー |
-| `argsFile` で指定したファイルの内容が不正（`args` キーが存在しない、または `args` が文字列配列でない）               | VSCode 通知バー |
-| `argsFile` のパスに含まれる変数の展開に失敗した                                                                      | VSCode 通知バー |
-| `profile` で参照する profile に `args` が定義されているにもかかわらず、config エントリに `argsFile` が指定されている | VSCode 通知バー |
-| config ファイルのルートに `configurations` 配列がない                                                                | VSCode 通知バー |
-| profile の `request` が `launch` または `attach` ではない                                                            | VSCode 通知バー |
-| profile の `type` が空文字または未指定                                                                               | VSCode 通知バー |
+`configuration` が省略されている profile は、`request` と `type` の検証に失敗する。
 
-`request` は Generate 時に検証する必須値とする。空文字、未指定、または `launch`・`attach` 以外の値はエラーとする。
+### config file
 
-profile 名の重複エラーでは、どのファイルで重複が発生しているかをメッセージに含める。例を以下に示す。
+| 条件                               | エラー |
+| ---------------------------------- | ------ |
+| `enabled` が存在し、boolean でない | はい   |
+| `configurations` が配列でない      | はい   |
 
+extension のファイル読み込みでは、config ファイルのルート形状が不正な場合は `ComposerDataIssue` として扱われる。core に渡された `ConfigFileData` でも `configurations` が配列でない場合は validation error にする。
+
+### config entry
+
+| 条件                                                         | エラー |
+| ------------------------------------------------------------ | ------ |
+| `name` が非空文字列でない                                    | はい   |
+| `enabled` が存在し、boolean でない                           | はい   |
+| `profile` が非空文字列でない                                 | はい   |
+| `profile` が存在しない profile 名を参照している              | はい   |
+| `argsFile` が存在し、string でない                           | はい   |
+| `args` が存在し、文字列配列でない                            | はい   |
+| `configuration` が存在し、オブジェクトでない                 | はい   |
+| `configuration.program` / `type` / `request` が存在する      | はい   |
+| 参照先 profile に `args` があり、config に `argsFile` がある | はい   |
+
+### name の一意性
+
+profile と config entry の `name` は、全 profile と全 config entry を通じて一意でなければならない。profile 同士、config 同士、profile と config の間の重複をすべてエラーにする。
+
+重複エラーの message には重複した名前と `file#index` 形式の発生位置を含める。
+
+## 出力
+
+Generate 成功時の出力型:
+
+```typescript
+interface LaunchJson {
+  version: '0.2.0';
+  configurations: LaunchConfig[];
+}
 ```
-Profile name "cpp" is defined in multiple files: cpp.json, scripting.json
-```
 
-エラーが 1 つでもあれば、Launch Composer は launch.json の生成を中断し、検出したすべてのエラーを通知バーに一覧表示する。
+`configurations` の順序は、core に渡された `configs` 配列の順序と各ファイル内の `configurations` 配列順に従う。extension はファイル名を昇順に読んで core に渡す。
 
-エラーの型定義は [spec-communication.md](./spec-communication.md) §1.5 の `ValidationError` を参照する。
+各 `LaunchConfig` には config の `name`、マージ済みの profile/config `configuration`、必要に応じて `args` が含まれる。`type` は非空文字列、`request` は `launch` または `attach` として検証済みである。
+
+有効な config が 0 件でも成功とし、`configurations: []` を返す。
