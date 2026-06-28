@@ -133,10 +133,7 @@ export function App() {
             return {
               ...currentPayload,
               editorRevision: result.revision ?? currentPayload.editorRevision,
-              generateReadiness:
-                result.generateReadiness === undefined
-                  ? currentPayload.generateReadiness
-                  : result.generateReadiness,
+              generateReadiness: result.generateReadiness,
             };
           });
         })
@@ -396,13 +393,18 @@ function isFileSelected(value: unknown): value is { path: string | null } {
   return typeof value === 'object' && value !== null && 'path' in value;
 }
 
-function isUpdateResult(value: unknown): value is {
-  success: boolean;
-  conflict?: boolean;
-  revision?: string | null;
-  generateReadiness?: InitialDataPayload['generateReadiness'];
-  error?: string;
-} {
+function isUpdateResult(value: unknown): value is
+  | {
+      success: true;
+      revision: string | null;
+      generateReadiness: InitialDataPayload['generateReadiness'];
+    }
+  | {
+      success: false;
+      conflict?: boolean;
+      revision?: string | null;
+      error?: string;
+    } {
   return (
     typeof value === 'object' &&
     value !== null &&

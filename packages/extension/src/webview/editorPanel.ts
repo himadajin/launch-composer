@@ -7,7 +7,6 @@ import * as vscode from 'vscode';
 import type {
   EntryPatchOperation,
   EditorTarget,
-  GenerateReadiness,
   HostMessage,
   InitialDataPayload,
   WorkspaceUpdatePayload,
@@ -35,12 +34,6 @@ interface EditorPanelOptions {
     errors?: ValidationError[];
   }>;
 }
-
-const DEFAULT_GENERATE_READINESS: GenerateReadiness = {
-  ready: true,
-  errors: [],
-  diagnostics: [],
-};
 
 export class EditorPanelController {
   private panel: vscode.WebviewPanel | undefined;
@@ -331,14 +324,13 @@ export class EditorPanelController {
         syncEditor: false,
       });
       const snapshot = await this.options.store.readAll();
-      const readiness = getGenerateReadiness(snapshot);
       await this.respond(requestId, {
         type: 'update-result',
         requestId,
         payload: {
           success: true,
           revision: result.revision,
-          generateReadiness: readiness,
+          generateReadiness: snapshot.generateReadiness,
         },
       });
     } catch (error) {
@@ -366,7 +358,6 @@ export class EditorPanelController {
     const snapshot = data ?? (await this.options.store.readAll());
     const payload: InitialDataPayload = {
       ...snapshot,
-      generateReadiness: getGenerateReadiness(snapshot),
       editor: this.currentTarget,
       editorRevision: await this.options.store.getDataFileRevision(
         this.currentTarget.kind,
@@ -423,7 +414,7 @@ export class EditorPanelController {
         ? { profiles: data.profiles }
         : { configs: data.configs }),
       issues: data.issues.filter((issue) => issue.kind === kind),
-      generateReadiness: getGenerateReadiness(data),
+      generateReadiness: data.generateReadiness,
       ...(this.currentTarget.kind === kind
         ? {
             editorRevision: await this.options.store.getDataFileRevision(
@@ -538,8 +529,4 @@ function hasInvalidFile(
   return data.issues.some(
     (issue) => issue.kind === target.kind && issue.file === target.file,
   );
-}
-
-function getGenerateReadiness(data: WorkspaceDataSnapshot): GenerateReadiness {
-  return data.generateReadiness ?? DEFAULT_GENERATE_READINESS;
 }

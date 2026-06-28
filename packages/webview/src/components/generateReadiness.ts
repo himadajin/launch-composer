@@ -7,12 +7,6 @@ import type {
   WorkspaceUpdatePayload,
 } from '../types.js';
 
-export const DEFAULT_GENERATE_READINESS: GenerateReadiness = {
-  ready: true,
-  errors: [],
-  diagnostics: [],
-};
-
 export function mergeWorkspaceUpdatePayload(
   currentPayload: InitialDataPayload | null,
   update: WorkspaceUpdatePayload,

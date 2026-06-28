@@ -344,6 +344,7 @@ Webview は patch 保存要求を直列化する。前回の `update-result` を
 保存結果:
 
 - success: Webview は `editorRevision` を更新する
+- success: Webview は response の `generateReadiness` を最新状態として採用する
 - conflict: Webview は `request-initial-data` で最新状態を再取得する
 - rename success / failure: Webview は結果に関わらず最新状態を再取得する
 

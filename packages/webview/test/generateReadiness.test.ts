@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  DEFAULT_GENERATE_READINESS,
   formatValidationError,
   getEditorDiagnostics,
   getEntryIssueDiagnostics,
@@ -11,13 +10,19 @@ import {
   mergeWorkspaceUpdatePayload,
 } from '../src/components/generateReadiness.js';
 
+const READY_TO_GENERATE = {
+  ready: true,
+  errors: [],
+  diagnostics: [],
+};
+
 test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace update', () => {
   const merged = mergeWorkspaceUpdatePayload(
     {
       profiles: [],
       configs: [],
       issues: [],
-      generateReadiness: DEFAULT_GENERATE_READINESS,
+      generateReadiness: READY_TO_GENERATE,
       editor: {
         kind: 'config',
         file: 'config.json',

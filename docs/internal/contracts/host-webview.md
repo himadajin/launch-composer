@@ -23,7 +23,7 @@ Extension Host と Webview の message shape は `packages/extension/src/message
   - canonical source: `GenerateReadiness` in `packages/extension/src/messages.ts`
   - mirror source: `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md), [../specs/ui.md](../specs/ui.md)
-  - 注意: Generate と同じ判定源から計算する workspace 全体の生成可能性。`diagnostics` は Webview UI 配置用
+  - 注意: Generate と同じ判定源から計算する workspace 全体の生成可能性。Host から Webview に送る workspace snapshot payload では必須。`diagnostics` は Webview UI 配置用
 - 契約: generate diagnostic
   - canonical source: `GenerateDiagnostic` in `packages/extension/src/messages.ts`
   - mirror source: `packages/webview/src/types.ts`

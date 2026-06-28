@@ -171,13 +171,18 @@ export type HostMessage =
   | {
       type: 'update-result';
       requestId: string;
-      payload: {
-        success: boolean;
-        conflict?: boolean;
-        revision?: string | null;
-        generateReadiness?: GenerateReadiness;
-        error?: string;
-      };
+      payload:
+        | {
+            success: true;
+            revision: string | null;
+            generateReadiness: GenerateReadiness;
+          }
+        | {
+            success: false;
+            conflict?: boolean;
+            revision?: string | null;
+            error?: string;
+          };
     }
   | {
       type: 'rename-result';

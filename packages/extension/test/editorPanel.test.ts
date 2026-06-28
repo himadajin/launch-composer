@@ -3,7 +3,10 @@ import test from 'node:test';
 
 import * as vscode from 'vscode';
 
-import type { WorkspaceStore } from '../src/io/workspaceStore.js';
+import type {
+  WorkspaceDataSnapshot,
+  WorkspaceStore,
+} from '../src/io/workspaceStore.js';
 import { EditorPanelController } from '../src/webview/editorPanel.js';
 
 const testVscode = vscode as typeof vscode & {
@@ -27,10 +30,19 @@ const READY_TO_GENERATE = {
   diagnostics: [],
 };
 
+function withReadiness(
+  snapshot: Omit<WorkspaceDataSnapshot, 'generateReadiness'>,
+): WorkspaceDataSnapshot {
+  return {
+    ...snapshot,
+    generateReadiness: READY_TO_GENERATE,
+  };
+}
+
 test('open sets the panel title to the current profile name', async () => {
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [
           {
             file: 'abc.json',
@@ -39,7 +51,7 @@ test('open sets the panel title to the current profile name', async () => {
         ],
         configs: [],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:title-profile';
@@ -75,11 +87,11 @@ test('syncWithWorkspace closes the editor panel when the current target no longe
   let exists = true;
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [],
         configs: [],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:0';
@@ -123,7 +135,7 @@ test('syncWithWorkspace closes the editor panel when the current target no longe
 test('syncWithWorkspaceData keeps the panel open when the current file is invalid', async () => {
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [
           {
             file: 'abc.json',
@@ -132,7 +144,7 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
         ],
         configs: [],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:1';
@@ -166,18 +178,21 @@ test('syncWithWorkspaceData keeps the panel open when the current file is invali
   assert.ok(panel);
   assert.equal(panel.title, 'cpp');
 
-  await controller.syncWithWorkspaceData({
-    profiles: [],
-    configs: [],
-    issues: [
-      {
-        kind: 'profile',
-        file: 'abc.json',
-        code: 'invalid-json',
-        message: 'Invalid JSON in abc.json. Open the file and fix the syntax.',
-      },
-    ],
-  });
+  await controller.syncWithWorkspaceData(
+    withReadiness({
+      profiles: [],
+      configs: [],
+      issues: [
+        {
+          kind: 'profile',
+          file: 'abc.json',
+          code: 'invalid-json',
+          message:
+            'Invalid JSON in abc.json. Open the file and fix the syntax.',
+        },
+      ],
+    }),
+  );
 
   assert.equal(panel.disposed, false);
   assert.equal(panel.title, 'abc.json');
@@ -210,11 +225,11 @@ test('openCurrentAsJson opens the active entry when the file is valid', async ()
     | undefined;
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [],
         configs: [],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:2';
@@ -265,7 +280,7 @@ test('openCurrentAsJson opens the backing file when the active file is invalid',
     | undefined;
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [],
         configs: [],
         issues: [
@@ -277,7 +292,7 @@ test('openCurrentAsJson opens the backing file when the active file is invalid',
               'Invalid JSON in profile.json. Open the file and fix the syntax.',
           },
         ],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:3';
@@ -333,7 +348,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
   let mutateCount = 0;
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [
           {
             file: 'profile.json',
@@ -342,7 +357,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
         ],
         configs: [],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:4';
@@ -438,7 +453,7 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
 test('rename-entry message returns an error when renameEntry fails', async () => {
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [],
         configs: [
           {
@@ -447,7 +462,7 @@ test('rename-entry message returns an error when renameEntry fails', async () =>
           },
         ],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:5';
@@ -520,7 +535,7 @@ test('update-config message refreshes only config views through onDidMutate', as
     | undefined;
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [],
         configs: [
           {
@@ -529,7 +544,7 @@ test('update-config message refreshes only config views through onDidMutate', as
           },
         ],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:6';
@@ -607,7 +622,7 @@ test('update-config message refreshes only config views through onDidMutate', as
 test('syncWithWorkspaceData refreshes the panel title when the current config name changes', async () => {
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [],
         configs: [
           {
@@ -616,7 +631,7 @@ test('syncWithWorkspaceData refreshes the panel title when the current config na
           },
         ],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:sync-title';
@@ -650,16 +665,18 @@ test('syncWithWorkspaceData refreshes the panel title when the current config na
   assert.ok(panel);
   assert.equal(panel.title, 'Launch');
 
-  await controller.syncWithWorkspaceData({
-    profiles: [],
-    configs: [
-      {
-        file: 'config.json',
-        configurations: [{ name: 'Launch Server', profile: 'cpp' }],
-      },
-    ],
-    issues: [],
-  });
+  await controller.syncWithWorkspaceData(
+    withReadiness({
+      profiles: [],
+      configs: [
+        {
+          file: 'config.json',
+          configurations: [{ name: 'Launch Server', profile: 'cpp' }],
+        },
+      ],
+      issues: [],
+    }),
+  );
 
   assert.equal(panel.title, 'Launch Server');
 });
@@ -667,7 +684,7 @@ test('syncWithWorkspaceData refreshes the panel title when the current config na
 test('syncWithWorkspaceData sends a config workspace update for an open config editor', async () => {
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [],
         configs: [
           {
@@ -678,7 +695,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
           },
         ],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:config-update';
@@ -712,7 +729,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
   assert.ok(panel);
 
   await controller.syncWithWorkspaceData(
-    {
+    withReadiness({
       profiles: [],
       configs: [
         {
@@ -731,7 +748,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
             'other.json must contain an object with a "configurations" array.',
         },
       ],
-    },
+    }),
     { kind: 'config' },
   );
 
@@ -766,7 +783,7 @@ test('syncWithWorkspaceData sends a config workspace update for an open config e
 test('syncWithWorkspaceData sends profile workspace updates to an open config editor', async () => {
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [
           {
             file: 'profile.json',
@@ -780,7 +797,7 @@ test('syncWithWorkspaceData sends profile workspace updates to an open config ed
           },
         ],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:profile-update';
@@ -814,7 +831,7 @@ test('syncWithWorkspaceData sends profile workspace updates to an open config ed
   assert.ok(panel);
 
   await controller.syncWithWorkspaceData(
-    {
+    withReadiness({
       profiles: [
         {
           file: 'profile.json',
@@ -828,7 +845,7 @@ test('syncWithWorkspaceData sends profile workspace updates to an open config ed
         },
       ],
       issues: [],
-    },
+    }),
     { kind: 'profile' },
   );
 
@@ -852,7 +869,7 @@ test('syncWithWorkspaceData sends profile workspace updates to an open config ed
 test('syncWithWorkspaceData skips config-only editor updates when a profile editor is open', async () => {
   const store = {
     async readAll() {
-      return {
+      return withReadiness({
         profiles: [
           {
             file: 'profile.json',
@@ -868,7 +885,7 @@ test('syncWithWorkspaceData skips config-only editor updates when a profile edit
           },
         ],
         issues: [],
-      };
+      });
     },
     async getDataFileRevision() {
       return 'rev:skip-config';
@@ -903,7 +920,7 @@ test('syncWithWorkspaceData skips config-only editor updates when a profile edit
   const messageCount = panel.postedMessages.length;
 
   await controller.syncWithWorkspaceData(
-    {
+    withReadiness({
       profiles: [
         {
           file: 'profile.json',
@@ -917,7 +934,7 @@ test('syncWithWorkspaceData skips config-only editor updates when a profile edit
         },
       ],
       issues: [],
-    },
+    }),
     { kind: 'config' },
   );
 

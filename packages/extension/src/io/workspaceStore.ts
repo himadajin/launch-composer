@@ -59,13 +59,14 @@ export interface WorkspaceDataSnapshot {
   profiles: ProfileFileData[];
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
-  generateReadiness?: GenerateReadiness;
+  generateReadiness: GenerateReadiness;
 }
 
-type WorkspaceDataWithoutReadiness = Omit<
-  WorkspaceDataSnapshot,
-  'generateReadiness'
->;
+export interface WorkspaceDataWithoutReadiness {
+  profiles: ProfileFileData[];
+  configs: ConfigFileData[];
+  issues: ComposerDataIssue[];
+}
 
 export interface ProfileWorkspaceData {
   profiles: ProfileFileData[];
@@ -799,8 +800,7 @@ export class WorkspaceStore {
 
   async generateLaunchJson(): Promise<GenerateResult> {
     const snapshot = await this.readAll();
-    const readiness =
-      snapshot.generateReadiness ?? (await this.getGenerateReadiness(snapshot));
+    const readiness = snapshot.generateReadiness;
     if (!readiness.ready) {
       return {
         success: false,

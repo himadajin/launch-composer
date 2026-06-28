@@ -8,6 +8,7 @@ import {
   WorkspaceStore,
   type ComposerDataIssue,
   type WorkspaceDataSnapshot,
+  type WorkspaceDataWithoutReadiness,
 } from './io/workspaceStore.js';
 import type { EditorTarget } from './messages.js';
 import {
@@ -20,10 +21,6 @@ type ProfileSelectionItem =
   | { label: string; value: string; description?: string }
   | vscode.QuickPickItem;
 type SnapshotKind = 'profile' | 'config' | 'both';
-type WorkspaceDataWithoutReadiness = Omit<
-  WorkspaceDataSnapshot,
-  'generateReadiness'
->;
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = getWorkspaceRoot();
@@ -273,7 +270,8 @@ export function activate(context: vscode.ExtensionContext): void {
   }> => {
     const generated = await store.generateLaunchJson();
     if (!generated.success) {
-      showValidationErrors(generated.errors);
+      await syncUiWithWorkspace({ notifyIssues: false, kind: 'both' });
+      showGenerateBlockedWarning(generated.errors.length);
       return {
         success: false,
         errors: generated.errors,
@@ -948,22 +946,12 @@ async function confirmOverwrite(store: WorkspaceStore): Promise<boolean> {
   return result === 'Yes';
 }
 
-function showValidationErrors(errors: ValidationError[]): void {
-  const message = errors
-    .map((error) => {
-      const details = [error.file];
-      if (error.configName !== undefined) {
-        details.push(error.configName);
-      }
-      if (error.field !== undefined) {
-        details.push(error.field);
-      }
-
-      return `${details.join(' / ')}: ${error.message}`;
-    })
-    .join('\n');
-
-  void vscode.window.showErrorMessage(message);
+function showGenerateBlockedWarning(issueCount: number): void {
+  void vscode.window.showWarningMessage(
+    `Generate is blocked by ${issueCount} issue${
+      issueCount === 1 ? '' : 's'
+    }. Open Launch Composer to review highlighted fields and JSON status.`,
+  );
 }
 
 function showError(error: unknown): void {

@@ -10,7 +10,7 @@ interface VsCodeApi {
   setState<T>(state: T): void;
 }
 
-const fallbackApi: VsCodeApi = {
+const noopApi: VsCodeApi = {
   postMessage(message) {
     console.log('[launch-composer:webview]', message);
   },
@@ -20,4 +20,4 @@ const fallbackApi: VsCodeApi = {
   setState() {},
 };
 
-export const vscode = window.acquireVsCodeApi?.() ?? fallbackApi;
+export const vscode = window.acquireVsCodeApi?.() ?? noopApi;

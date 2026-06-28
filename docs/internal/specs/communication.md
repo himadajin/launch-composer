@@ -40,6 +40,8 @@ Generate readiness は workspace 全体の生成可能性である。Host は Ge
 
 Generate diagnostic の `source` は core validation 由来なら `core-validation`、invalid file issue 由来なら `invalid-file` である。`target.kind` は Webview が配置先を決めるための値で、profile entry は `profile`、config entry は `config`、file 全体の問題は `file` とする。profile/config diagnostic は `file` と `target.index` で editor target に対応付け、可能な場合は `target.name` と `target.field` を含める。invalid file diagnostic は `target.kind: file` として扱い、entry-level inline 表示には使わない。
 
+Host から Webview に送る workspace snapshot payload は常に `generateReadiness` を含む。readiness 未計算の中間データは Extension Host 内部に閉じる。
+
 ## 保存と競合
 
 `name` 以外のフォーム変更は `update-profile` または `update-config` で送る。payload は対象 file、entry index、`baseRevision`、patch list を持つ。
@@ -150,7 +152,7 @@ Patch 保存結果である。
 
 - payload: `success: true`
   - 意味: 保存成功
-  - response: `revision` と `generateReadiness` を含める
+  - response: `revision` と `generateReadiness` を必ず含める
 - payload: `success: false, conflict: true`
   - 意味: 競合
   - Webview action: 最新データを再取得する
