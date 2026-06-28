@@ -1,4 +1,4 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +8,7 @@ const packageDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(packageDir, '..');
 const outDir = resolve(rootDir, '.test-dist');
 
+await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
 
 await build({
@@ -15,7 +16,8 @@ await build({
   bundle: true,
   entryPoints: [
     'test/editorPanel.test.ts',
-    'test/extension.test.ts',
+    'test/extensionCommands.test.ts',
+    'test/workspaceStore.test.ts',
     'test/manifest.test.ts',
     'test/bundle.test.ts',
   ],
