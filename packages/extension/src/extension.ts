@@ -17,8 +17,7 @@ import {
 import { EditorPanelController } from './webview/editorPanel.js';
 
 type ProfileSelectionItem =
-  | { label: string; value: string; description?: string }
-  | vscode.QuickPickItem;
+  { label: string; value: string; description?: string } | vscode.QuickPickItem;
 type SnapshotKind = 'profile' | 'config' | 'both';
 
 export function activate(context: vscode.ExtensionContext): void {

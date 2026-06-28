@@ -8,7 +8,7 @@ const ctx = await context({
   sourcemap: true,
   platform: 'node',
   format: 'cjs',
-  target: 'node20',
+  target: 'node24',
   external: ['vscode'],
   outfile: 'dist/extension.js',
   logLevel: 'info',

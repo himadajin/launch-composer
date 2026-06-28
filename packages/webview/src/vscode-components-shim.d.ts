@@ -1,3 +1,5 @@
+declare module '*.css';
+
 declare module '@himadajin/vscode-components' {
   import * as React from 'react';
 
