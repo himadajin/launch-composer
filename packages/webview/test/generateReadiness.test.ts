@@ -4,8 +4,13 @@ import test from 'node:test';
 import {
   DEFAULT_GENERATE_READINESS,
   formatValidationError,
+  getEditorDiagnostics,
+  getEntryIssueDiagnostics,
+  getFieldDiagnosticMessages,
+  mergeHelperMessages,
   mergeWorkspaceUpdatePayload,
   normalizeInitialDataPayload,
+  normalizeGenerateReadiness,
 } from '../src/components/generateReadiness.js';
 
 test('normalizeInitialDataPayload fills missing generateReadiness for persisted state', () => {
@@ -23,6 +28,32 @@ test('normalizeInitialDataPayload fills missing generateReadiness for persisted 
   });
 
   assert.deepEqual(payload.generateReadiness, DEFAULT_GENERATE_READINESS);
+});
+
+test('normalizeGenerateReadiness fills missing diagnostics for old persisted state', () => {
+  assert.deepEqual(
+    normalizeGenerateReadiness({
+      ready: false,
+      errors: [
+        {
+          file: 'profile.json',
+          field: 'configuration.type',
+          message: 'Profile type is required.',
+        },
+      ],
+    }),
+    {
+      ready: false,
+      errors: [
+        {
+          file: 'profile.json',
+          field: 'configuration.type',
+          message: 'Profile type is required.',
+        },
+      ],
+      diagnostics: [],
+    },
+  );
 });
 
 test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace update', () => {
@@ -54,6 +85,21 @@ test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace upda
             message: 'Config profile is required.',
           },
         ],
+        diagnostics: [
+          {
+            severity: 'error',
+            source: 'core-validation',
+            file: 'config.json',
+            field: 'profile',
+            message: 'Config profile is required.',
+            target: {
+              kind: 'config',
+              index: 0,
+              name: 'Launch',
+              field: 'profile',
+            },
+          },
+        ],
       },
       editorRevision: 'rev:2',
     },
@@ -67,6 +113,21 @@ test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace upda
         configName: 'Launch',
         field: 'profile',
         message: 'Config profile is required.',
+      },
+    ],
+    diagnostics: [
+      {
+        severity: 'error',
+        source: 'core-validation',
+        file: 'config.json',
+        field: 'profile',
+        message: 'Config profile is required.',
+        target: {
+          kind: 'config',
+          index: 0,
+          name: 'Launch',
+          field: 'profile',
+        },
       },
     ],
   });
@@ -91,4 +152,112 @@ test('formatValidationError omits missing optional details', () => {
     }),
     'config.json / Launch / profile: Config profile is required.',
   );
+});
+
+test('getEditorDiagnostics filters diagnostics to the current editor target', () => {
+  const diagnostics = getEditorDiagnostics(
+    {
+      ready: false,
+      errors: [],
+      diagnostics: [
+        {
+          severity: 'error',
+          source: 'core-validation',
+          file: 'profile.json',
+          field: 'configuration.type',
+          message: 'Profile type is required.',
+          target: {
+            kind: 'profile',
+            index: 0,
+            name: 'node',
+            field: 'configuration.type',
+          },
+        },
+        {
+          severity: 'error',
+          source: 'core-validation',
+          file: 'profile.json',
+          field: 'configuration.request',
+          message: 'Profile request must be one of: launch, attach.',
+          target: {
+            kind: 'profile',
+            index: 1,
+            name: 'attach',
+            field: 'configuration.request',
+          },
+        },
+        {
+          severity: 'error',
+          source: 'invalid-file',
+          file: 'profile.json',
+          message: 'Invalid JSON in profile.json.',
+          target: { kind: 'file' },
+        },
+      ],
+    },
+    {
+      kind: 'profile',
+      file: 'profile.json',
+      index: 0,
+    },
+  );
+
+  assert.deepEqual(
+    diagnostics.map((diagnostic) => diagnostic.message),
+    ['Profile type is required.'],
+  );
+});
+
+test('diagnostic helpers split field messages and entry issues', () => {
+  const diagnostics = [
+    {
+      severity: 'error',
+      source: 'core-validation',
+      file: 'config.json',
+      field: 'profile',
+      message: 'Config profile is required.',
+      target: {
+        kind: 'config',
+        index: 0,
+        name: 'Launch',
+        field: 'profile',
+      },
+    },
+    {
+      severity: 'error',
+      source: 'core-validation',
+      file: 'config.json',
+      field: 'configuration.program',
+      message: 'Config with a profile cannot override "program".',
+      target: {
+        kind: 'config',
+        index: 0,
+        name: 'Launch',
+        field: 'configuration.program',
+      },
+    },
+  ] as const;
+
+  assert.deepEqual(getFieldDiagnosticMessages(diagnostics, 'profile'), [
+    'Config profile is required.',
+  ]);
+  assert.deepEqual(
+    getEntryIssueDiagnostics(diagnostics, ['profile']).map(
+      (diagnostic) => diagnostic.message,
+    ),
+    ['Config with a profile cannot override "program".'],
+  );
+});
+
+test('mergeHelperMessages prefers diagnostic errors and deduplicates messages', () => {
+  assert.deepEqual(
+    mergeHelperMessages(
+      ['Profile type is required.', 'Profile type is required.'],
+      ['Local helper'],
+    ),
+    ['Profile type is required.'],
+  );
+  assert.deepEqual(mergeHelperMessages([], ['Local helper', undefined]), [
+    'Local helper',
+  ]);
 });

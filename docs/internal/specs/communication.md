@@ -30,7 +30,15 @@ Editor panel を開いたとき、Host は `initial-data` を送る。
 
 workspace file が変化した場合、Host は必要に応じて `workspace-update` を送る。profile update は open config editor にも送る。config editor は profile select 候補を更新する必要があるためである。
 
-Generate readiness は workspace 全体の生成可能性である。`ready` と `errors` を持ち、`errors` は core validation error または invalid file issue を validation-style error に変換したものを含む。Host は Generate と同じ判定源を使って readiness を計算する。
+Generate readiness は workspace 全体の生成可能性である。Host は Generate と同じ判定源を使って readiness を計算する。
+
+- `ready`: Generate 可能なら `true`
+- `errors`: Generate failure と summary 表示に使う validation-style error list
+- `diagnostics`: Webview の field-level helper と entry-level issue 表示に使う UI 配置用 diagnostic list
+
+`errors` は core validation error または invalid file issue を validation-style error に変換したものを含む。`diagnostics` は同じ問題を UI 配置できる形に投影したもので、severity、source、file、message、field、target を持つ。
+
+Generate diagnostic の `source` は core validation 由来なら `core-validation`、invalid file issue 由来なら `invalid-file` である。`target.kind` は Webview が配置先を決めるための値で、profile entry は `profile`、config entry は `config`、file 全体の問題は `file` とする。profile/config diagnostic は `file` と `target.index` で editor target に対応付け、可能な場合は `target.name` と `target.field` を含める。invalid file diagnostic は `target.kind: file` として扱い、entry-level inline 表示には使わない。
 
 ## 保存と競合
 
@@ -132,7 +140,7 @@ Full snapshot と editor target を送る。Editor panel を開いた直後、`r
 
 Profile または config の部分 snapshot を送る。`kind` は更新対象の領域を示す。payload の `issues` はその `kind` に属する issue だけを含む。
 
-`generateReadiness` は常に workspace 全体の最新 readiness を含める。
+`generateReadiness` は常に workspace 全体の最新 readiness を含める。Profile または config の部分 snapshot update でも、readiness は片側だけでなく workspace 全体を対象に再計算した値である。
 
 `editorRevision` は、現在開いている editor target の file が更新対象 kind と一致する場合に含める。
 

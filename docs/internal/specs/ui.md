@@ -193,11 +193,23 @@ Webview の editor title action `Open JSON` は `launch-composer.openActiveEdito
 Webview は editor header 直下に `Generate Status` を表示する。
 
 - readiness が ready の場合: `Ready to generate launch.json.` を表示する
-- readiness が not ready の場合: Generate を block している issue count と error list を表示する
+- readiness が not ready の場合: Generate を block している issue count を表示する
 
-error list は `file / configName / field: message` の形式で表示する。`configName` または `field` がない場合は省略する。
+Generate Status は workspace 全体の summary であり、現在開いている editor entry だけに絞らない。詳細な修正内容は `Entry Issues` または field-level helper に表示する。
 
-Generate Status は workspace 全体の状態であり、現在開いている editor entry だけに絞らない。field-level inline error 表示、TreeView item decoration、Generate command の disabled 制御はこの仕様では扱わない。
+### Entry Issues と field-level helper
+
+Webview は current editor target に一致する generate diagnostic をフォーム内に表示する。
+
+- field に対応する diagnostic: 該当 `FormGroup` の helper に表示する
+- field に対応しない current entry の diagnostic: フォーム先頭の `Entry Issues` row に表示する
+- invalid file issue: 従来の `JSON Status` を優先し、entry-level inline diagnostics は表示しない
+
+field-level helper は diagnostic error を local helper より優先する。同じ field に diagnostic と local helper が両方ある場合、diagnostic を表示し、local helper は重複表示しない。
+
+config 側で GUI 管理しない `configuration.type`、`configuration.request`、`configuration.program` などの blocked override は `Entry Issues` に表示し、`Edit in <sourceFile>` で JSON 編集へ誘導する。
+
+TreeView item decoration と Generate command の disabled 制御はこの仕様では扱わない。
 
 ## Profile Editor
 

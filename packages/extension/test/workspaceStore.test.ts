@@ -20,6 +20,7 @@ test.beforeEach(() => {
 const READY_TO_GENERATE = {
   ready: true,
   errors: [],
+  diagnostics: [],
 };
 
 test('readAll returns empty data when Launch Composer directories do not exist', async () => {
@@ -119,6 +120,15 @@ test('readAll keeps valid files and reports invalid files as issues', async () =
         message: 'profile.json is empty. Expected a JSON array such as [].',
       },
     ],
+    diagnostics: [
+      {
+        severity: 'error',
+        source: 'invalid-file',
+        file: 'profile.json',
+        message: 'profile.json is empty. Expected a JSON array such as [].',
+        target: { kind: 'file' },
+      },
+    ],
   });
 });
 
@@ -161,6 +171,22 @@ test('readAll reports core validation errors in generateReadiness', async () => 
         file: 'profile.json',
         field: 'configuration.type',
         message: 'Profile type is required.',
+        target: { kind: 'profile', index: 0 },
+      },
+    ],
+    diagnostics: [
+      {
+        severity: 'error',
+        source: 'core-validation',
+        file: 'profile.json',
+        field: 'configuration.type',
+        message: 'Profile type is required.',
+        target: {
+          kind: 'profile',
+          index: 0,
+          name: 'node',
+          field: 'configuration.type',
+        },
       },
     ],
   });
@@ -190,6 +216,21 @@ test('readAll reports missing argsFile in generateReadiness', async () => {
     field: 'argsFile',
     message:
       'argsFile does not exist: /workspace/readiness-missing-args-project/missing-args.json',
+    target: { kind: 'config', index: 0 },
+  });
+  assert.deepEqual(data.generateReadiness?.diagnostics[0], {
+    severity: 'error',
+    source: 'core-validation',
+    file: 'config.json',
+    field: 'argsFile',
+    message:
+      'argsFile does not exist: /workspace/readiness-missing-args-project/missing-args.json',
+    target: {
+      kind: 'config',
+      index: 0,
+      name: 'Launch',
+      field: 'argsFile',
+    },
   });
 });
 

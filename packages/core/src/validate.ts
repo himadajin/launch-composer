@@ -5,6 +5,7 @@ import type {
   GenerateInput,
   ProfileRef,
   ValidationError,
+  ValidationErrorTarget,
   ValidationState,
 } from './types.js';
 import { resolveArgsFilePath } from './variables.js';
@@ -89,6 +90,7 @@ function validateConfigFiles(
           file: configFile.file,
           field: 'configurations',
           message: 'Config file configurations must be an array.',
+          target: { kind: 'configFile' },
         }),
       );
     }
@@ -106,6 +108,7 @@ function validateProfileEntries(
           file: profileRef.file,
           field: 'name',
           message: 'Profile name is required.',
+          target: profileTarget(profileRef),
         }),
       );
     }
@@ -119,6 +122,7 @@ function validateProfileEntries(
           file: profileRef.file,
           field: 'args',
           message: 'Profile args must be an array of strings.',
+          target: profileTarget(profileRef),
         }),
       );
     }
@@ -136,6 +140,7 @@ function validateProfileEntries(
           file: profileRef.file,
           field: 'configuration',
           message: 'Profile configuration must be an object.',
+          target: profileTarget(profileRef),
         }),
       );
       continue;
@@ -147,6 +152,7 @@ function validateProfileEntries(
           file: profileRef.file,
           field: 'configuration.request',
           message: `Profile request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
+          target: profileTarget(profileRef),
         }),
       );
     }
@@ -157,6 +163,7 @@ function validateProfileEntries(
           file: profileRef.file,
           field: 'configuration.type',
           message: 'Profile type is required.',
+          target: profileTarget(profileRef),
         }),
       );
     }
@@ -174,6 +181,7 @@ function validateConfigEntries(
           file: configRef.file,
           field: 'name',
           message: 'Config name is required.',
+          target: configTarget(configRef),
         }),
       );
     }
@@ -188,6 +196,7 @@ function validateConfigEntries(
           configName: safeConfigName(configRef.data.name),
           field: 'excluded',
           message: 'Config excluded must be a boolean.',
+          target: configTarget(configRef),
         }),
       );
     }
@@ -199,6 +208,7 @@ function validateConfigEntries(
           configName: safeConfigName(configRef.data.name),
           field: 'profile',
           message: 'Config profile is required.',
+          target: configTarget(configRef),
         }),
       );
     }
@@ -214,6 +224,7 @@ function validateConfigEntries(
           configName: safeConfigName(configRef.data.name),
           field: 'argsFile',
           message: 'Config argsFile must be a string.',
+          target: configTarget(configRef),
         }),
       );
     }
@@ -228,6 +239,7 @@ function validateConfigEntries(
           configName: safeConfigName(configRef.data.name),
           field: 'args',
           message: 'Config args must be an array of strings.',
+          target: configTarget(configRef),
         }),
       );
     }
@@ -246,6 +258,7 @@ function validateConfigEntries(
           configName: safeConfigName(configRef.data.name),
           field: 'configuration',
           message: 'Config configuration must be an object.',
+          target: configTarget(configRef),
         }),
       );
       continue;
@@ -321,6 +334,7 @@ function validateNameUniqueness(
         file: firstEntry.file,
         field: 'name',
         message,
+        target: { kind: firstEntry.kind, index: firstEntry.index },
       }),
     );
   }
@@ -343,6 +357,7 @@ function validateConfigSemantics(
         configName: safeConfigName(configRef.data.name),
         field: 'profile',
         message: `Config references unknown profile "${configRef.data.profile}".`,
+        target: configTarget(configRef),
       }),
     );
   }
@@ -356,6 +371,7 @@ function validateConfigSemantics(
           configName: safeConfigName(configRef.data.name),
           field: `configuration.${key}`,
           message: `Config with a profile cannot override "${key}".`,
+          target: configTarget(configRef),
         }),
       );
     }
@@ -372,6 +388,7 @@ function validateConfigSemantics(
         field: 'argsFile',
         message:
           'Config cannot specify argsFile when the selected profile already defines args.',
+        target: configTarget(configRef),
       }),
     );
   }
@@ -402,6 +419,7 @@ async function validateArgsFile(
         configName: safeConfigName(configRef.data.name),
         field: 'argsFile',
         message: resolvedPath.message,
+        target: configTarget(configRef),
       }),
     );
     return;
@@ -419,6 +437,7 @@ async function validateArgsFile(
         field: 'argsFile',
         message:
           'argsFile was specified, but no args file reader was provided.',
+        target: configTarget(configRef),
       }),
     );
     return;
@@ -432,6 +451,7 @@ async function validateArgsFile(
         configName: safeConfigName(configRef.data.name),
         field: 'argsFile',
         message: `argsFile does not exist: ${resolvedPath.value}`,
+        target: configTarget(configRef),
       }),
     );
     return;
@@ -445,6 +465,7 @@ async function validateArgsFile(
         field: 'argsFile',
         message:
           result.message ?? `Failed to read argsFile: ${resolvedPath.value}`,
+        target: configTarget(configRef),
       }),
     );
     return;
@@ -458,6 +479,7 @@ async function validateArgsFile(
         field: 'argsFile',
         message:
           'argsFile content is invalid. Expected an object with an "args" string array.',
+        target: configTarget(configRef),
       }),
     );
     return;
@@ -492,6 +514,14 @@ function safeConfigName(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
+function profileTarget(profileRef: ProfileRef): ValidationErrorTarget {
+  return { kind: 'profile', index: profileRef.index };
+}
+
+function configTarget(configRef: ConfigRef): ValidationErrorTarget {
+  return { kind: 'config', index: configRef.index };
+}
+
 function isDebugRequestValue(
   value: unknown,
 ): value is (typeof DEBUG_REQUEST_VALUES)[number] {
@@ -506,6 +536,7 @@ function createValidationError(input: {
   message: string;
   field?: string | undefined;
   configName?: string | undefined;
+  target?: ValidationErrorTarget | undefined;
 }): ValidationError {
   const error: ValidationError = {
     file: input.file,
@@ -518,6 +549,10 @@ function createValidationError(input: {
 
   if (input.configName !== undefined) {
     error.configName = input.configName;
+  }
+
+  if (input.target !== undefined) {
+    error.target = input.target;
   }
 
   return error;

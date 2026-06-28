@@ -36,11 +36,17 @@ export interface ArgsFileData {
   [key: string]: unknown;
 }
 
+export interface ValidationErrorTarget {
+  kind: 'profile' | 'config' | 'configFile';
+  index?: number;
+}
+
 export interface ValidationError {
   file: string;
   configName?: string;
   field?: string;
   message: string;
+  target?: ValidationErrorTarget;
 }
 
 export interface LaunchConfig {

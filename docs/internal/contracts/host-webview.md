@@ -23,7 +23,12 @@ Extension Host と Webview の message shape は `packages/extension/src/message
   - canonical source: `GenerateReadiness` in `packages/extension/src/messages.ts`
   - mirror source: `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md), [../specs/ui.md](../specs/ui.md)
-  - 注意: Generate と同じ判定源から計算する workspace 全体の生成可能性
+  - 注意: Generate と同じ判定源から計算する workspace 全体の生成可能性。`diagnostics` は Webview UI 配置用
+- 契約: generate diagnostic
+  - canonical source: `GenerateDiagnostic` in `packages/extension/src/messages.ts`
+  - mirror source: `packages/webview/src/types.ts`
+  - behavior spec: [../specs/communication.md](../specs/communication.md), [../specs/ui.md](../specs/ui.md)
+  - 注意: `ValidationError` または invalid file issue から Host が生成する UI diagnostic
 - 契約: entry patch operation
   - canonical source: `EntryPatchOperation` in `packages/extension/src/messages.ts`
   - mirror source: `packages/webview/src/types.ts`

@@ -20,7 +20,7 @@ import type {
   ProfileData,
 } from './types.js';
 import {
-  formatValidationError,
+  getEditorDiagnostics,
   mergeWorkspaceUpdatePayload,
   normalizeGenerateReadiness,
   normalizeInitialDataPayload,
@@ -222,6 +222,10 @@ export function App() {
     (issue) =>
       issue.kind === payload.editor.kind && issue.file === payload.editor.file,
   );
+  const currentDiagnostics =
+    currentIssue === undefined
+      ? getEditorDiagnostics(payload.generateReadiness, payload.editor)
+      : [];
   if (current === undefined && currentIssue === undefined) {
     return (
       <main className="settings-editor composer-shell">
@@ -269,6 +273,7 @@ export function App() {
             }
             sourceFile={payload.editor.file}
             autoSaveDelay={payload.autoSaveDelay}
+            diagnostics={currentDiagnostics}
             {...(currentIssue === undefined
               ? {}
               : {
@@ -305,6 +310,7 @@ export function App() {
             sourceFile={payload.editor.file}
             profiles={profileCatalog}
             autoSaveDelay={payload.autoSaveDelay}
+            diagnostics={currentDiagnostics}
             {...(currentIssue === undefined
               ? {}
               : {
@@ -459,13 +465,10 @@ function GenerateStatus({
         </p>
       </div>
       {readiness.errors.length > 0 ? (
-        <ul className="composer-generate-status-list">
-          {readiness.errors.map((error, index) => (
-            <li key={`${error.file}:${error.field ?? ''}:${index}`}>
-              {formatValidationError(error)}
-            </li>
-          ))}
-        </ul>
+        <p className="composer-generate-status-detail">
+          Fix the highlighted fields, entry issues, or JSON status in the editor
+          below.
+        </p>
       ) : null}
     </section>
   );

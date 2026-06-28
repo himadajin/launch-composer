@@ -24,6 +24,7 @@ test.beforeEach(() => {
 const READY_TO_GENERATE = {
   ready: true,
   errors: [],
+  diagnostics: [],
 };
 
 test('open sets the panel title to the current profile name', async () => {

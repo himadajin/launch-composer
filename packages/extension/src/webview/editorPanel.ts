@@ -39,6 +39,7 @@ interface EditorPanelOptions {
 const DEFAULT_GENERATE_READINESS: GenerateReadiness = {
   ready: true,
   errors: [],
+  diagnostics: [],
 };
 
 export class EditorPanelController {

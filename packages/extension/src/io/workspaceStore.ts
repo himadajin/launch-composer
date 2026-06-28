@@ -8,10 +8,15 @@ import {
   type GenerateResult,
   type ProfileData,
   type ProfileFileData,
+  type ValidationError,
 } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
-import type { EditorTarget, GenerateReadiness } from '../messages.js';
+import type {
+  EditorTarget,
+  GenerateDiagnostic,
+  GenerateReadiness,
+} from '../messages.js';
 import {
   appendJsonArrayValue,
   applyJsonDocumentPatches,
@@ -146,12 +151,17 @@ export class WorkspaceStore {
     snapshot: WorkspaceDataWithoutReadiness,
   ): Promise<GenerateReadiness> {
     if (snapshot.issues.length > 0) {
+      const errors = snapshot.issues.map((issue) => ({
+        file: issue.file,
+        message: issue.message,
+      }));
+
       return {
         ready: false,
-        errors: snapshot.issues.map((issue) => ({
-          file: issue.file,
-          message: issue.message,
-        })),
+        errors,
+        diagnostics: snapshot.issues.map((issue) =>
+          this.createInvalidFileDiagnostic(issue),
+        ),
       };
     }
 
@@ -162,7 +172,115 @@ export class WorkspaceStore {
     return {
       ready: errors.length === 0,
       errors,
+      diagnostics: errors.map((error) =>
+        this.createCoreValidationDiagnostic(error, snapshot),
+      ),
     };
+  }
+
+  private createInvalidFileDiagnostic(
+    issue: ComposerDataIssue,
+  ): GenerateDiagnostic {
+    return {
+      severity: 'error',
+      source: 'invalid-file',
+      file: issue.file,
+      message: issue.message,
+      target: { kind: 'file' },
+    };
+  }
+
+  private createCoreValidationDiagnostic(
+    error: ValidationError,
+    snapshot: WorkspaceDataWithoutReadiness,
+  ): GenerateDiagnostic {
+    const diagnostic: GenerateDiagnostic = {
+      severity: 'error',
+      source: 'core-validation',
+      file: error.file,
+      message: error.message,
+    };
+
+    if (error.field !== undefined) {
+      diagnostic.field = error.field;
+    }
+
+    if (error.target?.kind === 'profile') {
+      const profile = findProfileEntry(
+        snapshot.profiles,
+        error.file,
+        error.target.index,
+      );
+      const target: NonNullable<GenerateDiagnostic['target']> = {
+        kind: 'profile',
+      };
+      if (error.target.index !== undefined) {
+        target.index = error.target.index;
+      }
+      if (profile?.name !== undefined) {
+        target.name = profile.name;
+      }
+      if (error.field !== undefined) {
+        target.field = error.field;
+      }
+      diagnostic.target = target;
+      return diagnostic;
+    }
+
+    if (error.target?.kind === 'config') {
+      const config = findConfigEntry(
+        snapshot.configs,
+        error.file,
+        error.target.index,
+      );
+      const target: NonNullable<GenerateDiagnostic['target']> = {
+        kind: 'config',
+      };
+      if (error.target.index !== undefined) {
+        target.index = error.target.index;
+      }
+      const name = config?.data.name ?? error.configName;
+      if (name !== undefined) {
+        target.name = name;
+      }
+      if (error.field !== undefined) {
+        target.field = error.field;
+      }
+      diagnostic.target = target;
+      return diagnostic;
+    }
+
+    if (error.target?.kind === 'configFile') {
+      const target: NonNullable<GenerateDiagnostic['target']> = {
+        kind: 'file',
+      };
+      if (error.field !== undefined) {
+        target.field = error.field;
+      }
+      diagnostic.target = target;
+      return diagnostic;
+    }
+
+    const config = findConfigEntryByName(
+      snapshot.configs,
+      error.file,
+      error.configName,
+    );
+    if (config !== undefined) {
+      const target: NonNullable<GenerateDiagnostic['target']> = {
+        kind: 'config',
+        index: config.index,
+      };
+      if (config.data.name !== undefined) {
+        target.name = config.data.name;
+      }
+      if (error.field !== undefined) {
+        target.field = error.field;
+      }
+      diagnostic.target = target;
+    }
+
+    return diagnostic;
   }
 
   private createGenerateInput(
@@ -1300,6 +1418,60 @@ function assertIndex(entries: unknown[], index: number, file: string): void {
   if (index < 0 || index >= entries.length) {
     throw new Error(`Entry index ${index} is out of bounds for ${file}.`);
   }
+}
+
+function findProfileEntry(
+  files: ProfileFileData[],
+  file: string,
+  index: number | undefined,
+): ProfileData | undefined {
+  if (index === undefined) {
+    return undefined;
+  }
+
+  return files.find((fileData) => fileData.file === file)?.profiles[index];
+}
+
+function findConfigEntry(
+  files: ConfigFileData[],
+  file: string,
+  index: number | undefined,
+): { index: number; data: ConfigData } | undefined {
+  if (index === undefined) {
+    return undefined;
+  }
+
+  const data = files.find((fileData) => fileData.file === file)?.configurations[
+    index
+  ];
+  return data === undefined ? undefined : { index, data };
+}
+
+function findConfigEntryByName(
+  files: ConfigFileData[],
+  file: string,
+  name: string | undefined,
+): { index: number; data: ConfigData } | undefined {
+  if (name === undefined) {
+    return undefined;
+  }
+
+  const fileData = files.find((entry) => entry.file === file);
+  if (fileData === undefined) {
+    return undefined;
+  }
+
+  const index = fileData.configurations.findIndex(
+    (config) => config.name === name,
+  );
+  if (index === -1) {
+    return undefined;
+  }
+
+  return {
+    index,
+    data: fileData.configurations[index]!,
+  };
 }
 
 function decodeText(bytes: Uint8Array): string {

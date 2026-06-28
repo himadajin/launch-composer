@@ -121,16 +121,10 @@ textarea {
   font-size: 13px;
 }
 
-.composer-generate-status-list {
-  margin: 8px 0 0;
-  padding-left: 18px;
+.composer-generate-status-detail {
+  margin: 3px 0 0;
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
-  line-height: 1.45;
-}
-
-.composer-generate-status-list li + li {
-  margin-top: 3px;
 }
 
 .composer-form {
@@ -152,6 +146,12 @@ textarea {
   flex-direction: column;
   align-items: flex-start;
   gap: 6px;
+}
+
+.composer-diagnostic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .composer-json-hint {

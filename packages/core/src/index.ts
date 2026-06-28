@@ -15,6 +15,7 @@ export type {
   ProfileEntry,
   ProfileFileData,
   ValidationError,
+  ValidationErrorTarget,
 } from './types.js';
 
 export { buildLaunchArgs, buildLaunchConfig } from './merge.js';

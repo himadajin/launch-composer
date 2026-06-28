@@ -9,7 +9,12 @@ import {
 } from '@himadajin/vscode-components';
 import { useEffect, useRef, useState } from 'react';
 
-import type { ComposerDataIssue, ProfileData } from '../types.js';
+import type {
+  ComposerDataIssue,
+  GenerateDiagnostic,
+  ProfileData,
+} from '../types.js';
+import { EntryIssuesRow, renderHelperMessages } from './DiagnosticMessages.js';
 import type { EntryChange } from './entryChanges.js';
 import {
   updateProfileArgs,
@@ -24,13 +29,29 @@ import {
   isInternalProfileRequestSelectValue,
   resolveProfileRequestSelectState,
 } from './profileRequestSelect.js';
+import {
+  getEntryIssueDiagnostics,
+  getFieldDiagnosticMessages,
+  mergeHelperMessages,
+} from './generateReadiness.js';
 import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
+
+const PROFILE_VISIBLE_DIAGNOSTIC_FIELDS = [
+  'name',
+  'configuration.type',
+  'configuration.request',
+  'configuration.program',
+  'configuration.cwd',
+  'configuration.stopAtEntry',
+  'args',
+] as const;
 
 interface ProfileEditorProps {
   data: ProfileData;
   sourceFile: string;
   autoSaveDelay: number;
+  diagnostics?: GenerateDiagnostic[];
   onChange: (change: EntryChange<ProfileData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
@@ -41,6 +62,7 @@ export function ProfileEditor({
   data,
   sourceFile,
   autoSaveDelay,
+  diagnostics = [],
   onChange,
   onRename,
   onOpenJson,
@@ -131,6 +153,32 @@ export function ProfileEditor({
   const requestSelect = resolveProfileRequestSelectState(
     data.configuration?.request,
   );
+  const nameHelperMessages = getFieldDiagnosticMessages(diagnostics, 'name');
+  const typeHelperMessages = mergeHelperMessages(
+    getFieldDiagnosticMessages(diagnostics, 'configuration.type'),
+    [typeHelperMessage],
+  );
+  const requestHelperMessages = mergeHelperMessages(
+    getFieldDiagnosticMessages(diagnostics, 'configuration.request'),
+    [requestSelect.helperMessage],
+  );
+  const programHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.program',
+  );
+  const cwdHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.cwd',
+  );
+  const stopAtEntryHelperMessages = getFieldDiagnosticMessages(
+    diagnostics,
+    'configuration.stopAtEntry',
+  );
+  const argsHelperMessages = getFieldDiagnosticMessages(diagnostics, 'args');
+  const entryIssueDiagnostics = getEntryIssueDiagnostics(
+    diagnostics,
+    PROFILE_VISIBLE_DIAGNOSTIC_FIELDS,
+  );
 
   return (
     <div className="composer-editor">
@@ -164,10 +212,17 @@ export function ProfileEditor({
           </FormGroup>
         ) : null}
 
+        <EntryIssuesRow
+          diagnostics={entryIssueDiagnostics}
+          sourceFile={sourceFile}
+          onOpenJson={onOpenJson}
+        />
+
         <FormGroup
           category="Launch Composer"
           label="Profile: Name"
           description="Profile identifier. Config profile references this value."
+          helper={renderHelperMessages(nameHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -190,11 +245,7 @@ export function ProfileEditor({
         <FormGroup
           label="Profile: Type"
           description="Debug adapter type used in generated launch.json."
-          helper={
-            typeHelperMessage === undefined ? undefined : (
-              <FormHelper tone="warning">{typeHelperMessage}</FormHelper>
-            )
-          }
+          helper={renderHelperMessages(typeHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -206,13 +257,7 @@ export function ProfileEditor({
         <FormGroup
           label="Profile: Request"
           description="Debug request passed to the adapter."
-          helper={
-            requestSelect.helperMessage === undefined ? undefined : (
-              <FormHelper tone="warning">
-                {requestSelect.helperMessage}
-              </FormHelper>
-            )
-          }
+          helper={renderHelperMessages(requestHelperMessages)}
         >
           <Select
             disabled={readOnly}
@@ -236,6 +281,7 @@ export function ProfileEditor({
         <FormGroup
           label="Profile: Program"
           description="Program path or expression used by the debugger."
+          helper={renderHelperMessages(programHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -247,6 +293,7 @@ export function ProfileEditor({
         <FormGroup
           label="Profile: Working Directory"
           description="Working directory passed to the debug adapter."
+          helper={renderHelperMessages(cwdHelperMessages)}
         >
           <TextInput
             disabled={readOnly}
@@ -259,6 +306,7 @@ export function ProfileEditor({
           label="Profile: Stop At Entry"
           description="Pause execution immediately after the program starts."
           modified={data.configuration?.stopAtEntry === true}
+          helper={renderHelperMessages(stopAtEntryHelperMessages)}
         >
           <Checkbox
             toggle
@@ -280,6 +328,7 @@ export function ProfileEditor({
         <FormGroup
           label="Profile: Args"
           description="Arguments appended to the debug configuration."
+          helper={renderHelperMessages(argsHelperMessages)}
           fill
         >
           {readOnly ? (

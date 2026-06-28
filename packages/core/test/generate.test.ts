@@ -201,6 +201,21 @@ test('validateGenerateInput reports spec violations together', async () => {
     errors.map((error) => error.message).join('\n'),
     /absolute path/,
   );
+  assert.deepEqual(
+    errors.map((error) => ({
+      field: error.field,
+      target: error.target,
+    })),
+    [
+      { field: 'name', target: { kind: 'profile', index: 0 } },
+      { field: 'profile', target: { kind: 'config', index: 0 } },
+      {
+        field: 'configuration.program',
+        target: { kind: 'config', index: 0 },
+      },
+      { field: 'argsFile', target: { kind: 'config', index: 0 } },
+    ],
+  );
 });
 
 test('generate fails when a profile request is not launch or attach', async () => {
@@ -231,6 +246,10 @@ test('generate fails when a profile request is not launch or attach', async () =
     result.errors[0]?.message ?? '',
     /Profile request must be one of/,
   );
+  assert.deepEqual(result.errors[0]?.target, {
+    kind: 'profile',
+    index: 0,
+  });
 });
 
 test('generate fails when config.profile is missing', async () => {
@@ -255,6 +274,10 @@ test('generate fails when config.profile is missing', async () => {
   }
 
   assert.match(result.errors[0]?.message ?? '', /Config profile is required/);
+  assert.deepEqual(result.errors[0]?.target, {
+    kind: 'config',
+    index: 0,
+  });
 });
 
 test('generate fails when profile args and config argsFile are combined', async () => {
@@ -298,6 +321,10 @@ test('generate fails when profile args and config argsFile are combined', async 
   }
 
   assert.match(result.errors[0]?.message ?? '', /cannot specify argsFile/);
+  assert.deepEqual(result.errors[0]?.target, {
+    kind: 'config',
+    index: 0,
+  });
 });
 
 test('generate treats omitted excluded values as included', async () => {
@@ -374,4 +401,5 @@ test('validateGenerateInput rejects legacy config array files', async () => {
     errors.map((error) => error.message).join('\n'),
     /configurations must be an array/i,
   );
+  assert.deepEqual(errors[0]?.target, { kind: 'configFile' });
 });

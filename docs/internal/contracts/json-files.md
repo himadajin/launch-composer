@@ -44,7 +44,7 @@ JSON file data と Generate 入出力の shape は `packages/core/src/types.ts` 
   - 用途: Generate failure と Webview への error 表示に使う
   - canonical source: `ValidationError` in `packages/core/src/types.ts`
   - behavior spec: [../specs/core.md](../specs/core.md), [../specs/communication.md](../specs/communication.md)
-  - 注意: invalid file issue は Extension Host で validation-style error に変換される
+  - 注意: invalid file issue は Extension Host で validation-style error に変換される。`target` は Host/Webview diagnostic 生成用の optional metadata
 
 ## Ownership
 

@@ -36,11 +36,32 @@ export interface ValidationError {
   configName?: string;
   field?: string;
   message: string;
+  target?: {
+    kind: 'profile' | 'config' | 'configFile';
+    index?: number;
+  };
+}
+
+export interface GenerateDiagnosticTarget {
+  kind: 'profile' | 'config' | 'file';
+  index?: number;
+  name?: string;
+  field?: string;
+}
+
+export interface GenerateDiagnostic {
+  severity: 'error';
+  source: 'core-validation' | 'invalid-file';
+  file: string;
+  message: string;
+  field?: string;
+  target?: GenerateDiagnosticTarget;
 }
 
 export interface GenerateReadiness {
   ready: boolean;
   errors: ValidationError[];
+  diagnostics: GenerateDiagnostic[];
 }
 
 export interface EditorTarget {
