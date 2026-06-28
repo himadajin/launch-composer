@@ -65,7 +65,7 @@ Copy this as `.vscode/launch-composer/profiles/profile.json`:
 ```
 
 `configuration` is passed through to the generated VS Code launch configuration.
-`type` and `request` belong in the profile.
+`program`, `type`, and `request` belong in the profile.
 
 ## Configs
 

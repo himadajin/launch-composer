@@ -1,7 +1,7 @@
 {
   "name": "launch-composer",
   "displayName": "Launch Composer",
-  "description": "Compose VSCode launch.json from profiles and configs.",
+  "description": "Compose VS Code launch.json from profiles and configs.",
   "version": "0.1.1",
   "publisher": "himadajin",
   "license": "MIT",

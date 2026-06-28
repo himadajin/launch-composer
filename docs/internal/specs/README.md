@@ -22,6 +22,8 @@
 
 データ構造の canonical source は TypeScript 型である。変更対象の実装面に対応する仕様ファイルを同時に更新し、JSON file data や shared message shape を変更する場合は [contracts](../contracts/README.md) の contract map も確認する。
 
+保留中の product-design question は [pending decisions](../pending.md) に記録する。pending は将来検討の入口であり、仕様本文に昇格するまでは canonical behavior ではない。
+
 ## 概要
 
 Launch Composer は、ワークスペース内の `.vscode/launch-composer/` に置かれた profile と config を読み込み、VS Code の `.vscode/launch.json` を生成する拡張機能である。
@@ -36,7 +38,7 @@ argsFile
 
 `launch.json` はユーザーが Generate を実行したときだけ生成する。設定ファイルの変更は TreeView と Webview に反映するが、自動で `launch.json` を再生成しない。
 
-Launch Composer は単一ワークスペースフォルダーを前提にする。ワークスペースフォルダーが 0 件または複数件の場合、コマンドは登録されるが、実行時に「exactly one workspace folder」が必要であることを通知して処理を行わない。マルチルートワークスペースのデータ解決や生成結果は仕様対象外とする。
+Launch Composer は単一ワークスペースフォルダーを前提にする。ワークスペースフォルダーが 0 件または複数件の場合、contributed command は VS Code UI 上では disabled になる。Extension Host は同じ command ID を登録し、直接 command 実行された場合は「exactly one workspace folder」が必要であることを通知して処理を行わない。マルチルートワークスペースのデータ解決や生成結果は仕様対象外とする。
 
 ## 入出力ディレクトリ
 

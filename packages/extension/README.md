@@ -9,17 +9,6 @@ you edit by hand.
 
 Launch Composer works with exactly one workspace folder.
 
-## Install From Source
-
-From this repository:
-
-```bash
-npm install
-npm run install:vscode
-```
-
-This builds a VSIX package and installs it into VS Code.
-
 ## Quick Start
 
 1. Open a single-folder workspace in VS Code.
@@ -68,7 +57,7 @@ Copy this as `.vscode/launch-composer/profiles/profile.json`:
 ```
 
 `configuration` is passed through to the generated VS Code launch configuration.
-`type` and `request` belong in the profile.
+`program`, `type`, and `request` belong in the profile.
 
 ## Configs
 
@@ -109,6 +98,17 @@ its profile and written to `.vscode/launch.json`.
   generation succeeds.
 - Use `excluded: true` on a config entry to keep it out of the generated
   `launch.json`. Excluded entries are still validated.
+
+## Install From Source
+
+From this repository:
+
+```bash
+npm install
+npm run install:vscode
+```
+
+This builds a VSIX package and installs it into VS Code.
 
 ## More Information
 
