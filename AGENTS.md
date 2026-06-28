@@ -4,6 +4,13 @@
 
 This file is a durable working contract for coding agents in this repository. Keep it focused on repository-specific build, test, architecture, and verification rules. Do not add product overview content, issue-specific notes, or generic TypeScript/React/PR advice that belongs in `README.md`, `docs/`, or the current task prompt.
 
+## Start Here
+
+- Product behavior, package responsibilities, and spec routing are defined in `docs/spec.md`.
+- Data contract routing is defined in `docs/contracts/README.md`.
+- npm script definitions are in `package.json`; the required agent verification gate is listed in this file.
+- This file is the canonical source for agent workflow, coding guardrails, verification expectations, external reference policy, testing policy, and commit policy.
+
 ## Project Structure
 
 This repository is an npm workspace with three packages under `packages/`:

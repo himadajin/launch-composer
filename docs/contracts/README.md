@@ -22,3 +22,4 @@
 - contract map には型全文や大きな JSON 例を複製しない。
 - JSON Schema ファイルは置かない。`configuration` などのパススルー領域は TypeScript の `unknown` / index signature と仕様本文で扱う。
 - behavior は `docs/spec*.md` に書く。contract map には責務と正規参照先だけを書く。
+- 実装作業時の agent workflow、verification gate、coding guardrails は [../../AGENTS.md](../../AGENTS.md) に従う。

@@ -188,7 +188,7 @@ React 19 + Vite 7 で実装する Webview UI である。ビルド成果物は e
 
 ## ビルドと検証
 
-ルートの npm scripts を使う。
+ルートの npm scripts を使う。script 定義の正は `package.json` である。実装作業時の agent verification gate と作業ルールは [../AGENTS.md](../AGENTS.md) を参照する。
 
 - コマンド: `npm run build`
   - 内容: core、webview、extension を順にビルドする
@@ -205,4 +205,4 @@ React 19 + Vite 7 で実装する Webview UI である。ビルド成果物は e
 - コマンド: `npm run install:vscode`
   - 内容: extension workspace の install script を実行する
 
-テストは Node.js の `node --test` を使う。package ごとの詳細な script は各 `package.json` を参照する。
+package ごとの詳細な script は各 `package.json` を参照する。
