@@ -208,12 +208,6 @@ export function App() {
       : payload.configs.find(
           (fileData) => fileData.file === payload.editor.file,
         )?.configurations[payload.editor.index];
-  const currentConfigFile =
-    payload.editor.kind === 'config'
-      ? payload.configs.find(
-          (fileData) => fileData.file === payload.editor.file,
-        )
-      : undefined;
   const currentIssue = payload.issues.find(
     (issue) =>
       issue.kind === payload.editor.kind && issue.file === payload.editor.file,
@@ -298,7 +292,6 @@ export function App() {
               createPlaceholderConfig(payload.editor.file)
             }
             sourceFile={payload.editor.file}
-            fileEnabled={currentConfigFile?.enabled !== false}
             profiles={profileCatalog}
             autoSaveDelay={payload.autoSaveDelay}
             {...(currentIssue === undefined
@@ -449,7 +442,6 @@ function createPlaceholderProfile(file: string): ProfileData {
 function createPlaceholderConfig(file: string): ConfigData {
   return {
     name: file,
-    enabled: true,
     profile: '',
   };
 }

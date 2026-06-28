@@ -47,6 +47,10 @@ test('package.json command contributions stay aligned with the extension impleme
           when?: string;
           group?: string;
         }>;
+        commandPalette?: Array<{
+          command: string;
+          when?: string;
+        }>;
       };
     };
   };
@@ -94,15 +98,59 @@ test('package.json command contributions stay aligned with the extension impleme
   assert.ok(
     itemContextMenu.some(
       (item) =>
-        item.command === 'launch-composer.enableConfig' &&
+        item.command === 'launch-composer.includeConfig' &&
+        item.when === 'viewItem == configEntryDisabled' &&
         item.group === '0_state@1',
     ),
   );
   assert.ok(
     itemContextMenu.some(
       (item) =>
-        item.command === 'launch-composer.disableConfig' &&
+        item.command === 'launch-composer.excludeConfig' &&
+        item.when === 'viewItem == configEntryEnabled' &&
         item.group === '0_state@1',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.some(
+      (item) =>
+        item.command === 'launch-composer.includeAllConfigs' &&
+        item.when ===
+          'view == launchComposer.configs && viewItem == configFile' &&
+        item.group === '0_state@1',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.some(
+      (item) =>
+        item.command === 'launch-composer.excludeAllConfigs' &&
+        item.when ===
+          'view == launchComposer.configs && viewItem == configFile' &&
+        item.group === '0_state@2',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.every(
+      (item) =>
+        item.command !== 'launch-composer.includeConfig' ||
+        !(item.when ?? '').includes('configFile'),
+    ),
+  );
+  assert.ok(
+    itemContextMenu.every(
+      (item) =>
+        item.command !== 'launch-composer.excludeConfig' ||
+        !(item.when ?? '').includes('configFile'),
+    ),
+  );
+  assert.ok(
+    itemContextMenu.every(
+      (item) =>
+        ![
+          'launch-composer.includeAllConfigs',
+          'launch-composer.excludeAllConfigs',
+        ].includes(item.command) ||
+        !(item.when ?? '').includes('configFileInvalid'),
     ),
   );
   const inlineMenu = itemContextMenu.filter((item) => item.group === 'inline');
@@ -111,6 +159,23 @@ test('package.json command contributions stay aligned with the extension impleme
     'launch-composer.addProfileEntry',
     'launch-composer.openItemJson',
   ]);
+
+  const commandPalette = packageJson.contributes.menus?.commandPalette;
+  assert.ok(commandPalette);
+  assert.ok(
+    commandPalette.some(
+      (item) =>
+        item.command === 'launch-composer.includeAllConfigs' &&
+        item.when === 'false',
+    ),
+  );
+  assert.ok(
+    commandPalette.some(
+      (item) =>
+        item.command === 'launch-composer.excludeAllConfigs' &&
+        item.when === 'false',
+    ),
+  );
 
   for (const command of packageJson.contributes.commands) {
     assert.equal(command.enablement, SINGLE_WORKSPACE_ENABLEMENT);

@@ -36,7 +36,6 @@ const DEFAULT_CONFIG_CONTENT =
   '// Configure this file and add entries to "configurations".\n' +
   '// Set "profile" to reference a profile.\n' +
   '{\n' +
-  '  "enabled": true,\n' +
   '  "configurations": []\n' +
   '}\n';
 
@@ -337,7 +336,7 @@ export class WorkspaceStore {
     await this.ensureConfigDataFile(file);
     const text = await this.readRequiredDataFileText('config', file);
     const configFile = this.parseConfigFileContent(file, text);
-    const data: ConfigData = { name, enabled: true, profile: profileName };
+    const data: ConfigData = { name, profile: profileName };
 
     const nextText = appendJsonArrayValue(text, ['configurations'], data);
     await this.writeDataFileText('config', file, nextText);
@@ -367,31 +366,94 @@ export class WorkspaceStore {
     return this.patchArrayEntry('config', file, index, baseRevision, patches);
   }
 
-  async toggleConfigEnabled(file: string, index: number): Promise<void> {
+  async toggleConfigExcluded(file: string, index: number): Promise<void> {
     const text = await this.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
     assertIndex(fileData.configurations, index, file);
     const current = fileData.configurations[index]!;
-    const nextText = applyJsonDocumentPatches(text, [
-      {
-        type: 'set',
-        path: ['configurations', index, 'enabled'],
-        value: current.enabled === false,
-      },
-    ]);
+    const nextText = applyJsonDocumentPatches(
+      text,
+      current.excluded === true
+        ? [
+            {
+              type: 'delete',
+              path: ['configurations', index, 'excluded'],
+            },
+          ]
+        : [
+            {
+              type: 'set',
+              path: ['configurations', index, 'excluded'],
+              value: true,
+            },
+          ],
+    );
     await this.writeDataFileText('config', file, nextText);
   }
 
-  async toggleConfigFileEnabled(file: string): Promise<void> {
+  async setConfigExcluded(
+    file: string,
+    index: number,
+    excluded: boolean,
+  ): Promise<void> {
     const text = await this.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
-    const nextText = applyJsonDocumentPatches(text, [
-      {
-        type: 'set',
-        path: ['enabled'],
-        value: fileData.enabled === false,
-      },
-    ]);
+    assertIndex(fileData.configurations, index, file);
+    const current = fileData.configurations[index]!;
+    if ((current.excluded === true) === excluded) {
+      return;
+    }
+
+    const nextText = applyJsonDocumentPatches(
+      text,
+      excluded
+        ? [
+            {
+              type: 'set',
+              path: ['configurations', index, 'excluded'],
+              value: true,
+            },
+          ]
+        : [
+            {
+              type: 'delete',
+              path: ['configurations', index, 'excluded'],
+            },
+          ],
+    );
+    await this.writeDataFileText('config', file, nextText);
+  }
+
+  async setConfigFileExcluded(file: string, excluded: boolean): Promise<void> {
+    const text = await this.readRequiredDataFileText('config', file);
+    const fileData = this.parseConfigFileContent(file, text);
+    const patches: JsonObjectPatchOperation[] = [];
+
+    fileData.configurations.forEach((config, index) => {
+      if (excluded) {
+        if (config.excluded !== true) {
+          patches.push({
+            type: 'set',
+            path: ['configurations', index, 'excluded'],
+            value: true,
+          });
+        }
+        return;
+      }
+
+      if (Object.hasOwn(config, 'excluded')) {
+        patches.push({
+          type: 'delete',
+          path: ['configurations', index, 'excluded'],
+        });
+      }
+    });
+
+    if (patches.length === 0) {
+      return;
+    }
+
+    const nextText = applyJsonDocumentPatches(text, patches);
     await this.writeDataFileText('config', file, nextText);
   }
 
@@ -712,11 +774,6 @@ export class WorkspaceStore {
       status: 'ok',
       data: {
         file,
-        ...(Object.hasOwn(parsed.value, 'enabled')
-          ? {
-              enabled: parsed.value.enabled as boolean,
-            }
-          : {}),
         configurations: parsed.value.configurations as ConfigData[],
       },
     };
@@ -758,11 +815,6 @@ export class WorkspaceStore {
     }
 
     return {
-      ...(Object.hasOwn(parsed.value, 'enabled')
-        ? {
-            enabled: parsed.value.enabled as boolean,
-          }
-        : {}),
       configurations: parsed.value.configurations as ConfigData[],
     };
   }
@@ -1216,7 +1268,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function createEmptyConfigFile(): Omit<ConfigFileData, 'file'> {
   return {
-    enabled: true,
     configurations: [],
   };
 }

@@ -16,6 +16,8 @@ export const COMMANDS = {
   renameConfigFile: 'launch-composer.renameConfigFile',
   deleteConfigFile: 'launch-composer.deleteConfigFile',
   addConfigEntry: 'launch-composer.addConfigEntry',
+  includeAllConfigs: 'launch-composer.includeAllConfigs',
+  excludeAllConfigs: 'launch-composer.excludeAllConfigs',
   editItem: 'launch-composer.editItem',
   openActiveEditorJson: 'launch-composer.openActiveEditorJson',
   openItemJson: 'launch-composer.openItemJson',
@@ -23,9 +25,9 @@ export const COMMANDS = {
   copyItemFileRelativePath: 'launch-composer.copyItemFileRelativePath',
   renameItem: 'launch-composer.renameItem',
   deleteItem: 'launch-composer.deleteItem',
-  enableConfig: 'launch-composer.enableConfig',
-  disableConfig: 'launch-composer.disableConfig',
-  toggleEnabled: 'launch-composer.toggleEnabled',
+  includeConfig: 'launch-composer.includeConfig',
+  excludeConfig: 'launch-composer.excludeConfig',
+  toggleIncluded: 'launch-composer.toggleIncluded',
 } as const;
 
 export const CONTRIBUTED_COMMAND_IDS = Object.values(COMMANDS);

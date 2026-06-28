@@ -30,7 +30,6 @@ import {
 interface ConfigEditorProps {
   data: ConfigData;
   sourceFile: string;
-  fileEnabled: boolean;
   profiles: ProfileData[];
   autoSaveDelay: number;
   onBrowseFile: () => Promise<string | null>;
@@ -43,7 +42,6 @@ interface ConfigEditorProps {
 export function ConfigEditor({
   data,
   sourceFile,
-  fileEnabled,
   profiles,
   autoSaveDelay,
   onBrowseFile,
@@ -193,22 +191,15 @@ export function ConfigEditor({
         </FormGroup>
 
         <FormGroup
-          label="Config: Enabled"
+          label="Config: Include"
           description="Include this config when generating launch.json."
-          modified={data.enabled === true}
-          helper={
-            !fileEnabled ? (
-              <FormHelper tone="info">
-                This config is currently disabled by the file-level setting.
-              </FormHelper>
-            ) : undefined
-          }
+          modified={data.excluded === true}
         >
           <Checkbox
             toggle
-            checked={data.enabled === true}
+            checked={data.excluded !== true}
             disabled={readOnly}
-            label="Enabled"
+            label="Include"
             onChange={(checked) => {
               if (readOnly) {
                 return;

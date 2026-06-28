@@ -14,7 +14,7 @@ export interface ConfigEntry {
 
 export interface ConfigData {
   name: string;
-  enabled?: boolean;
+  excluded?: boolean;
   profile: string;
   argsFile?: string;
   args?: string[];
@@ -28,7 +28,6 @@ export interface ProfileFileData {
 
 export interface ConfigFileData {
   file: string;
-  enabled?: boolean;
   configurations: ConfigData[];
 }
 

@@ -14,7 +14,6 @@ const DEFAULT_CONFIG_TEXT =
   '// Configure this file and add entries to "configurations".\n' +
   '// Set "profile" to reference a profile.\n' +
   '{\n' +
-  '  "enabled": true,\n' +
   '  "configurations": []\n' +
   '}\n';
 
@@ -197,7 +196,7 @@ test('initialize creates only the missing default file when one already exists',
       'config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "keep-me",\n      "enabled": false\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "keep-me",\n      "excluded": true\n    }\n  ]\n}\n',
     ),
   );
 
@@ -225,7 +224,7 @@ test('initialize creates only the missing default file when one already exists',
   assert.equal(new TextDecoder().decode(profileBytes), DEFAULT_TEMPLATE_TEXT);
   assert.equal(
     new TextDecoder().decode(configBytes),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "keep-me",\n      "enabled": false\n    }\n  ]\n}\n',
+    '{\n  "configurations": [\n    {\n      "name": "keep-me",\n      "excluded": true\n    }\n  ]\n}\n',
   );
 });
 
@@ -364,7 +363,7 @@ test('readConfigsWithIssues reads config data without requiring profile director
       'config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch"\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch"\n    }\n  ]\n}\n',
     ),
   );
 
@@ -374,7 +373,6 @@ test('readConfigsWithIssues reads config data without requiring profile director
     configs: [
       {
         file: 'config.json',
-        enabled: true,
         configurations: [{ name: 'Launch' }],
       },
     ],
@@ -463,7 +461,7 @@ test('addConfigEntry creates its backing file when it does not exist', async () 
 
   assert.equal(
     new TextDecoder().decode(bytes).trim(),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Basic Test",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}',
+    '{\n  "configurations": [\n    {\n      "name": "Basic Test",\n      "profile": "cpp"\n    }\n  ]\n}',
   );
 });
 
@@ -580,23 +578,22 @@ test('addConfig command shows available profiles in selection order', async () =
   });
 });
 
-test('toggleConfigFileEnabled updates the file-level enabled flag', async () => {
+test('addConfigEntry creates included configs without exclusion state', async () => {
   const store = new WorkspaceStore(
-    vscode.Uri.file('/workspace/toggle-config-file-project'),
+    vscode.Uri.file('/workspace/new-config-file-project'),
   );
 
   await store.addConfigEntry('config.json', 'Launch', 'cpp');
-  await store.toggleConfigFileEnabled('config.json');
 
   const bytes = await vscode.workspace.fs.readFile(
     vscode.Uri.file(
-      '/workspace/toggle-config-file-project/.vscode/launch-composer/configs/config.json',
+      '/workspace/new-config-file-project/.vscode/launch-composer/configs/config.json',
     ),
   );
 
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "cpp"\n    }\n  ]\n}\n',
   );
 });
 
@@ -658,12 +655,10 @@ test('addConfigEntry preserves existing JSONC comments', async () => {
     new TextEncoder().encode(
       '{\n' +
         '  // keep file comment\n' +
-        '  "enabled": true,\n' +
         '  "configurations": [\n' +
         '    // keep config comment\n' +
         '    {\n' +
         '      "name": "Launch",\n' +
-        '      "enabled": true,\n' +
         '      "profile": "cpp"\n' +
         '    }\n' +
         '  ]\n' +
@@ -698,11 +693,9 @@ test('deleteEntry preserves comments around remaining entries', async () => {
     fileUri,
     new TextEncoder().encode(
       '{\n' +
-        '  "enabled": true,\n' +
         '  "configurations": [\n' +
         '    {\n' +
         '      "name": "Delete Me",\n' +
-        '      "enabled": true,\n' +
         '      "configuration": {\n' +
         '        "type": "node",\n' +
         '        "request": "launch"\n' +
@@ -711,7 +704,6 @@ test('deleteEntry preserves comments around remaining entries', async () => {
         '    {\n' +
         '      "name": "Keep Me",\n' +
         '      // keep surviving comment\n' +
-        '      "enabled": true,\n' +
         '      "configuration": {\n' +
         '        "type": "node",\n' +
         '        "request": "launch"\n' +
@@ -736,7 +728,7 @@ test('deleteEntry preserves comments around remaining entries', async () => {
   assert.match(text, /Keep Me/);
 });
 
-test('toggle config flags preserve unrelated comments', async () => {
+test('toggle config exclusion preserves unrelated comments', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/comment-toggle-project'),
   );
@@ -753,13 +745,11 @@ test('toggle config flags preserve unrelated comments', async () => {
     fileUri,
     new TextEncoder().encode(
       '{\n' +
-        '  // keep file enabled comment\n' +
-        '  "enabled": true,\n' +
+        '  // keep file comment\n' +
         '  "configurations": [\n' +
         '    {\n' +
         '      "name": "Launch",\n' +
-        '      // keep entry enabled comment\n' +
-        '      "enabled": true,\n' +
+        '      // keep entry comment\n' +
         '      "configuration": {\n' +
         '        "type": "node",\n' +
         '        "request": "launch"\n' +
@@ -770,18 +760,98 @@ test('toggle config flags preserve unrelated comments', async () => {
     ),
   );
 
-  await store.toggleConfigEnabled('config.json', 0);
-  await store.toggleConfigFileEnabled('config.json');
+  await store.toggleConfigExcluded('config.json', 0);
 
   const text = new TextDecoder().decode(
     await vscode.workspace.fs.readFile(fileUri),
   );
-  assert.match(text, /\/\/ keep file enabled comment/);
-  assert.match(text, /\/\/ keep entry enabled comment/);
-  assert.match(text, /"enabled": false/);
+  assert.match(text, /\/\/ keep file comment/);
+  assert.match(text, /\/\/ keep entry comment/);
+  assert.match(text, /"excluded": true/);
 });
 
-test('config tree checkbox toggles the file-level enabled flag', async () => {
+test('setConfigFileExcluded excludes and includes all configs while preserving comments', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/bulk-config-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/bulk-config-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/bulk-config-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode(
+      '{\n' +
+        '  // keep file comment\n' +
+        '  "configurations": [\n' +
+        '    {\n' +
+        '      "name": "Launch",\n' +
+        '      // keep first comment\n' +
+        '      "profile": "cpp"\n' +
+        '    },\n' +
+        '    {\n' +
+        '      "name": "Skip",\n' +
+        '      "excluded": true,\n' +
+        '      // keep second comment\n' +
+        '      "profile": "cpp"\n' +
+        '    }\n' +
+        '  ]\n' +
+        '}\n',
+    ),
+  );
+
+  await store.setConfigFileExcluded('config.json', true);
+
+  let text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.match(text, /\/\/ keep file comment/);
+  assert.match(text, /\/\/ keep first comment/);
+  assert.match(text, /\/\/ keep second comment/);
+  assert.equal((text.match(/"excluded": true/g) ?? []).length, 2);
+
+  await store.setConfigFileExcluded('config.json', false);
+
+  text = new TextDecoder().decode(await vscode.workspace.fs.readFile(fileUri));
+  assert.match(text, /\/\/ keep file comment/);
+  assert.match(text, /\/\/ keep first comment/);
+  assert.match(text, /\/\/ keep second comment/);
+  assert.doesNotMatch(text, /"excluded"/);
+});
+
+test('setConfigFileExcluded no-ops when config file has no entries to change', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/bulk-noop-project'),
+  );
+  const fileUri = vscode.Uri.file(
+    '/workspace/bulk-noop-project/.vscode/launch-composer/configs/config.json',
+  );
+
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(
+      '/workspace/bulk-noop-project/.vscode/launch-composer/configs',
+    ),
+  );
+  await vscode.workspace.fs.writeFile(
+    fileUri,
+    new TextEncoder().encode('{\n  "configurations": []\n}\n'),
+  );
+
+  await store.setConfigFileExcluded('config.json', true);
+  await store.setConfigFileExcluded('config.json', false);
+
+  const text = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(fileUri),
+  );
+  assert.equal(text, '{\n  "configurations": []\n}\n');
+});
+
+test('config tree checkbox toggles the entry excluded flag', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders(['/workspace/config-checkbox-view']);
@@ -802,10 +872,10 @@ test('config tree checkbox toggles the file-level enabled flag', async () => {
     items: [
       [
         {
-          type: 'file',
-          kind: 'config',
-          file: 'config.json',
-          enabled: true,
+          type: 'entry',
+          target: { kind: 'config', file: 'config.json', index: 0 },
+          label: 'Launch',
+          included: true,
         },
         vscode.TreeItemCheckboxState.Unchecked,
       ],
@@ -820,8 +890,62 @@ test('config tree checkbox toggles the file-level enabled flag', async () => {
 
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": false,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "cpp",\n      "excluded": true\n    }\n  ]\n}\n',
   );
+});
+
+test('config file bulk commands update only the selected config file entries', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/config-bulk-command']);
+
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/config-bulk-command'),
+  );
+  await store.addConfigEntry('config.json', 'Launch', 'cpp');
+  await store.addConfigEntry('other.json', 'Other', 'cpp');
+
+  activate(context);
+
+  await vscode.commands.executeCommand('launch-composer.excludeAllConfigs', {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+    configurations: [],
+  });
+
+  let selectedText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/config-bulk-command/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  );
+  const otherText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/config-bulk-command/.vscode/launch-composer/configs/other.json',
+      ),
+    ),
+  );
+  assert.match(selectedText, /"excluded": true/);
+  assert.doesNotMatch(otherText, /"excluded"/);
+
+  await vscode.commands.executeCommand('launch-composer.includeAllConfigs', {
+    type: 'file',
+    kind: 'config',
+    file: 'config.json',
+    configurations: [],
+  });
+
+  selectedText = new TextDecoder().decode(
+    await vscode.workspace.fs.readFile(
+      vscode.Uri.file(
+        '/workspace/config-bulk-command/.vscode/launch-composer/configs/config.json',
+      ),
+    ),
+  );
+  assert.doesNotMatch(selectedText, /"excluded"/);
 });
 
 test('createDataFile supports unicode file names without stat-ing the target path', async () => {
@@ -917,7 +1041,7 @@ test('renameEntry updates profile references in configs', async () => {
       '/workspace/rename-entry-project/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "profile": "cpp"\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "excluded": true,\n      "profile": "cpp"\n    }\n  ]\n}\n',
     ),
   );
 
@@ -949,7 +1073,7 @@ test('renameEntry updates profile references in configs', async () => {
   );
   assert.equal(
     new TextDecoder().decode(configBytes),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": false,\n      "profile": "cpp-renamed"\n    }\n  ]\n}\n',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "excluded": true,\n      "profile": "cpp-renamed"\n    }\n  ]\n}\n',
   );
 });
 
@@ -993,7 +1117,6 @@ test('renameEntry preserves profile and config comments while updating profile',
     configUri,
     new TextEncoder().encode(
       '{\n' +
-        '  "enabled": true,\n' +
         '  "configurations": [\n' +
         '    {\n' +
         '      "name": "Launch",\n' +
@@ -1068,11 +1191,9 @@ test('patch entry updates preserve comments around edited fields', async () => {
     configUri,
     new TextEncoder().encode(
       '{\n' +
-        '  "enabled": true,\n' +
         '  "configurations": [\n' +
         '    {\n' +
         '      "name": "Launch",\n' +
-        '      "enabled": true,\n' +
         '      "configuration": {\n' +
         '        "type": "node",\n' +
         '        "request": "launch",\n' +
@@ -1179,7 +1300,7 @@ test('patchConfigEntry rejects name updates', async () => {
   await vscode.workspace.fs.writeFile(
     fileUri,
     new TextEncoder().encode(
-      '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "cppdbg",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "configuration": {\n        "type": "cppdbg",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
     ),
   );
 
@@ -1200,7 +1321,7 @@ test('patchConfigEntry rejects name updates', async () => {
   const bytes = await vscode.workspace.fs.readFile(fileUri);
   assert.equal(
     new TextDecoder().decode(bytes),
-    '{\n  "enabled": true,\n  "configurations": [\n    {\n      "name": "Launch",\n      "enabled": true,\n      "configuration": {\n        "type": "cppdbg",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "configuration": {\n        "type": "cppdbg",\n        "request": "launch"\n      }\n    }\n  ]\n}\n',
   );
 });
 
