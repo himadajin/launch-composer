@@ -16,6 +16,19 @@ Source files live in each package's `src/` directory. Tests live in `packages/co
 
 Use `docs/spec*.md` as the product behavior reference when a change affects generation rules, extension behavior, webview flows, or host/webview communication.
 
+## Spec-First Change Routing
+
+Before implementing user-visible behavior, schema changes, generated `launch.json` changes, extension commands, TreeView actions, or host/webview messages, verify that the relevant `docs/spec*.md` file already defines the behavior. If the spec is silent, update the spec or make the task's acceptance criteria explicit before coding. Do not silently infer product semantics such as duplicate naming, insertion position, disabled-entry behavior, whether state flags are preserved or reset, post-action selection/reveal/open behavior, default values, empty-value deletion, validation timing, JSONC comment cloning versus preservation, or whether a new field is an extension-specific top-level key or a `configuration` pass-through key.
+
+Use this routing when deciding which specs and code surfaces must move together:
+
+- Generation, merge, validation, args handling, and path resolution: `docs/spec-core.md`, plus `docs/spec.md` for JSON file schemas.
+- Extension host behavior, workspace I/O, file watching, command registration, settings, and `launch.json` writing: `docs/spec-extension.md`; use `docs/spec-ui.md` as well when TreeView UI behavior or item actions change.
+- Webview editor UI, form behavior, and VS Code-style interaction details: `docs/spec-ui.md`.
+- Extension Host ↔ Webview messages, editor persistence flow, request/response payloads, and shared data types: `docs/spec-communication.md`.
+
+When changing host/webview communication or shared data shapes, keep the mirrored contract surfaces synchronized: `docs/spec-communication.md`, `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`, and `packages/core/src/types.ts` when `ProfileData`, `ConfigData`, or `ValidationError` changes. Preserve the existing persistence path: Webview state and controls emit changes through the local bridge/RPC utilities, the extension host applies JSONC patches, and the webview never performs workspace file I/O directly.
+
 ## Commands
 
 Install dependencies from the repository root with `npm install`.
