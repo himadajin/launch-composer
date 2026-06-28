@@ -184,3 +184,142 @@ test('tree provider describes excluded config entries', async () => {
   assert.equal(item.iconPath, undefined);
   assert.equal(item.label, 'Launch');
 });
+
+test('tree provider decorates profile entries with diagnostics', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/profile-tree-diagnostics'),
+  );
+  const provider = new LaunchComposerTreeProvider('profile', store);
+  provider.refresh({
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [{ name: 'node' }],
+      },
+    ],
+    configs: [],
+    issues: [],
+    generateReadiness: {
+      diagnostics: [
+        {
+          source: 'core-validation',
+          file: 'profile.json',
+          message: 'Profile type is required.',
+          target: {
+            kind: 'profile',
+            index: 0,
+            name: 'node',
+            field: 'configuration.type',
+          },
+        },
+      ],
+    },
+  });
+
+  const [fileNode] = await provider.getChildren();
+  assert.ok(fileNode);
+  assert.equal(fileNode.type, 'file');
+  const fileItem = provider.getTreeItem(fileNode);
+  assert.equal(fileItem.description, undefined);
+  assert.equal(fileItem.iconPath, undefined);
+
+  const [entryNode] = await provider.getChildren(fileNode);
+  assert.ok(entryNode);
+  assert.equal(entryNode.type, 'entry');
+  const item = provider.getTreeItem(entryNode);
+  assert.equal(item.description, '1 issue');
+  assert.equal(item.tooltip, 'Profile type is required.');
+  assert.notEqual(item.iconPath, undefined);
+});
+
+test('tree provider combines excluded config state with diagnostic count', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/config-tree-diagnostics'),
+  );
+  const provider = new LaunchComposerTreeProvider('config', store);
+  provider.refresh({
+    profiles: [],
+    configs: [
+      {
+        file: 'config.json',
+        configurations: [
+          {
+            name: 'Launch',
+            profile: '',
+            excluded: true,
+          },
+        ],
+      },
+    ],
+    issues: [],
+    generateReadiness: {
+      diagnostics: [
+        {
+          source: 'core-validation',
+          file: 'config.json',
+          message: 'Config profile is required.',
+          target: {
+            kind: 'config',
+            index: 0,
+            name: 'Launch',
+            field: 'profile',
+          },
+        },
+      ],
+    },
+  });
+
+  const [fileNode] = await provider.getChildren();
+  assert.ok(fileNode);
+  assert.equal(fileNode.type, 'file');
+  const [entryNode] = await provider.getChildren(fileNode);
+  assert.ok(entryNode);
+  assert.equal(entryNode.type, 'entry');
+
+  const item = provider.getTreeItem(entryNode);
+  assert.equal(item.description, 'excluded, 1 issue');
+  assert.equal(item.tooltip, 'Config profile is required.');
+  assert.notEqual(item.iconPath, undefined);
+});
+
+test('tree provider decorates config files with file-level diagnostics', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/config-file-tree-diagnostics'),
+  );
+  const provider = new LaunchComposerTreeProvider('config', store);
+  provider.refresh({
+    profiles: [],
+    configs: [
+      {
+        file: 'config.json',
+        configurations: [],
+      },
+    ],
+    issues: [],
+    generateReadiness: {
+      diagnostics: [
+        {
+          source: 'core-validation',
+          file: 'config.json',
+          message: 'Config file must contain a configurations array.',
+          target: {
+            kind: 'file',
+            field: 'configurations',
+          },
+        },
+      ],
+    },
+  });
+
+  const [fileNode] = await provider.getChildren();
+  assert.ok(fileNode);
+  assert.equal(fileNode.type, 'file');
+
+  const item = provider.getTreeItem(fileNode);
+  assert.equal(item.description, '1 issue');
+  assert.equal(
+    item.tooltip,
+    'Config file must contain a configurations array.',
+  );
+  assert.notEqual(item.iconPath, undefined);
+});

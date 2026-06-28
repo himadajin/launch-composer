@@ -1,8 +1,4 @@
-import type {
-  ConfigFileData,
-  ProfileFileData,
-  ValidationError,
-} from '@launch-composer/core';
+import type { ConfigFileData, ProfileFileData } from '@launch-composer/core';
 import type { ComposerDataIssue } from './io/workspaceStore.js';
 
 export interface GenerateDiagnosticTarget {
@@ -13,17 +9,13 @@ export interface GenerateDiagnosticTarget {
 }
 
 export interface GenerateDiagnostic {
-  severity: 'error';
   source: 'core-validation' | 'invalid-file';
   file: string;
   message: string;
-  field?: string;
-  target?: GenerateDiagnosticTarget;
+  target: GenerateDiagnosticTarget;
 }
 
 export interface GenerateReadiness {
-  ready: boolean;
-  errors: ValidationError[];
   diagnostics: GenerateDiagnostic[];
 }
 
@@ -155,7 +147,7 @@ export type HostMessage =
   | {
       type: 'generate-result';
       requestId: string;
-      payload: { success: boolean; errors?: ValidationError[] };
+      payload: { success: boolean };
     }
   | {
       type: 'file-selected';

@@ -3,7 +3,6 @@ import type {
   GenerateDiagnostic,
   GenerateReadiness,
   InitialDataPayload,
-  ValidationError,
   WorkspaceUpdatePayload,
 } from '../types.js';
 
@@ -32,18 +31,6 @@ export function mergeWorkspaceUpdatePayload(
   };
 }
 
-export function formatValidationError(error: ValidationError): string {
-  const details = [error.file];
-  if (error.configName !== undefined) {
-    details.push(error.configName);
-  }
-  if (error.field !== undefined) {
-    details.push(error.field);
-  }
-
-  return `${details.join(' / ')}: ${error.message}`;
-}
-
 export function getEditorDiagnostics(
   readiness: GenerateReadiness,
   editor: EditorTarget,
@@ -51,7 +38,7 @@ export function getEditorDiagnostics(
   return readiness.diagnostics.filter((diagnostic) => {
     const target = diagnostic.target;
     return (
-      target?.kind === editor.kind &&
+      target.kind === editor.kind &&
       diagnostic.file === editor.file &&
       target.index === editor.index
     );
@@ -61,7 +48,7 @@ export function getEditorDiagnostics(
 export function getDiagnosticField(
   diagnostic: GenerateDiagnostic,
 ): string | undefined {
-  return diagnostic.target?.field ?? diagnostic.field;
+  return diagnostic.target.field;
 }
 
 export function getFieldDiagnosticMessages(
@@ -103,7 +90,7 @@ export function mergeHelperMessages(
 export function formatDiagnostic(diagnostic: GenerateDiagnostic): string {
   const field = getDiagnosticField(diagnostic);
   const details = [diagnostic.file];
-  if (diagnostic.target?.name !== undefined) {
+  if (diagnostic.target.name !== undefined) {
     details.push(diagnostic.target.name);
   }
   if (field !== undefined) {

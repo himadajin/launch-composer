@@ -168,6 +168,7 @@ export class TreeItem {
   resourceUri?: Uri;
   command?: unknown;
   description?: string;
+  tooltip?: string;
   checkboxState?:
     | TreeItemCheckboxState
     | {

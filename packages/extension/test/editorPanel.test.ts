@@ -25,8 +25,6 @@ test.beforeEach(() => {
 });
 
 const READY_TO_GENERATE = {
-  ready: true,
-  errors: [],
   diagnostics: [],
 };
 

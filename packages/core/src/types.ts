@@ -46,7 +46,7 @@ export interface ValidationError {
   configName?: string;
   field?: string;
   message: string;
-  target?: ValidationErrorTarget;
+  target: ValidationErrorTarget;
 }
 
 export interface LaunchConfig {

@@ -44,7 +44,7 @@ export function EntryIssuesRow({
           <div className="composer-diagnostic-list">
             {diagnostics.map((diagnostic, index) => (
               <FormHelper
-                key={`${diagnostic.file}:${diagnostic.field ?? ''}:${index}`}
+                key={`${diagnostic.file}:${diagnostic.target.field ?? ''}:${index}`}
                 tone="warning"
               >
                 {formatDiagnostic(diagnostic)}

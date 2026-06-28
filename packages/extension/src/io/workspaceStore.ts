@@ -5,7 +5,7 @@ import {
   type ConfigData,
   type ConfigFileData,
   type GenerateInput,
-  type GenerateResult,
+  type GenerateSuccess,
   type ProfileData,
   type ProfileFileData,
   type ValidationError,
@@ -77,6 +77,13 @@ export interface ConfigWorkspaceData {
   configs: ConfigFileData[];
   issues: ComposerDataIssue[];
 }
+
+export type WorkspaceGenerateResult =
+  | GenerateSuccess
+  | {
+      success: false;
+      issueCount: number;
+    };
 
 type ArrayFileReadResult<T> =
   | { status: 'ok'; data: T[] }
@@ -152,14 +159,7 @@ export class WorkspaceStore {
     snapshot: WorkspaceDataWithoutReadiness,
   ): Promise<GenerateReadiness> {
     if (snapshot.issues.length > 0) {
-      const errors = snapshot.issues.map((issue) => ({
-        file: issue.file,
-        message: issue.message,
-      }));
-
       return {
-        ready: false,
-        errors,
         diagnostics: snapshot.issues.map((issue) =>
           this.createInvalidFileDiagnostic(issue),
         ),
@@ -171,8 +171,6 @@ export class WorkspaceStore {
     );
 
     return {
-      ready: errors.length === 0,
-      errors,
       diagnostics: errors.map((error) =>
         this.createCoreValidationDiagnostic(error, snapshot),
       ),
@@ -183,7 +181,6 @@ export class WorkspaceStore {
     issue: ComposerDataIssue,
   ): GenerateDiagnostic {
     return {
-      severity: 'error',
       source: 'invalid-file',
       file: issue.file,
       message: issue.message,
@@ -195,24 +192,13 @@ export class WorkspaceStore {
     error: ValidationError,
     snapshot: WorkspaceDataWithoutReadiness,
   ): GenerateDiagnostic {
-    const diagnostic: GenerateDiagnostic = {
-      severity: 'error',
-      source: 'core-validation',
-      file: error.file,
-      message: error.message,
-    };
-
-    if (error.field !== undefined) {
-      diagnostic.field = error.field;
-    }
-
-    if (error.target?.kind === 'profile') {
+    if (error.target.kind === 'profile') {
       const profile = findProfileEntry(
         snapshot.profiles,
         error.file,
         error.target.index,
       );
-      const target: NonNullable<GenerateDiagnostic['target']> = {
+      const target: GenerateDiagnostic['target'] = {
         kind: 'profile',
       };
       if (error.target.index !== undefined) {
@@ -224,17 +210,21 @@ export class WorkspaceStore {
       if (error.field !== undefined) {
         target.field = error.field;
       }
-      diagnostic.target = target;
-      return diagnostic;
+      return {
+        source: 'core-validation',
+        file: error.file,
+        message: error.message,
+        target,
+      };
     }
 
-    if (error.target?.kind === 'config') {
+    if (error.target.kind === 'config') {
       const config = findConfigEntry(
         snapshot.configs,
         error.file,
         error.target.index,
       );
-      const target: NonNullable<GenerateDiagnostic['target']> = {
+      const target: GenerateDiagnostic['target'] = {
         kind: 'config',
       };
       if (error.target.index !== undefined) {
@@ -247,41 +237,27 @@ export class WorkspaceStore {
       if (error.field !== undefined) {
         target.field = error.field;
       }
-      diagnostic.target = target;
-      return diagnostic;
-    }
-
-    if (error.target?.kind === 'configFile') {
-      const target: NonNullable<GenerateDiagnostic['target']> = {
-        kind: 'file',
+      return {
+        source: 'core-validation',
+        file: error.file,
+        message: error.message,
+        target,
       };
-      if (error.field !== undefined) {
-        target.field = error.field;
-      }
-      diagnostic.target = target;
-      return diagnostic;
     }
 
-    const config = findConfigEntryByName(
-      snapshot.configs,
-      error.file,
-      error.configName,
-    );
-    if (config !== undefined) {
-      const target: NonNullable<GenerateDiagnostic['target']> = {
-        kind: 'config',
-        index: config.index,
-      };
-      if (config.data.name !== undefined) {
-        target.name = config.data.name;
-      }
-      if (error.field !== undefined) {
-        target.field = error.field;
-      }
-      diagnostic.target = target;
+    const target: GenerateDiagnostic['target'] = {
+      kind: 'file',
+    };
+    if (error.field !== undefined) {
+      target.field = error.field;
     }
 
-    return diagnostic;
+    return {
+      source: 'core-validation',
+      file: error.file,
+      message: error.message,
+      target,
+    };
   }
 
   private createGenerateInput(
@@ -798,22 +774,28 @@ export class WorkspaceStore {
     );
   }
 
-  async generateLaunchJson(): Promise<GenerateResult> {
+  async generateLaunchJson(): Promise<WorkspaceGenerateResult> {
     const snapshot = await this.readAll();
     const readiness = snapshot.generateReadiness;
-    if (!readiness.ready) {
+    if (readiness.diagnostics.length > 0) {
       return {
         success: false,
-        errors: readiness.errors,
+        issueCount: readiness.diagnostics.length,
       };
     }
 
-    return generate(this.createGenerateInput(snapshot));
+    const result = await generate(this.createGenerateInput(snapshot));
+    if (!result.success) {
+      return {
+        success: false,
+        issueCount: result.errors.length,
+      };
+    }
+
+    return result;
   }
 
-  async writeLaunchJson(
-    result: Exclude<GenerateResult, { success: false }>,
-  ): Promise<void> {
+  async writeLaunchJson(result: GenerateSuccess): Promise<void> {
     const content =
       '// This file is auto-generated by Launch Composer.\n' +
       '// Do not edit manually. Changes will be overwritten.\n' +
@@ -1445,33 +1427,6 @@ function findConfigEntry(
     index
   ];
   return data === undefined ? undefined : { index, data };
-}
-
-function findConfigEntryByName(
-  files: ConfigFileData[],
-  file: string,
-  name: string | undefined,
-): { index: number; data: ConfigData } | undefined {
-  if (name === undefined) {
-    return undefined;
-  }
-
-  const fileData = files.find((entry) => entry.file === file);
-  if (fileData === undefined) {
-    return undefined;
-  }
-
-  const index = fileData.configurations.findIndex(
-    (config) => config.name === name,
-  );
-  if (index === -1) {
-    return undefined;
-  }
-
-  return {
-    index,
-    data: fileData.configurations[index]!,
-  };
 }
 
 function decodeText(bytes: Uint8Array): string {

@@ -1,6 +1,5 @@
 import * as path from 'node:path';
 
-import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
 import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from './commands.js';
@@ -264,18 +263,12 @@ export function activate(context: vscode.ExtensionContext): void {
     ]);
   };
 
-  const handleGenerate = async (): Promise<{
-    success: boolean;
-    errors?: ValidationError[];
-  }> => {
+  const handleGenerate = async (): Promise<{ success: boolean }> => {
     const generated = await store.generateLaunchJson();
     if (!generated.success) {
       await syncUiWithWorkspace({ notifyIssues: false, kind: 'both' });
-      showGenerateBlockedWarning(generated.errors.length);
-      return {
-        success: false,
-        errors: generated.errors,
-      };
+      showGenerateBlockedWarning(generated.issueCount);
+      return { success: false };
     }
 
     if (!(await confirmOverwrite(store))) {

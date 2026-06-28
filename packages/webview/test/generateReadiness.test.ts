@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  formatValidationError,
   getEditorDiagnostics,
   getEntryIssueDiagnostics,
   getFieldDiagnosticMessages,
@@ -11,8 +10,6 @@ import {
 } from '../src/components/generateReadiness.js';
 
 const READY_TO_GENERATE = {
-  ready: true,
-  errors: [],
   diagnostics: [],
 };
 
@@ -36,21 +33,10 @@ test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace upda
       configs: [],
       issues: [],
       generateReadiness: {
-        ready: false,
-        errors: [
-          {
-            file: 'config.json',
-            configName: 'Launch',
-            field: 'profile',
-            message: 'Config profile is required.',
-          },
-        ],
         diagnostics: [
           {
-            severity: 'error',
             source: 'core-validation',
             file: 'config.json',
-            field: 'profile',
             message: 'Config profile is required.',
             target: {
               kind: 'config',
@@ -66,21 +52,10 @@ test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace upda
   );
 
   assert.deepEqual(merged?.generateReadiness, {
-    ready: false,
-    errors: [
-      {
-        file: 'config.json',
-        configName: 'Launch',
-        field: 'profile',
-        message: 'Config profile is required.',
-      },
-    ],
     diagnostics: [
       {
-        severity: 'error',
         source: 'core-validation',
         file: 'config.json',
-        field: 'profile',
         message: 'Config profile is required.',
         target: {
           kind: 'config',
@@ -94,37 +69,13 @@ test('mergeWorkspaceUpdatePayload replaces generateReadiness from workspace upda
   assert.equal(merged?.editorRevision, 'rev:2');
 });
 
-test('formatValidationError omits missing optional details', () => {
-  assert.equal(
-    formatValidationError({
-      file: 'profile.json',
-      field: 'configuration.type',
-      message: 'Profile type is required.',
-    }),
-    'profile.json / configuration.type: Profile type is required.',
-  );
-  assert.equal(
-    formatValidationError({
-      file: 'config.json',
-      configName: 'Launch',
-      field: 'profile',
-      message: 'Config profile is required.',
-    }),
-    'config.json / Launch / profile: Config profile is required.',
-  );
-});
-
 test('getEditorDiagnostics filters diagnostics to the current editor target', () => {
   const diagnostics = getEditorDiagnostics(
     {
-      ready: false,
-      errors: [],
       diagnostics: [
         {
-          severity: 'error',
           source: 'core-validation',
           file: 'profile.json',
-          field: 'configuration.type',
           message: 'Profile type is required.',
           target: {
             kind: 'profile',
@@ -134,10 +85,8 @@ test('getEditorDiagnostics filters diagnostics to the current editor target', ()
           },
         },
         {
-          severity: 'error',
           source: 'core-validation',
           file: 'profile.json',
-          field: 'configuration.request',
           message: 'Profile request must be one of: launch, attach.',
           target: {
             kind: 'profile',
@@ -147,7 +96,6 @@ test('getEditorDiagnostics filters diagnostics to the current editor target', ()
           },
         },
         {
-          severity: 'error',
           source: 'invalid-file',
           file: 'profile.json',
           message: 'Invalid JSON in profile.json.',
@@ -171,10 +119,8 @@ test('getEditorDiagnostics filters diagnostics to the current editor target', ()
 test('diagnostic helpers split field messages and entry issues', () => {
   const diagnostics = [
     {
-      severity: 'error',
       source: 'core-validation',
       file: 'config.json',
-      field: 'profile',
       message: 'Config profile is required.',
       target: {
         kind: 'config',
@@ -184,10 +130,8 @@ test('diagnostic helpers split field messages and entry issues', () => {
       },
     },
     {
-      severity: 'error',
       source: 'core-validation',
       file: 'config.json',
-      field: 'configuration.program',
       message: 'Config with a profile cannot override "program".',
       target: {
         kind: 'config',

@@ -12,7 +12,7 @@
 
 `GenerateInput`、`GenerateResult`、`LaunchJson`、`ValidationError` の canonical source は `packages/core/src/types.ts` である。
 
-`ValidationError` は `file`、任意の `configName`、任意の `field`、`message` に加えて、UI diagnostic 生成用の任意 `target` を持つ。`target` は validation error が属する data entry を示す metadata であり、Generate failure の意味や `message` の内容を変えない。
+`ValidationError` は `file`、任意の `configName`、任意の `field`、`message`、必須 `target` を持つ。`target` は validation error が属する data entry または config file を示し、Extension Host が UI diagnostic を生成するときの配置元になる。
 
 処理順序:
 

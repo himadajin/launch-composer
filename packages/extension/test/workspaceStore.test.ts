@@ -18,8 +18,6 @@ test.beforeEach(() => {
 });
 
 const READY_TO_GENERATE = {
-  ready: true,
-  errors: [],
   diagnostics: [],
 };
 
@@ -113,16 +111,8 @@ test('readAll keeps valid files and reports invalid files as issues', async () =
     },
   ]);
   assert.deepEqual(data.generateReadiness, {
-    ready: false,
-    errors: [
-      {
-        file: 'profile.json',
-        message: 'profile.json is empty. Expected a JSON array such as [].',
-      },
-    ],
     diagnostics: [
       {
-        severity: 'error',
         source: 'invalid-file',
         file: 'profile.json',
         message: 'profile.json is empty. Expected a JSON array such as [].',
@@ -165,21 +155,10 @@ test('readAll reports core validation errors in generateReadiness', async () => 
   const data = await store.readAll();
 
   assert.deepEqual(data.generateReadiness, {
-    ready: false,
-    errors: [
-      {
-        file: 'profile.json',
-        field: 'configuration.type',
-        message: 'Profile type is required.',
-        target: { kind: 'profile', index: 0 },
-      },
-    ],
     diagnostics: [
       {
-        severity: 'error',
         source: 'core-validation',
         file: 'profile.json',
-        field: 'configuration.type',
         message: 'Profile type is required.',
         target: {
           kind: 'profile',
@@ -209,20 +188,9 @@ test('readAll reports missing argsFile in generateReadiness', async () => {
 
   const data = await store.readAll();
 
-  assert.equal(data.generateReadiness?.ready, false);
-  assert.deepEqual(data.generateReadiness?.errors[0], {
-    file: 'config.json',
-    configName: 'Launch',
-    field: 'argsFile',
-    message:
-      'argsFile does not exist: /workspace/readiness-missing-args-project/missing-args.json',
-    target: { kind: 'config', index: 0 },
-  });
-  assert.deepEqual(data.generateReadiness?.diagnostics[0], {
-    severity: 'error',
+  assert.deepEqual(data.generateReadiness.diagnostics[0], {
     source: 'core-validation',
     file: 'config.json',
-    field: 'argsFile',
     message:
       'argsFile does not exist: /workspace/readiness-missing-args-project/missing-args.json',
     target: {
@@ -298,7 +266,7 @@ test('readConfigsWithIssues reads config data without requiring profile director
   });
 });
 
-test('generateLaunchJson returns validation-style errors for invalid files', async () => {
+test('generateLaunchJson returns blocked count for invalid files', async () => {
   const store = new WorkspaceStore(
     vscode.Uri.file('/workspace/generate-invalid-project'),
   );
@@ -319,13 +287,7 @@ test('generateLaunchJson returns validation-style errors for invalid files', asy
 
   assert.deepEqual(result, {
     success: false,
-    errors: [
-      {
-        file: 'profile.json',
-        message:
-          'Invalid JSON in profile.json. Open the file and fix the syntax.',
-      },
-    ],
+    issueCount: 1,
   });
 });
 

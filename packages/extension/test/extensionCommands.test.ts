@@ -219,8 +219,6 @@ test('addConfig command with zero profiles shows Create Profile guidance and cre
     configs: [],
     issues: [],
     generateReadiness: {
-      ready: true,
-      errors: [],
       diagnostics: [],
     },
   });
@@ -267,21 +265,10 @@ test('addConfig command choosing Create Profile starts profile creation without 
     configs: [],
     issues: [],
     generateReadiness: {
-      ready: false,
-      errors: [
-        {
-          file: 'profile.json',
-          field: 'configuration.type',
-          message: 'Profile type is required.',
-          target: { kind: 'profile', index: 0 },
-        },
-      ],
       diagnostics: [
         {
-          severity: 'error',
           source: 'core-validation',
           file: 'profile.json',
-          field: 'configuration.type',
           message: 'Profile type is required.',
           target: {
             kind: 'profile',

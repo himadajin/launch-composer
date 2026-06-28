@@ -444,10 +444,13 @@ function GenerateStatus({
 }: {
   readiness: InitialDataPayload['generateReadiness'];
 }) {
+  const issueCount = readiness.diagnostics.length;
+  const isReady = issueCount === 0;
+
   return (
     <section
       className={
-        readiness.ready
+        isReady
           ? 'composer-generate-status'
           : 'composer-generate-status composer-generate-status-warning'
       }
@@ -456,14 +459,12 @@ function GenerateStatus({
       <div>
         <p className="composer-generate-status-label">Generate Status</p>
         <p className="composer-generate-status-message">
-          {readiness.ready
+          {isReady
             ? 'Ready to generate launch.json.'
-            : `${readiness.errors.length} issue${
-                readiness.errors.length === 1 ? '' : 's'
-              } block Generate.`}
+            : `${issueCount} issue${issueCount === 1 ? '' : 's'} block Generate.`}
         </p>
       </div>
-      {readiness.errors.length > 0 ? (
+      {issueCount > 0 ? (
         <p className="composer-generate-status-detail">
           Fix the highlighted fields, entry issues, or JSON status in the editor
           below.

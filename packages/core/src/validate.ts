@@ -536,11 +536,12 @@ function createValidationError(input: {
   message: string;
   field?: string | undefined;
   configName?: string | undefined;
-  target?: ValidationErrorTarget | undefined;
+  target: ValidationErrorTarget;
 }): ValidationError {
   const error: ValidationError = {
     file: input.file,
     message: input.message,
+    target: input.target,
   };
 
   if (input.field !== undefined) {
@@ -549,10 +550,6 @@ function createValidationError(input: {
 
   if (input.configName !== undefined) {
     error.configName = input.configName;
-  }
-
-  if (input.target !== undefined) {
-    error.target = input.target;
   }
 
   return error;

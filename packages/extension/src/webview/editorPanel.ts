@@ -1,7 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import type { ValidationError } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
 import type {
@@ -29,10 +28,7 @@ interface EditorPanelOptions {
     syncEditor?: boolean;
   }) => void;
   onDidReveal: (target: EditorTarget) => Promise<void>;
-  onDidGenerate: () => Promise<{
-    success: boolean;
-    errors?: ValidationError[];
-  }>;
+  onDidGenerate: () => Promise<{ success: boolean }>;
 }
 
 export class EditorPanelController {
