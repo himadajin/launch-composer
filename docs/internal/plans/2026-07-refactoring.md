@@ -189,7 +189,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: `updateConfigurationString(data, key, value, { required })` / `updateOptionalArrayField` / `updateBooleanConfigurationField` の 3 ファクトリに集約し、既存の名前付き export は 1 行ラッパーとして残す（コンポーネント呼び出し側と既存テストを変えないため)。可能なら「フィールドのセマンティクス記述子」1 つからデータ更新とパッチ生成の両方を導出し、二者が食い違えない構造にする。
 - **検証**: `entryChanges.test.ts`（256 行）が data と patches の両出力を固定している。このパッケージで最も安全に着手できる項目である。
 
-### 3-8. webview: select 状態パターンの共通化（任意）
+### 3-8. webview: select 状態パターンの共通化（任意） [完了]
 
 - **対象**: `packages/webview/src/components/profileSelect.ts` / `profileRequestSelect.ts`
 - **問題**: sentinel 定数 + internal 値ガード + `{value, options, optionLabels, helperMessage}` リゾルバという同型パターンの二重実装。profileSelect 内では同じ二分岐オブジェクトリテラルが 3 回繰り返されている。
@@ -320,6 +320,7 @@ Phase 3（各項目独立）
   3-6 webview RPC 型付けと手書き型ガード削除 [完了]
   3-6 ─────────────────────→ 4-3 の前提 [完了]
   3-7 webview entryChanges updater ファクトリ集約 [完了]
+  3-8 webview select 状態パターンの共通化 [完了]
 
 Phase 4（対応する Phase 1 / 3 項目の後）
 Phase 5（任意順序・いつでも）
