@@ -90,6 +90,9 @@ type ConfigFileReadResult =
   | { status: 'missing' }
   | { status: 'invalid'; issue: ComposerDataIssue };
 
+type TextFileReadResult =
+  { status: 'ok'; text: string } | { status: 'missing' };
+
 export type EntryPatchResult =
   | {
       status: 'ok';
@@ -410,19 +413,12 @@ export class WorkspaceStore {
     file: string,
   ): Promise<string | null> {
     const uri = this.getDataFileUri(kind, file);
-    let bytes: Uint8Array;
-
-    try {
-      bytes = await vscode.workspace.fs.readFile(uri);
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return null;
-      }
-
-      throw error;
+    const result = await this.readTextFile(uri);
+    if (result.status === 'missing') {
+      return null;
     }
 
-    return createTextRevision(decodeText(bytes));
+    return createTextRevision(result.text);
   }
 
   async renameDataFile(
@@ -836,19 +832,12 @@ export class WorkspaceStore {
     file: string,
   ): Promise<ConfigFileReadResult> {
     const uri = this.getDataFileUri('config', file);
-    let bytes: Uint8Array;
-
-    try {
-      bytes = await vscode.workspace.fs.readFile(uri);
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return { status: 'missing' };
-      }
-
-      throw error;
+    const result = await this.readTextFile(uri);
+    if (result.status === 'missing') {
+      return { status: 'missing' };
     }
 
-    const text = decodeText(bytes);
+    const text = result.text;
     const parsed = parseJsoncDocument<unknown>(text);
     if (parsed.issues.length > 0) {
       return {
@@ -926,19 +915,12 @@ export class WorkspaceStore {
     file: string,
   ): Promise<ArrayFileReadResult<T>> {
     const uri = this.getDataFileUri(kind, file);
-    let bytes: Uint8Array;
-
-    try {
-      bytes = await vscode.workspace.fs.readFile(uri);
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return { status: 'missing' };
-      }
-
-      throw error;
+    const result = await this.readTextFile(uri);
+    if (result.status === 'missing') {
+      return { status: 'missing' };
     }
 
-    const text = decodeText(bytes);
+    const text = result.text;
     const parsed = parseJsoncDocument<unknown>(text);
     if (parsed.issues.length > 0) {
       return {
@@ -967,17 +949,12 @@ export class WorkspaceStore {
     file: string,
   ): Promise<string> {
     const uri = this.getDataFileUri(kind, file);
-
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      return decodeText(bytes);
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        throw new Error(`File not found: ${file}`);
-      }
-
-      throw error;
+    const result = await this.readTextFile(uri);
+    if (result.status === 'missing') {
+      throw new Error(`File not found: ${file}`);
     }
+
+    return result.text;
   }
 
   private async writeDataFileText(
@@ -1010,19 +987,12 @@ export class WorkspaceStore {
     }
 
     const uri = this.getDataFileUri(kind, file);
-    let bytes: Uint8Array;
-
-    try {
-      bytes = await vscode.workspace.fs.readFile(uri);
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        throw new Error(`File not found: ${file}`);
-      }
-
-      throw error;
+    const result = await this.readTextFile(uri);
+    if (result.status === 'missing') {
+      throw new Error(`File not found: ${file}`);
     }
 
-    const text = decodeText(bytes);
+    const text = result.text;
     const currentRevision = createTextRevision(text);
     if (baseRevision !== currentRevision) {
       return {
@@ -1084,6 +1054,19 @@ export class WorkspaceStore {
     } catch (error) {
       if (isMissingFileSystemError(error)) {
         return [];
+      }
+
+      throw error;
+    }
+  }
+
+  private async readTextFile(uri: vscode.Uri): Promise<TextFileReadResult> {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      return { status: 'ok', text: decodeText(bytes) };
+    } catch (error) {
+      if (isMissingFileSystemError(error)) {
+        return { status: 'missing' };
       }
 
       throw error;

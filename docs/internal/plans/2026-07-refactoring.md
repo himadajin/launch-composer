@@ -152,7 +152,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: `resolveArgsForConfig` は `state.argsFileCache` を唯一のソースとし（ミス時は invariant 違反として明示的に throw）、再読込ロジックと `isStringArrayPayload` を削除する。共有型ガードは validate 側の実装に寄せる。merge の silent fallback は明示的な invariant エラーに置き換える。
 - **前提**: 「validation エラーあり ⇒ generate は早期 return」という不変条件に依存する。この不変条件をコメントとして `generate` に明記し、キャッシュ消費のテストを追加する。
 
-### 3-3. extension: ファイル読込 boilerplate の統一
+### 3-3. extension: ファイル読込 boilerplate の統一 [完了]
 
 - **対象**: `packages/extension/src/io/workspaceStore.ts`
 - **問題**: 「`vscode.workspace.fs.readFile` → `isMissingFileSystemError` 判定 → `decodeText`」のブロックが 5 箇所（`getDataFileRevision` / `readConfigFileResult` / `readArrayFile` / `readRequiredDataFileText` / `patchArrayEntry`）にコピーされ、missing 時の挙動（null 返却 / issue 返却 / throw）だけが異なる。
@@ -312,6 +312,7 @@ Phase 2（完了: 2-1 → 2-2 → 2-3 → 2-4 → 2-5）
 Phase 3（各項目独立）
   3-1 core フィールド形状チェックのテーブル駆動化 [完了]
   3-2 core argsFile ロジックと到達不能防御コードの整理 [完了]
+  3-3 extension ファイル読込 boilerplate の統一 [完了]
   3-3, 3-4 ────────────────→ 4-1 の前提
   3-5 ─────────────────────→ 4-2 と組み合わせる
   3-6 ─────────────────────→ 4-3 の前提
