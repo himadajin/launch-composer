@@ -80,15 +80,13 @@ export type WorkspaceGenerateResult =
       issueCount: number;
     };
 
-type ArrayFileReadResult<T> =
-  | { status: 'ok'; data: T[] }
-  | { status: 'missing' }
-  | { status: 'invalid'; issue: ComposerDataIssue };
-
 type ConfigFileReadResult =
   | { status: 'ok'; data: ConfigFileData }
   | { status: 'missing' }
   | { status: 'invalid'; issue: ComposerDataIssue };
+
+type DocumentParseResult<T> =
+  { status: 'ok'; data: T } | { status: 'invalid'; issue: ComposerDataIssue };
 
 type TextFileReadResult =
   { status: 'ok'; text: string } | { status: 'missing' };
@@ -817,14 +815,21 @@ export class WorkspaceStore {
     | { status: 'missing' }
     | { status: 'invalid'; issue: ComposerDataIssue }
   > {
-    const result = await this.readArrayFile<ProfileData>('profile', file);
-    if (result.status !== 'ok') {
-      return result;
+    const result = await this.readTextFile(
+      this.getDataFileUri('profile', file),
+    );
+    if (result.status === 'missing') {
+      return { status: 'missing' };
+    }
+
+    const parsed = this.parseProfileDocument(file, result.text);
+    if (parsed.status === 'invalid') {
+      return parsed;
     }
 
     return {
       status: 'ok',
-      data: { file, profiles: result.data },
+      data: { file, profiles: parsed.data },
     };
   }
 
@@ -837,7 +842,62 @@ export class WorkspaceStore {
       return { status: 'missing' };
     }
 
-    const text = result.text;
+    const parsed = this.parseConfigDocument(file, result.text);
+    if (parsed.status === 'invalid') {
+      return parsed;
+    }
+
+    return {
+      status: 'ok',
+      data: {
+        file,
+        configurations: parsed.data.configurations,
+      },
+    };
+  }
+
+  private parseProfileEntries(file: string, text: string): ProfileData[] {
+    return this.unwrapParsedDocument(this.parseProfileDocument(file, text));
+  }
+
+  private parseConfigFileContent(
+    file: string,
+    text: string,
+  ): Omit<ConfigFileData, 'file'> {
+    return this.unwrapParsedDocument(this.parseConfigDocument(file, text));
+  }
+
+  private parseProfileDocument(
+    file: string,
+    text: string,
+  ): DocumentParseResult<ProfileData[]> {
+    const parsed = parseJsoncDocument<unknown>(text);
+    if (parsed.issues.length > 0) {
+      return {
+        status: 'invalid',
+        issue: this.createParseIssue('profile', file, text, parsed.issues),
+      };
+    }
+
+    if (!Array.isArray(parsed.value)) {
+      return {
+        status: 'invalid',
+        issue: {
+          kind: 'profile',
+          file,
+          code: 'invalid-shape',
+          message: `${file} must contain a JSON array.`,
+        },
+      };
+    }
+
+    return { status: 'ok', data: parsed.value as ProfileData[] };
+  }
+
+  private parseConfigDocument(
+    file: string,
+    text: string,
+  ): DocumentParseResult<Omit<ConfigFileData, 'file'>> {
     const parsed = parseJsoncDocument<unknown>(text);
     if (parsed.issues.length > 0) {
       return {
@@ -863,85 +923,16 @@ export class WorkspaceStore {
 
     return {
       status: 'ok',
-      data: {
-        file,
-        configurations: parsed.value.configurations as ConfigData[],
-      },
+      data: { configurations: parsed.value.configurations as ConfigData[] },
     };
   }
 
-  private parseProfileEntries(file: string, text: string): ProfileData[] {
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      throw new Error(
-        this.createParseIssue('profile', file, text, parsed.issues).message,
-      );
+  private unwrapParsedDocument<T>(result: DocumentParseResult<T>): T {
+    if (result.status === 'invalid') {
+      throw new Error(result.issue.message);
     }
 
-    if (!Array.isArray(parsed.value)) {
-      throw new Error(`${file} must contain a JSON array.`);
-    }
-
-    return parsed.value as ProfileData[];
-  }
-
-  private parseConfigFileContent(
-    file: string,
-    text: string,
-  ): Omit<ConfigFileData, 'file'> {
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      throw new Error(
-        this.createParseIssue('config', file, text, parsed.issues).message,
-      );
-    }
-
-    if (
-      !isRecord(parsed.value) ||
-      !Array.isArray(parsed.value.configurations)
-    ) {
-      throw new Error(
-        `${file} must contain an object with a "configurations" array.`,
-      );
-    }
-
-    return {
-      configurations: parsed.value.configurations as ConfigData[],
-    };
-  }
-
-  private async readArrayFile<T>(
-    kind: 'profile' | 'config',
-    file: string,
-  ): Promise<ArrayFileReadResult<T>> {
-    const uri = this.getDataFileUri(kind, file);
-    const result = await this.readTextFile(uri);
-    if (result.status === 'missing') {
-      return { status: 'missing' };
-    }
-
-    const text = result.text;
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      return {
-        status: 'invalid',
-        issue: this.createParseIssue(kind, file, text, parsed.issues),
-      };
-    }
-
-    if (!Array.isArray(parsed.value)) {
-      return {
-        status: 'invalid',
-        issue: {
-          kind,
-          file,
-          code: 'invalid-shape',
-          message: `${file} must contain a JSON array.`,
-        },
-      };
-    }
-
-    return { status: 'ok', data: parsed.value as T[] };
+    return result.data;
   }
 
   private async readRequiredDataFileText(

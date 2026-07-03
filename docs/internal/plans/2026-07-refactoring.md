@@ -159,7 +159,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: private `readTextFile(uri): Promise<{ status: 'ok'; text: string } | { status: 'missing' }>` を 1 つ作り、3 種の挙動は呼び出し側で導出する。
 - **検証**: `workspaceStore.test.ts` が ENOENT / vscode / vscode-enoent の各エラースタイルを明示的にテストしているので、それが通ること。
 
-### 3-4. extension: throw 版 / result 版パーサの統合
+### 3-4. extension: throw 版 / result 版パーサの統合 [完了]
 
 - **対象**: `workspaceStore.ts` の `readConfigFileResult` vs `parseConfigFileContent`、`readArrayFile` vs `parseProfileEntries`
 - **問題**: 「JSONC をパースして形状を確認する」ロジックが kind ごとに失敗チャネス違い（issue 返却 / throw）で二重実装され、形状チェックとエラーメッセージがコピペである。
@@ -313,7 +313,8 @@ Phase 3（各項目独立）
   3-1 core フィールド形状チェックのテーブル駆動化 [完了]
   3-2 core argsFile ロジックと到達不能防御コードの整理 [完了]
   3-3 extension ファイル読込 boilerplate の統一 [完了]
-  3-3, 3-4 ────────────────→ 4-1 の前提
+  3-4 extension throw/result パーサの統合 [完了]
+  3-3, 3-4 ────────────────→ 4-1 の前提 [完了]
   3-5 ─────────────────────→ 4-2 と組み合わせる
   3-6 ─────────────────────→ 4-3 の前提
 
