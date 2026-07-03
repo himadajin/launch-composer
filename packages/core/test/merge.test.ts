@@ -64,3 +64,22 @@ test('buildLaunchConfig rejects invalid debug request values', () => {
     /Debug request must be "launch" or "attach"/,
   );
 });
+
+test('buildLaunchConfig rejects missing required launch fields', () => {
+  assert.throws(
+    () =>
+      buildLaunchConfig(
+        {
+          name: 'Launch',
+          profile: 'node',
+        },
+        {
+          name: 'node',
+          configuration: {
+            request: 'launch',
+          },
+        },
+      ),
+    /Required launch field "type" must be a non-empty string/,
+  );
+});

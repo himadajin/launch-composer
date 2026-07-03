@@ -1,5 +1,6 @@
 import { buildLaunchConfig } from './merge.js';
 import type {
+  ArgsFileData,
   ConfigRef,
   GenerateInput,
   GenerateResult,
@@ -18,6 +19,8 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
     };
   }
 
+  // From this point on, validation has resolved every argsFile and populated
+  // argsFileCache for successful entries.
   const configurations: LaunchConfig[] = [];
 
   for (const configRef of state.configRefs) {
@@ -32,11 +35,11 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
       );
     }
 
-    const argsFileArgs = await resolveArgsForConfig(
+    const argsFileArgs = resolveArgsForConfig(
       configRef,
       profile,
       state.argsFileCache,
-      input,
+      input.variables,
     );
 
     configurations.push(
@@ -53,12 +56,12 @@ export async function generate(input: GenerateInput): Promise<GenerateResult> {
   };
 }
 
-async function resolveArgsForConfig(
+function resolveArgsForConfig(
   configRef: ConfigRef,
   profile: ProfileData,
-  argsFileCache: Map<string, { args: string[] }>,
-  input: GenerateInput,
-): Promise<string[] | undefined> {
+  argsFileCache: Map<string, ArgsFileData>,
+  variables: GenerateInput['variables'],
+): string[] | undefined {
   if (profile.args !== undefined) {
     return undefined;
   }
@@ -68,39 +71,19 @@ async function resolveArgsForConfig(
     return undefined;
   }
 
-  const resolvedPath = resolveArgsFilePath(rawArgsFile, input.variables ?? {});
+  const resolvedPath = resolveArgsFilePath(rawArgsFile, variables ?? {});
   if (!resolvedPath.ok) {
-    throw new Error(resolvedPath.message);
+    throw new Error(
+      `Invariant violation: argsFile was not validated successfully. ${resolvedPath.message}`,
+    );
   }
 
   const cached = argsFileCache.get(resolvedPath.value);
-  if (cached !== undefined) {
-    return cached.args;
+  if (cached === undefined) {
+    throw new Error(
+      `Invariant violation: argsFile was not cached after validation: ${resolvedPath.value}`,
+    );
   }
 
-  if (input.readArgsFile === undefined) {
-    throw new Error('argsFile reader is not configured.');
-  }
-
-  const result = await input.readArgsFile(resolvedPath.value);
-  if (result.kind !== 'success' || !isStringArrayPayload(result.data)) {
-    throw new Error(`Failed to load argsFile: ${resolvedPath.value}`);
-  }
-
-  argsFileCache.set(resolvedPath.value, { args: result.data.args });
-  return result.data.args;
-}
-
-function isStringArrayPayload(value: unknown): value is {
-  args: string[];
-} {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Array.isArray((value as { args?: unknown }).args) &&
-    (value as { args: unknown[] }).args.every(
-      (entry) => typeof entry === 'string',
-    )
-  );
+  return cached.args;
 }

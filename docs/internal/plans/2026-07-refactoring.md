@@ -142,7 +142,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: `{ field, applies?, valid, message }` のルール配列 + 1 ループに置き換える。横断ルール（`validateNameUniqueness` / `validateConfigSemantics` / `validateArgsFile`)はテーブルに合わないので現状の関数のまま残す。`BLOCKED_OVERRIDE_KEYS` はデータとして維持する（`docs/internal/pending.md` に `configuration.program` を許可するかの保留課題があり、決定時に 1 行のデータ変更で済ませるため）。
 - **前提**: Phase 1-1 のテストが先。エラーメッセージ文字列と `ValidationError` の形状を変えないこと。
 
-### 3-2. core: argsFile ロジックの重複と到達不能な防御コードの整理
+### 3-2. core: argsFile ロジックの重複と到達不能な防御コードの整理 [完了]
 
 - **対象**: `packages/core/src/generate.ts` の `resolveArgsForConfig` / `isStringArrayPayload`、`packages/core/src/merge.ts` の `ensureRequiredLaunchField` / `requireDebugRequest`
 - **問題**:
@@ -311,6 +311,7 @@ Phase 2（完了: 2-1 → 2-2 → 2-3 → 2-4 → 2-5）
 
 Phase 3（各項目独立）
   3-1 core フィールド形状チェックのテーブル駆動化 [完了]
+  3-2 core argsFile ロジックと到達不能防御コードの整理 [完了]
   3-3, 3-4 ────────────────→ 4-1 の前提
   3-5 ─────────────────────→ 4-2 と組み合わせる
   3-6 ─────────────────────→ 4-3 の前提
