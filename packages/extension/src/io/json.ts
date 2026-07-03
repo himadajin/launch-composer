@@ -7,21 +7,14 @@ import {
   type ParseError,
 } from 'jsonc-parser/lib/esm/main.js';
 
+import type { EntryPatchOperation } from '../messages.js';
+
 export interface JsonParseIssue {
   code: string;
   offset: number;
 }
 
-export type JsonObjectPatchOperation =
-  | {
-      type: 'set';
-      path: (string | number)[];
-      value: unknown;
-    }
-  | {
-      type: 'delete';
-      path: (string | number)[];
-    };
+export type JsonObjectPatchOperation = EntryPatchOperation;
 
 const JSON_FORMATTING_OPTIONS = {
   insertSpaces: true,

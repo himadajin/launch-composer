@@ -36,7 +36,7 @@ Use this routing when deciding which specs and code surfaces must move together:
 - Webview editor UI, form behavior, and VS Code-style interaction details: `docs/internal/specs/ui.md`.
 - Extension Host ↔ Webview messages, editor persistence flow, request/response payloads, and shared data types: `docs/internal/specs/communication.md`.
 
-When changing schema, shared data shapes, or host/webview communication, keep the mirrored contract surfaces synchronized: `docs/internal/contracts/`, `docs/internal/specs/communication.md`, `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`, and `packages/core/src/types.ts` when `ProfileData`, `ConfigData`, or `ValidationError` changes. TypeScript types are the canonical source for data shapes; `docs/internal/contracts/` maps each contract to the owning type and spec. Preserve the existing persistence path: Webview state and controls emit changes through the local bridge/RPC utilities, the extension host applies JSONC patches, and the webview never performs workspace file I/O directly.
+When changing schema, shared data shapes, or host/webview communication, start from `docs/internal/contracts/` and update the canonical TypeScript source it names. JSON file data and Generate types live in `packages/core/src/types.ts`; Host/Webview message and UI diagnostic contracts live in `packages/core/src/contracts.ts`. `packages/extension/src/messages.ts` and `packages/webview/src/types.ts` are consumer-facing re-exports, so do not hand-copy mirror definitions there. Preserve the existing persistence path: Webview state and controls emit changes through the local bridge/RPC utilities, the extension host applies JSONC patches, and the webview never performs workspace file I/O directly.
 
 ## Commands
 

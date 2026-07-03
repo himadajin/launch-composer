@@ -8,7 +8,7 @@
     "build:test": "node test/build-tests.mjs",
     "test": "npm run build:test && node --test .test-dist/*.test.js",
     "watch": "vite build --watch",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -b tsconfig.json"
   },
   "dependencies": {
     "@himadajin/vscode-components": "^0.1.0",
@@ -16,6 +16,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@launch-composer/core": "0.1.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",

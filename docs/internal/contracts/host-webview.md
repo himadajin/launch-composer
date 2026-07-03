@@ -1,55 +1,55 @@
 # Host-Webview Data Contracts
 
-Extension Host と Webview の message shape は `packages/extension/src/messages.ts` を canonical source とする。Webview 側の mirror は `packages/webview/src/types.ts` である。
+Extension Host と Webview の message shape は `packages/core/src/contracts.ts` を canonical source とする。Extension Host 側の `packages/extension/src/messages.ts` と Webview 側の `packages/webview/src/types.ts` は consumer-facing re-export である。
 
 ## Contracts
 
 - 契約: editor target
-  - canonical source: `EditorTarget` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `EditorTarget` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
   - 注意: `file` は composer directory 内のファイル名であり、絶対パスではない
 - 契約: initial data payload
-  - canonical source: `InitialDataPayload` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `InitialDataPayload` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
   - 注意: editor panel の full snapshot と revision を運ぶ
 - 契約: workspace update payload
-  - canonical source: `WorkspaceUpdatePayload` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `WorkspaceUpdatePayload` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
   - 注意: profile update は open config editor にも送る
 - 契約: generate readiness
-  - canonical source: `GenerateReadiness` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `GenerateReadiness` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md), [../specs/ui.md](../specs/ui.md)
   - 注意: Generate と同じ判定源から計算する workspace 全体の生成可能性。Host から Webview に送る workspace snapshot payload では必須。`diagnostics` が UI 表示と生成可否判定の source of truth
 - 契約: generate diagnostic
-  - canonical source: `GenerateDiagnostic` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `GenerateDiagnostic` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md), [../specs/ui.md](../specs/ui.md)
   - 注意: core validation または invalid file issue から Host が生成する UI diagnostic
 - 契約: entry patch operation
-  - canonical source: `EntryPatchOperation` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `EntryPatchOperation` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
   - 注意: path は entry root からの相対パスであり、`name` は patch では変更しない
 - 契約: Webview message
-  - canonical source: `WebviewMessage` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `WebviewMessage` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
   - 注意: response が必要な message は `requestId` を持つ
 - 契約: Host message
-  - canonical source: `HostMessage` in `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `HostMessage` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
   - 注意: response message は Webview request と同じ `requestId` を返す
 - 契約: composer data issue
-  - canonical source: `ComposerDataIssue` in `packages/extension/src/io/workspaceStore.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `ComposerDataIssue` in `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/extension.md](../specs/extension.md), [../specs/communication.md](../specs/communication.md)
   - 注意: invalid file をファイル単位で表す。core validation error とは別物
 
 ## Ownership
 
-`packages/extension/src/messages.ts` を変更した場合は、`packages/webview/src/types.ts` とこの contract map を同期する。`ProfileData`、`ConfigData` を含む payload を変更する場合は `packages/core/src/types.ts` も確認する。
+Host/Webview message shape を変更する場合は `packages/core/src/contracts.ts` を変更する。`packages/extension/src/messages.ts` と `packages/webview/src/types.ts` は re-export なので、canonical 型の変更にコンパイル時に追従する。`ProfileData`、`ConfigData` を含む payload を変更する場合は `packages/core/src/types.ts` も確認する。

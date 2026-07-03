@@ -12,8 +12,8 @@
   - behavior spec: [../specs/README.md](../specs/README.md), [../specs/core.md](../specs/core.md), [../specs/extension.md](../specs/extension.md)
 - 契約: Extension Host ↔ Webview messages
   - contract map: [host-webview.md](./host-webview.md)
-  - canonical source: `packages/extension/src/messages.ts`
-  - mirror source: `packages/webview/src/types.ts`
+  - canonical source: `packages/core/src/contracts.ts`
+  - consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
   - behavior spec: [../specs/communication.md](../specs/communication.md)
 
 ## 更新ルール

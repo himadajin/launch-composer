@@ -48,4 +48,4 @@ JSON file data と Generate 入出力の shape は `packages/core/src/types.ts` 
 
 ## Ownership
 
-`packages/core/src/types.ts` を変更した場合は、このファイルの contract map、関連する `docs/internal/specs/*.md`、および mirror している `packages/webview/src/types.ts` / `packages/extension/src/messages.ts` を確認する。
+`packages/core/src/types.ts` を変更した場合は、このファイルの contract map と関連する `docs/internal/specs/*.md` を確認する。Host/Webview payload がその型を含む場合は `packages/core/src/contracts.ts` も確認する。

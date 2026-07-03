@@ -1,6 +1,6 @@
 # Launch Composer - Extension Host ↔ Webview 通信仕様
 
-このファイルは `launch-composer` と `@launch-composer/webview` の通信 behavior を定める。message shape の canonical source は `packages/extension/src/messages.ts`、Webview 側 mirror は `packages/webview/src/types.ts` である。契約ごとの参照先は [Host/Webview contract map](../contracts/host-webview.md) を参照する。
+このファイルは `launch-composer` と `@launch-composer/webview` の通信 behavior を定める。message shape の canonical source は `packages/core/src/contracts.ts` である。`packages/extension/src/messages.ts` と `packages/webview/src/types.ts` は consumer-facing re-export として既存 import 元を維持する。契約ごとの参照先は [Host/Webview contract map](../contracts/host-webview.md) を参照する。
 
 ## 基本方針
 
@@ -58,8 +58,8 @@ rename request の成功・失敗後、Webview は最新 `initial-data` を再�
 共有データ型の canonical source は次の通りである。
 
 - JSON file data / validation error: `packages/core/src/types.ts`
-- Host/Webview payload: `packages/extension/src/messages.ts`
-- Webview mirror: `packages/webview/src/types.ts`
+- Host/Webview payload: `packages/core/src/contracts.ts`
+- Consumer re-exports: `packages/extension/src/messages.ts`, `packages/webview/src/types.ts`
 - contract map: [Host/Webview contract map](../contracts/host-webview.md)
 
 `file` は composer directory 内のファイル名である。絶対パスではない。
@@ -68,7 +68,7 @@ rename request の成功・失敗後、Webview は最新 `initial-data` を再�
 
 ## Patch 型
 
-`EntryPatchOperation` の shape は `packages/extension/src/messages.ts` を canonical source とする。Webview 側 mirror は `packages/webview/src/types.ts` である。
+`EntryPatchOperation` の shape は `packages/core/src/contracts.ts` を canonical source とする。Extension Host の `JsonObjectPatchOperation` は同じ型の alias であり、ワイヤ形状と JSONC patch 適用形状は一致する。
 
 `path` は entry root からの相対パスである。たとえば profile の program 変更は `['configuration', 'program']`、config の profile 変更は `['profile']` である。
 
@@ -78,7 +78,7 @@ Host は受け取った patch path に対象 entry の document path を prefix 
 
 ## Webview → Host message
 
-`WebviewMessage` の shape は `packages/extension/src/messages.ts` を canonical source とする。Webview が送る message は次の通りである。
+`WebviewMessage` の shape は `packages/core/src/contracts.ts` を canonical source とする。Webview が送る message は次の通りである。
 
 - `update-profile`
 - `update-config`
@@ -122,7 +122,7 @@ Backing JSON file を開く fire-and-forget message である。response はな�
 
 ## Host → Webview message
 
-`HostMessage` の shape は `packages/extension/src/messages.ts` を canonical source とする。Host が送る message は次の通りである。
+`HostMessage` の shape は `packages/core/src/contracts.ts` を canonical source とする。Host が送る message は次の通りである。
 
 - `initial-data`
 - `workspace-update`
