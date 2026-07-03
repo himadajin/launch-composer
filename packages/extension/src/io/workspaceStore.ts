@@ -112,13 +112,6 @@ export class WorkspaceStore {
     return this.workspaceRoot.fsPath;
   }
 
-  getRelativeComposerPattern(): vscode.RelativePattern {
-    return new vscode.RelativePattern(
-      this.workspaceRoot,
-      `${COMPOSER_DIR}/**/*.json`,
-    );
-  }
-
   getRelativeProfilePattern(): vscode.RelativePattern {
     return new vscode.RelativePattern(
       this.workspaceRoot,
@@ -766,14 +759,6 @@ export class WorkspaceStore {
     );
   }
 
-  isComposerDataFile(uri: vscode.Uri): boolean {
-    const relativePath = vscode.workspace.asRelativePath(uri, false);
-    return (
-      relativePath.startsWith(`${PROFILES_DIR}/`) ||
-      relativePath.startsWith(`${CONFIGS_DIR}/`)
-    );
-  }
-
   async generateLaunchJson(): Promise<WorkspaceGenerateResult> {
     const snapshot = await this.readAll();
     const readiness = snapshot.generateReadiness;
@@ -831,32 +816,6 @@ export class WorkspaceStore {
     const entries = await this.listFiles('config');
     return this.readExistingFiles(entries, (file) =>
       this.readConfigFileResult(file),
-    );
-  }
-
-  private async readProfileFile(file: string): Promise<ProfileFileData> {
-    const result = await this.readProfileFileResult(file);
-    if (result.status === 'ok') {
-      return result.data;
-    }
-
-    throw new Error(
-      result.status === 'missing'
-        ? `File not found: ${file}`
-        : result.issue.message,
-    );
-  }
-
-  private async readConfigFile(file: string): Promise<ConfigFileData> {
-    const result = await this.readConfigFileResult(file);
-    if (result.status === 'ok') {
-      return result.data;
-    }
-
-    throw new Error(
-      result.status === 'missing'
-        ? `File not found: ${file}`
-        : result.issue.message,
     );
   }
 

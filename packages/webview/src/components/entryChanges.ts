@@ -289,11 +289,6 @@ function createDeleteIfPresentPatch(
   path: (string | number)[],
   valueHolder: object | undefined,
   key: string,
-): EntryPatchOperation[];
-function createDeleteIfPresentPatch(
-  path: (string | number)[],
-  valueHolder: object | undefined,
-  key: string,
 ): EntryPatchOperation[] {
   return valueHolder !== undefined && Object.hasOwn(valueHolder, key)
     ? [

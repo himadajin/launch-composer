@@ -5,8 +5,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type Dispatch,
-  type SetStateAction,
 } from 'react';
 
 import { ConfigEditor } from './components/ConfigEditor.js';
@@ -23,6 +21,11 @@ import {
   getEditorDiagnostics,
   mergeWorkspaceUpdatePayload,
 } from './components/generateReadiness.js';
+import {
+  createPlaceholderConfig,
+  createPlaceholderProfile,
+  updatePayload,
+} from './payloadUpdates.js';
 import { RpcClient } from './utils/rpc.js';
 import { vscode } from './utils/vscode.js';
 
@@ -277,7 +280,7 @@ export function App() {
               data: nextData,
               patches,
             }: EntryChange<ProfileData>) => {
-              updatePayload(payload, setPayload, payload.editor, nextData);
+              setPayload(updatePayload(payload, payload.editor, nextData));
               enqueueUpdate(
                 'profile',
                 payload.editor.file,
@@ -318,7 +321,7 @@ export function App() {
               data: nextData,
               patches,
             }: EntryChange<ConfigData>) => {
-              updatePayload(payload, setPayload, payload.editor, nextData);
+              setPayload(updatePayload(payload, payload.editor, nextData));
               enqueueUpdate(
                 'config',
                 payload.editor.file,
@@ -340,49 +343,6 @@ export function App() {
       </section>
     </main>
   );
-}
-
-function updatePayload(
-  payload: InitialDataPayload,
-  setPayload: Dispatch<SetStateAction<InitialDataPayload | null>>,
-  editor: InitialDataPayload['editor'],
-  nextData: ProfileData | ConfigData,
-) {
-  const nextPayload: InitialDataPayload =
-    editor.kind === 'profile'
-      ? {
-          ...payload,
-          profiles: payload.profiles.map((fileData) =>
-            fileData.file !== editor.file
-              ? fileData
-              : {
-                  ...fileData,
-                  profiles: fileData.profiles.map((profile, index) =>
-                    index === editor.index
-                      ? (nextData as ProfileData)
-                      : profile,
-                  ),
-                },
-          ),
-        }
-      : {
-          ...payload,
-          configs: payload.configs.map((fileData) =>
-            fileData.file !== editor.file
-              ? fileData
-              : {
-                  ...fileData,
-                  configurations: fileData.configurations.map(
-                    (config, index) =>
-                      index === editor.index
-                        ? (nextData as ConfigData)
-                        : config,
-                  ),
-                },
-          ),
-        };
-
-  setPayload(nextPayload);
 }
 
 function isInitialDataPayload(value: unknown): value is InitialDataPayload {
@@ -423,20 +383,6 @@ function isRenameResult(value: unknown): value is {
     'success' in value &&
     typeof (value as { success: unknown }).success === 'boolean'
   );
-}
-
-function createPlaceholderProfile(file: string): ProfileData {
-  return {
-    name: file,
-    configuration: { type: '', request: 'launch' },
-  };
-}
-
-function createPlaceholderConfig(file: string): ConfigData {
-  return {
-    name: file,
-    profile: '',
-  };
 }
 
 function GenerateStatus({

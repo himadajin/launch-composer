@@ -6,8 +6,8 @@
 
 - 各項目は「問題 → 変更内容 → 検証」の形で、意図が独立に理解できるように記述する。
 - 位置の参照はシンボル名を正とする。行番号は調査時点の目安であり、ずれていたらシンボル名で探すこと。
-- 着手前に、対象コードが調査時点から変わっていないかを確認する。既に解消済みの項目はこのファイルから削除してよい。
-- 完了した項目もこのファイルから削除し、フェーズ内の全項目が終わったらフェーズごと削除する。全フェーズ完了時はこのファイル自体を削除する。
+- 着手前に、対象コードが調査時点から変わっていないかを確認する。既に解消済みの項目は `[完了]` を付ける。
+- 完了した項目は `[完了]` を付け、完了済みであることが後から分かるように残す。全フェーズ完了時はこのファイル自体を削除する。
 
 ### 進め方の原則
 
@@ -23,22 +23,22 @@
 1. **型契約の手動三重同期**: `packages/webview/src/types.ts`（191 行）はほぼ全行が core 型・extension メッセージ型・`ComposerDataIssue` の手書きコピーであり、コンパイラによる同期保証がない。既にフォーマット差分のドリフトが発生している。
 2. **ホットスポットの肥大化**: サイズ×変更頻度の上位が `workspaceStore.ts`（1,464 行・22 回変更）、`extension.ts`（1,036 行・19 回変更）、`ConfigEditor.tsx`（20 回）、`App.tsx`（15 回）。変更コストが最も高い場所に責務が集中している。
 3. **profile / config 対称性によるコピー実装**: profile と config で同じ処理をコピーして書く箇所が extension のコマンド登録、webview のエディタ・updater 群に蓄積している。
-4. **テストの穴**: core の `validate.ts` の大半・`variables.ts`・`merge.ts` が未テスト。webview の React 層が全て未テスト。さらに `treeProvider.test.ts` はテストビルド対象から漏れており一度も実行されていない（Phase 0-1）。
+4. **テストの穴**: core の `validate.ts` / `variables.ts` / `merge.ts` の未テスト分岐と `treeProvider.test.ts` のテストビルド脱落は Phase 0〜1 で解消済み。webview の React rendering 層は引き続き未テストである。
 
 ---
 
-## Phase 0: バグ修正とデッドコード削除
+## Phase 0: バグ修正とデッドコード削除 [完了]
 
 低リスクで即効性のある項目。どれも独立に実施できる。
 
-### 0-1. treeProvider.test.ts がテスト実行から脱落している【バグ】
+### 0-1. treeProvider.test.ts がテスト実行から脱落している【バグ】 [完了]
 
 - **対象**: `packages/extension/test/build-tests.mjs`
 - **問題**: esbuild の `entryPoints` にテストファイル名がハードコードされており、`treeProvider.test.ts`（325 行）が含まれていない。`node --test .test-dist/*.test.js` はビルド済みファイルしか実行しないため、TreeView のテストスイート全体がサイレントに実行されていない。「テストがある」という認識と実態がずれている。
 - **変更**: `entryPoints` を `test/*.test.ts` の glob（`fs.readdirSync` などで列挙）に置き換え、新しいテストファイルが二度と脱落しない構造にする。`packages/webview/test/build-tests.mjs` も同じハードコード方式なので同様に glob 化する。
 - **検証**: `npm run test -w launch-composer` の実行テスト数が増えることを確認する。treeProvider のテストは長期間実行されていないため、失敗する可能性がある。失敗した場合は原因を確認し、テストまたは実装の修正を独立した変更として扱う。
 
-### 0-2. デッドコードの削除
+### 0-2. デッドコードの削除 [完了]
 
 参照ゼロを grep / typecheck で再確認したうえで削除する。
 
@@ -49,7 +49,7 @@
 - `packages/core/src/index.ts`: `isAbsolutePath` と `buildLaunchConfig` の re-export を削除（モジュール内部・core 内部でのみ使用）。`generate` のシグネチャに現れる型（`GenerateResult` / `LaunchJson` / `LaunchConfig` / `ValidationErrorTarget` / `ArgsFileReader` など）は正当な public API なので残す。`ProfileEntry` / `ConfigEntry` は Phase 2 で webview から import されるようになるため残す。
 - **検証**: typecheck とテストが通ること。
 
-### 0-3. TreeView のコマンド ID 文字列リテラルを定数参照にする
+### 0-3. TreeView のコマンド ID 文字列リテラルを定数参照にする [完了]
 
 - **対象**: `packages/extension/src/treeview/provider.ts`
 - **問題**: `'launch-composer.openProfileFileJson'`、`'launch-composer.openConfigFileJson'`、`'launch-composer.editItem'` が文字列リテラルで埋め込まれている。`src/commands.ts` はコマンド ID を一元管理するために存在しており、ID 変更時にツリーアイテムのコマンドだけがサイレントに壊れる。
@@ -58,11 +58,11 @@
 
 ---
 
-## Phase 1: テスト補強（後続フェーズの安全網）
+## Phase 1: テスト補強（後続フェーズの安全網） [完了]
 
 Phase 2 以降で触るコードのうち、現在テストがない箇所を先に固める。挙動変更はしない。
 
-### 1-1. core: validate / variables / merge のテスト追加
+### 1-1. core: validate / variables / merge のテスト追加 [完了]
 
 - **対象**: `packages/core/test/` に `validate.test.ts` と `variables.test.ts` を新設
 - **問題**: core のテストは `generate.test.ts` の 1 ファイルのみ。以下が未テストである。
@@ -74,14 +74,14 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: 上記の失敗系マトリクスを網羅するテストを追加する。仕様の正は `docs/internal/specs/core.md`。テスト追加中に仕様とコードの食い違いを見つけたら、黙って合わせずに仕様確認を先に行う。
 - **理由**: Phase 3-1（validate のテーブル駆動化）と 3-2（argsFile ロジック統合）はこれらの分岐を書き換える。ピン留めするテストなしに着手してはならない。
 
-### 1-2. webview: App.tsx 内の純粋ロジックを .ts モジュールへ抽出してテスト
+### 1-2. webview: App.tsx 内の純粋ロジックを .ts モジュールへ抽出してテスト [完了]
 
 - **対象**: `packages/webview/src/App.tsx`
 - **問題**: `updatePayload`（payload へのエントリデータ適用）、レスポンス型ガード群、`createPlaceholderProfile` / `createPlaceholderConfig` は純粋関数だが App.tsx 内にあるためテストされていない。webview のテスト基盤（`node --test` + esbuild、DOM なし）は plain .ts モジュールしかテストできず、同種の `mergeWorkspaceUpdatePayload`（`generateReadiness.ts`）はテスト済みという非対称がある。
 - **変更**: 純粋ロジックを .ts モジュール（例: `payloadUpdates.ts`）へ移し、`test/build-tests.mjs` のビルド対象に追加してテストを書く。型ガード群は Phase 3-6（RPC 型付け）で削除予定なので、テスト対象は `updatePayload` を優先する。
 - **理由**: Phase 4-3（App.tsx のフック分割）の前提。
 
-### 1-3. extension: Webview HTML 書き換えを純関数化してテスト
+### 1-3. extension: Webview HTML 書き換えを純関数化してテスト [完了]
 
 - **対象**: `packages/extension/src/webview/editorPanel.ts` の `getWebviewHtml`
 - **問題**: Vite が生成した `index.html` の asset パスを webview URI に書き換える正規表現処理が、テストスタブでは `node:fs` を差し替えられないため常に catch 分岐（"Webview assets are missing"）に落ち、カバレッジゼロである。Vite の出力形式変更（属性順、preload リンク等）で静かに壊れ得るホットスポットである。
@@ -292,15 +292,15 @@ watcher は `profiles/**/*.json`（再帰）を監視するが、store の `read
 ## 実施順序と依存関係のまとめ
 
 ```text
-Phase 0（独立・即実施可）
-  0-1 テストビルド glob 化 ── 0-3 の前提（treeProvider テスト復活）
-  0-2 デッドコード削除
-  0-3 コマンド ID 定数化
+Phase 0（完了）
+  0-1 テストビルド glob 化 ── 0-3 の前提（treeProvider テスト復活） [完了]
+  0-2 デッドコード削除 [完了]
+  0-3 コマンド ID 定数化 [完了]
 
-Phase 1（Phase 2〜4 の安全網）
-  1-1 core テスト追加 ──────→ 3-1, 3-2 の前提
-  1-2 App.tsx 純粋ロジック抽出 → 4-3 の前提
-  1-3 HTML 書き換え純関数化
+Phase 1（完了 / Phase 2〜4 の安全網）
+  1-1 core テスト追加 ──────→ 3-1, 3-2 の前提 [完了]
+  1-2 App.tsx 純粋ロジック抽出 → 4-3 の前提 [完了]
+  1-3 HTML 書き換え純関数化 [完了]
 
 Phase 2（順序どおり: 2-1 → 2-2 → 2-3 → 2-4 → 2-5）
 

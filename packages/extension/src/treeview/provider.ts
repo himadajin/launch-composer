@@ -12,6 +12,7 @@ import type {
   WorkspaceDataSnapshot,
   WorkspaceStore,
 } from '../io/workspaceStore.js';
+import { COMMANDS } from '../commands.js';
 
 type FileNode = {
   type: 'file';
@@ -49,7 +50,6 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
   >();
   readonly onDidChangeTreeData = this.didChangeTreeDataEmitter.event;
 
-  private fileNodes = new Map<string, FileNode>();
   private entryNodes = new Map<string, EntryNode>();
   private snapshot: WorkspaceDataSnapshot | undefined;
 
@@ -60,7 +60,6 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
   refresh(snapshot?: WorkspaceDataSnapshot): void {
     this.snapshot = snapshot;
-    this.fileNodes.clear();
     this.entryNodes.clear();
     this.didChangeTreeDataEmitter.fire(undefined);
   }
@@ -142,8 +141,8 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
         item.command = {
           command:
             element.kind === 'profile'
-              ? 'launch-composer.openProfileFileJson'
-              : 'launch-composer.openConfigFileJson',
+              ? COMMANDS.openProfileFileJson
+              : COMMANDS.openConfigFileJson,
           title: 'Open JSON',
           arguments: [element],
         };
@@ -174,7 +173,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
           ? 'configEntryEnabled'
           : 'configEntryDisabled';
     item.command = {
-      command: 'launch-composer.editItem',
+      command: COMMANDS.editItem,
       title: 'Edit',
       arguments: [element],
     };
@@ -223,7 +222,6 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       ...data.issues.filter((i) => i.kind === this.kind).map((i) => i.file),
     ].sort((a, b) => a.localeCompare(b));
 
-    this.fileNodes.clear();
     this.entryNodes.clear();
 
     return fileNames.map((file) => {
@@ -262,7 +260,6 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
                 (fileData as ConfigFileData | undefined)?.configurations ?? [],
             };
 
-      this.fileNodes.set(file, node);
       return node;
     });
   }

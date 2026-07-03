@@ -62,6 +62,7 @@ test('tree provider keeps invalid files visible as warning nodes', async () => {
 test('tree provider shows included config entries as checked checkboxes', async () => {
   const store = new WorkspaceStore(vscode.Uri.file('/workspace/config-tree'));
 
+  await writeValidProfile('/workspace/config-tree');
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file('/workspace/config-tree/.vscode/launch-composer/configs'),
   );
@@ -70,7 +71,7 @@ test('tree provider shows included config entries as checked checkboxes', async 
       '/workspace/config-tree/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "configurations": [\n    {\n      "name": "Launch"\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "node"\n    }\n  ]\n}\n',
     ),
   );
 
@@ -111,6 +112,7 @@ test('tree provider keeps excluded config entries as unchecked checkboxes', asyn
     vscode.Uri.file('/workspace/config-tree-preserve-state'),
   );
 
+  await writeValidProfile('/workspace/config-tree-preserve-state');
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
       '/workspace/config-tree-preserve-state/.vscode/launch-composer/configs',
@@ -121,7 +123,7 @@ test('tree provider keeps excluded config entries as unchecked checkboxes', asyn
       '/workspace/config-tree-preserve-state/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "excluded": true\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "node",\n      "excluded": true\n    }\n  ]\n}\n',
     ),
   );
 
@@ -151,6 +153,7 @@ test('tree provider describes excluded config entries', async () => {
     vscode.Uri.file('/workspace/config-tree-item-disabled'),
   );
 
+  await writeValidProfile('/workspace/config-tree-item-disabled');
   await vscode.workspace.fs.createDirectory(
     vscode.Uri.file(
       '/workspace/config-tree-item-disabled/.vscode/launch-composer/configs',
@@ -161,7 +164,7 @@ test('tree provider describes excluded config entries', async () => {
       '/workspace/config-tree-item-disabled/.vscode/launch-composer/configs/config.json',
     ),
     new TextEncoder().encode(
-      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "excluded": true\n    }\n  ]\n}\n',
+      '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "node",\n      "excluded": true\n    }\n  ]\n}\n',
     ),
   );
 
@@ -231,6 +234,20 @@ test('tree provider decorates profile entries with diagnostics', async () => {
   assert.equal(item.tooltip, 'Profile type is required.');
   assert.notEqual(item.iconPath, undefined);
 });
+
+async function writeValidProfile(workspacePath: string): Promise<void> {
+  await vscode.workspace.fs.createDirectory(
+    vscode.Uri.file(`${workspacePath}/.vscode/launch-composer/profiles`),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.file(
+      `${workspacePath}/.vscode/launch-composer/profiles/profile.json`,
+    ),
+    new TextEncoder().encode(
+      '[\n  {\n    "name": "node",\n    "configuration": {\n      "type": "node",\n      "request": "launch"\n    }\n  }\n]\n',
+    ),
+  );
+}
 
 test('tree provider combines excluded config state with diagnostic count', async () => {
   const store = new WorkspaceStore(

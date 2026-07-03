@@ -18,7 +18,7 @@ export type {
   ValidationErrorTarget,
 } from './types.js';
 
-export { buildLaunchArgs, buildLaunchConfig } from './merge.js';
+export { buildLaunchArgs } from './merge.js';
 export { generate } from './generate.js';
 export { validateGenerateInput } from './validate.js';
-export { isAbsolutePath, resolveArgsFilePath } from './variables.js';
+export { resolveArgsFilePath } from './variables.js';
