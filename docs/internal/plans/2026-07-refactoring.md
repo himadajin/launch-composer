@@ -14,13 +14,13 @@
 1. **フェーズ順に進める。** Phase 1（テスト補強）は Phase 2 以降の安全網であり、順序に意味がある。フェーズ内の項目は独立しており、任意の順で小さな PR に分割できる。
 2. **各変更後に検証ゲートを通す**: `npm run format` / `npm run lint` / `npm run typecheck` / `npm run test`（`AGENTS.md` の必須ゲート）。
 3. **挙動を変えない。** この計画の大半は挙動保存のリファクタリングである。観測可能な挙動が変わる項目は「[挙動変更を伴う項目](#挙動変更を伴う項目仕様更新とセットで行う)」に分離してあり、`AGENTS.md` の Spec-First Change Routing に従って仕様更新とセットで行う。
-4. **契約面の変更は同期を守る。** 型契約（`docs/internal/contracts/`、`packages/extension/src/messages.ts`、`packages/webview/src/types.ts`、`packages/core/src/types.ts`）に触れる場合はミラー面とドキュメントを同時に更新する。Phase 2 完了後はこの手動同期自体が不要になる。
+4. **契約面の変更は同期を守る。** 型契約に触れる場合は `docs/internal/contracts/` が指す canonical TypeScript source とドキュメントを同時に更新する。Host/Webview 契約は Phase 2 で `packages/core/src/contracts.ts` に一元化済みであり、extension/webview 側の re-export へ手書きコピーしない。
 
 ## 背景: 調査で判明した構造的課題
 
 コードベース（約 13,000 行）の設計は健全で、パッケージ境界の規律、pure logic と UI の分離、public API を対象とした厚いテストという資産がある。問題は次の 4 テーマに集約される。
 
-1. **型契約の手動三重同期**: `packages/webview/src/types.ts`（191 行）はほぼ全行が core 型・extension メッセージ型・`ComposerDataIssue` の手書きコピーであり、コンパイラによる同期保証がない。既にフォーマット差分のドリフトが発生している。
+1. **型契約の手動三重同期**: `packages/webview/src/types.ts` にあった core 型・extension メッセージ型・`ComposerDataIssue` の手書きコピーは Phase 2 で `packages/core/src/contracts.ts` に一元化済みである。
 2. **ホットスポットの肥大化**: サイズ×変更頻度の上位が `workspaceStore.ts`（1,464 行・22 回変更）、`extension.ts`（1,036 行・19 回変更）、`ConfigEditor.tsx`（20 回）、`App.tsx`（15 回）。変更コストが最も高い場所に責務が集中している。
 3. **profile / config 対称性によるコピー実装**: profile と config で同じ処理をコピーして書く箇所が extension のコマンド登録、webview のエディタ・updater 群に蓄積している。
 4. **テストの穴**: core の `validate.ts` / `variables.ts` / `merge.ts` の未テスト分岐と `treeProvider.test.ts` のテストビルド脱落は Phase 0〜1 で解消済み。webview の React rendering 層は引き続き未テストである。
@@ -90,26 +90,26 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 
 ---
 
-## Phase 2: 型契約の一元化（構造上最大の改善）
+## Phase 2: 型契約の一元化（構造上最大の改善） [完了]
 
 `AGENTS.md` が明文化している「contracts / communication.md / messages.ts / webview types.ts / core types.ts の手動同期」をコンパイラ保証に置き換える。調査時点で技術的障害はない: `messages.ts` は vscode API に依存しておらず、core 型と plain data 型のみを参照している。webview は現在 core に依存していないが、型のみの import は Vite・esbuild 双方で消去されるためランタイムコストはない。
 
 **この Phase は順序どおりに進める。**
 
-### 2-1. TypeScript project references の導入
+### 2-1. TypeScript project references の導入 [完了]
 
 - **対象**: `packages/core/tsconfig.json`（`composite: true`）、`packages/extension` / `packages/webview` の tsconfig（`references`）、ルートの `typecheck` スクリプト
 - **問題**: extension の `typecheck` が core のビルドをスクリプト実行順序で肩代わりしている。webview → core の型依存を追加する（2-2）には、ビルド順序の保証をスクリプトの暗黙順序から `tsc -b` に移すのが安全である。
 - **検証**: `npm run typecheck`、`npm run build` が通ること。core を変更した直後の typecheck が古い `dist` を見ない（参照経由で再ビルドされる）ことを確認する。
 
-### 2-2. webview が core のデータ型を import する
+### 2-2. webview が core のデータ型を import する [完了]
 
 - **対象**: `packages/webview/package.json`、`packages/webview/src/types.ts`
 - **問題**: `types.ts` の冒頭部（`ProfileEntry` / `ProfileData` / `ConfigEntry` / `ConfigData` / `ProfileFileData` / `ConfigFileData`）は `packages/core/src/types.ts` と一字一句同一の手書きコピーである。
 - **変更**: webview の `package.json` に `@launch-composer/core` を devDependencies として追加し、該当部分を `export type { ... } from '@launch-composer/core'` の re-export に置き換える。
 - **検証**: `npm run build:webview`、`npm run test -w @launch-composer/webview`（テストバンドラも workspace 依存を解決できること）、および extension に webview 成果物を取り込んだ状態での動作確認。
 
-### 2-3. メッセージ契約を共有モジュールへ移動
+### 2-3. メッセージ契約を共有モジュールへ移動 [完了]
 
 - **対象**: `packages/extension/src/messages.ts` の全型、`packages/extension/src/io/workspaceStore.ts` の `ComposerDataIssue`、`packages/webview/src/types.ts` の残り全部
 - **問題**: `GenerateDiagnostic` / `EditorTarget` / `InitialDataPayload` / `WorkspaceUpdatePayload` / `EntryPatchOperation` / `WebviewMessage` / `HostMessage` と `ComposerDataIssue` が extension と webview で二重定義されている。プロトコル変更のたびに 2 ファイルを人手で同期しており、片側だけ変えてもコンパイルは通ってしまう（実行時に型ガードが静かに desync する）。
@@ -118,13 +118,13 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
   - extension パッケージから直接 import させる案は不可: パッケージ `launch-composer` は `exports` マップを持たず、`@types/vscode` の型空間を引き込むため。
 - **検証**: 3 パッケージの typecheck / 全テスト。ワイヤ上のメッセージ形状が変わっていないこと（editorPanel テストが posted message を検証している）。
 
-### 2-4. EntryPatchOperation と JsonObjectPatchOperation の統合
+### 2-4. EntryPatchOperation と JsonObjectPatchOperation の統合 [完了]
 
 - **対象**: `packages/extension/src/messages.ts` の `EntryPatchOperation`、`packages/extension/src/io/json.ts` の `JsonObjectPatchOperation`
 - **問題**: 構造的に同一の union が 2 箇所にあり、`editorPanel.ts` は webview から受けた `EntryPatchOperation[]` を `JsonObjectPatchOperation[]` を取る store メソッドへ渡している。形状が偶然一致しているから通っているだけで、片方が変わると離れた場所で不可解な型エラーになる。
 - **変更**: 契約モジュール側の `EntryPatchOperation` を単一の定義とし、`json.ts` は `export type JsonObjectPatchOperation = EntryPatchOperation` として import する（ワイヤ形状は不変）。
 
-### 2-5. ドキュメントと AGENTS.md の同期ルール更新
+### 2-5. ドキュメントと AGENTS.md の同期ルール更新 [完了]
 
 - **対象**: `docs/internal/contracts/host-webview.md` / `json-files.md` の Ownership 節、`docs/internal/specs/communication.md`、`AGENTS.md` の Spec-First Change Routing
 - **変更**: 「mirror source: `packages/webview/src/types.ts`」等のミラー行を削除し、「canonical 型を変更すれば消費側は import で追従する」という記述に改める。手動同期を要求する文面を残さないこと（この計画の目的が同期作業の廃止であるため）。
@@ -302,7 +302,12 @@ Phase 1（完了 / Phase 2〜4 の安全網）
   1-2 App.tsx 純粋ロジック抽出 → 4-3 の前提 [完了]
   1-3 HTML 書き換え純関数化 [完了]
 
-Phase 2（順序どおり: 2-1 → 2-2 → 2-3 → 2-4 → 2-5）
+Phase 2（完了: 2-1 → 2-2 → 2-3 → 2-4 → 2-5）
+  2-1 TypeScript project references 導入 [完了]
+  2-2 webview の core 型 re-export 化 [完了]
+  2-3 メッセージ契約の core contracts 移動 [完了]
+  2-4 EntryPatchOperation / JsonObjectPatchOperation 統合 [完了]
+  2-5 docs / AGENTS 同期ルール更新 [完了]
 
 Phase 3（各項目独立）
   3-3, 3-4 ────────────────→ 4-1 の前提

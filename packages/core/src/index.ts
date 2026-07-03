@@ -17,6 +17,18 @@ export type {
   ValidationError,
   ValidationErrorTarget,
 } from './types.js';
+export type {
+  ComposerDataIssue,
+  EditorTarget,
+  EntryPatchOperation,
+  GenerateDiagnostic,
+  GenerateDiagnosticTarget,
+  GenerateReadiness,
+  HostMessage,
+  InitialDataPayload,
+  WebviewMessage,
+  WorkspaceUpdatePayload,
+} from './contracts.js';
 
 export { buildLaunchArgs } from './merge.js';
 export { generate } from './generate.js';

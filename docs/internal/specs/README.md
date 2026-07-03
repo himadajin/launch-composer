@@ -151,12 +151,13 @@ React 19 + Vite 7 で実装する Webview UI である。ビルド成果物は e
 - 編集フォーム
 - Webview 側 RPC
 - フォーム変更から `EntryPatchOperation` への変換
+- `@launch-composer/core` から共有データ型と Host/Webview 契約型を type-only import する
 
 依存関係は次のとおりである。
 
 ```text
 @launch-composer/core <- launch-composer
-                              ^
-                              |
-                  @launch-composer/webview (build artifact)
+        ^                     ^
+        | type-only           |
+        +---- @launch-composer/webview (build artifact)
 ```

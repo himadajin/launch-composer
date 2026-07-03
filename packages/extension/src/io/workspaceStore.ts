@@ -13,6 +13,7 @@ import {
 import * as vscode from 'vscode';
 
 import type {
+  ComposerDataIssue,
   EditorTarget,
   GenerateDiagnostic,
   GenerateReadiness,
@@ -47,13 +48,7 @@ const DEFAULT_CONFIG_CONTENT =
   '  "configurations": []\n' +
   '}\n';
 
-export interface ComposerDataIssue {
-  kind: 'profile' | 'config';
-  file: string;
-  code: 'empty' | 'invalid-json' | 'invalid-shape';
-  message: string;
-  details?: string;
-}
+export type { ComposerDataIssue } from '../messages.js';
 
 export interface WorkspaceDataSnapshot {
   profiles: ProfileFileData[];
