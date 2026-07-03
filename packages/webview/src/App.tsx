@@ -44,9 +44,6 @@ export function App() {
 
   const requestLatestPayload = useCallback(async () => {
     const result = await rpc.sendRequest({ type: 'request-initial-data' });
-    if (!isInitialDataPayload(result)) {
-      return;
-    }
 
     startTransition(() => {
       setPayload(result);
@@ -60,7 +57,7 @@ export function App() {
       index: number,
       name: string,
     ) => {
-      const result = await rpc.sendRequest({
+      await rpc.sendRequest({
         type: 'rename-entry',
         payload: {
           kind,
@@ -69,11 +66,6 @@ export function App() {
           name,
         },
       });
-
-      if (!isRenameResult(result)) {
-        await requestLatestPayload();
-        return;
-      }
 
       await requestLatestPayload();
     },
@@ -115,10 +107,6 @@ export function App() {
                   },
                 },
           );
-
-          if (!isUpdateResult(result)) {
-            return;
-          }
 
           if (result.success !== true) {
             if (result.conflict === true) {
@@ -171,7 +159,7 @@ export function App() {
     }
 
     window.addEventListener('message', onMessage as EventListener);
-    void requestLatestPayload();
+    void requestLatestPayload().catch(() => undefined);
 
     return () => {
       window.removeEventListener('message', onMessage as EventListener);
@@ -315,7 +303,7 @@ export function App() {
                 })}
             onBrowseFile={async () => {
               const result = await rpc.sendRequest({ type: 'browse-file' });
-              return isFileSelected(result) ? result.path : null;
+              return result.path;
             }}
             onChange={({
               data: nextData,
@@ -342,46 +330,6 @@ export function App() {
         )}
       </section>
     </main>
-  );
-}
-
-function isInitialDataPayload(value: unknown): value is InitialDataPayload {
-  return typeof value === 'object' && value !== null && 'editor' in value;
-}
-
-function isFileSelected(value: unknown): value is { path: string | null } {
-  return typeof value === 'object' && value !== null && 'path' in value;
-}
-
-function isUpdateResult(value: unknown): value is
-  | {
-      success: true;
-      revision: string | null;
-      generateReadiness: InitialDataPayload['generateReadiness'];
-    }
-  | {
-      success: false;
-      conflict?: boolean;
-      revision?: string | null;
-      error?: string;
-    } {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'success' in value &&
-    typeof (value as { success: unknown }).success === 'boolean'
-  );
-}
-
-function isRenameResult(value: unknown): value is {
-  success: boolean;
-  error?: string;
-} {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'success' in value &&
-    typeof (value as { success: unknown }).success === 'boolean'
   );
 }
 

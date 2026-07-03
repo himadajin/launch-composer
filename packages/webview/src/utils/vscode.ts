@@ -20,4 +20,4 @@ const noopApi: VsCodeApi = {
   setState() {},
 };
 
-export const vscode = window.acquireVsCodeApi?.() ?? noopApi;
+export const vscode = globalThis.window?.acquireVsCodeApi?.() ?? noopApi;

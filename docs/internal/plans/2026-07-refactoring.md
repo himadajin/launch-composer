@@ -176,7 +176,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: `registerSafeCommand(id, handler)`（catch + showError を一元化）を導入し、`registerFileCommands(kind: 'profile' | 'config')` がコマンド ID と文言のテーブルから 7 コマンドを生成する形に統合する。プロンプト 2 関数は `promptForNonEmptyInput(placeHolder, requiredMessage, value?)` に統合。共有ラムダは関数に括り出す。
 - **検証**: `extensionCommands.test.ts`(571 行)が init / add / rename / delete / include / exclude / clipboard の各フローを押さえている。ユーザー向け文言(プロンプト、エラー)を変えないこと。
 
-### 3-6. webview: RPC の型付けと手書き型ガードの削除
+### 3-6. webview: RPC の型付けと手書き型ガードの削除 [完了]
 
 - **対象**: `packages/webview/src/utils/rpc.ts`、`packages/webview/src/App.tsx`
 - **問題**: `sendRequest` の戻りが全レスポンス payload の union のため、呼び出し側が手書きガード（`isInitialDataPayload` / `isFileSelected` / `isUpdateResult` / `isRenameResult`）で再絞り込みしている。`isUpdateResult` と `isRenameResult` は構造的に同一で `generate-result` の payload も受理してしまい、実際には区別能力がない。`renameEntry` はガードの成否どちらでも `requestLatestPayload()` を呼ぶデッドロジックになっている。また `RpcClient.sendRequest` は reject もタイムアウトもせず、host が応答しない場合 pending resolver がリークする。
@@ -317,7 +317,8 @@ Phase 3（各項目独立）
   3-3, 3-4 ────────────────→ 4-1 の前提 [完了]
   3-5 extension コマンド登録の重複除去 [完了]
   3-5 ─────────────────────→ 4-2 と組み合わせる [完了]
-  3-6 ─────────────────────→ 4-3 の前提
+  3-6 webview RPC 型付けと手書き型ガード削除 [完了]
+  3-6 ─────────────────────→ 4-3 の前提 [完了]
 
 Phase 4（対応する Phase 1 / 3 項目の後）
 Phase 5（任意順序・いつでも）
