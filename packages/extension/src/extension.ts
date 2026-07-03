@@ -19,6 +19,30 @@ import { EditorPanelController } from './webview/editorPanel.js';
 type ProfileSelectionItem =
   { label: string; value: string; description?: string } | vscode.QuickPickItem;
 type SnapshotKind = 'profile' | 'config' | 'both';
+type DataFileKind = 'profile' | 'config';
+
+const DATA_FILE_COMMANDS = {
+  profile: {
+    fileNamePlaceHolder: 'Profile file name',
+    addFile: COMMANDS.addProfileFile,
+    openJson: COMMANDS.openProfileFileJson,
+    copyPath: COMMANDS.copyProfileFilePath,
+    copyRelativePath: COMMANDS.copyProfileFileRelativePath,
+    renameFile: COMMANDS.renameProfileFile,
+    deleteFile: COMMANDS.deleteProfileFile,
+    addEntry: COMMANDS.addProfileEntry,
+  },
+  config: {
+    fileNamePlaceHolder: 'Config file name',
+    addFile: COMMANDS.addConfigFile,
+    openJson: COMMANDS.openConfigFileJson,
+    copyPath: COMMANDS.copyConfigFilePath,
+    copyRelativePath: COMMANDS.copyConfigFileRelativePath,
+    renameFile: COMMANDS.renameConfigFile,
+    deleteFile: COMMANDS.deleteConfigFile,
+    addEntry: COMMANDS.addConfigEntry,
+  },
+} as const;
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = getWorkspaceRoot();
@@ -364,326 +388,177 @@ export function activate(context: vscode.ExtensionContext): void {
     handleConfigCheckboxChange(event),
   );
 
+  const syncChangedConfigFile = async (file: string): Promise<void> => {
+    queueWatcherEvent('config', file);
+    await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
+  };
+
+  const addDataEntry = async (
+    kind: DataFileKind,
+    file: string,
+  ): Promise<void> => {
+    if (kind === 'profile') {
+      await addProfileEntry(store, file, editorPanel, syncUiWithWorkspace);
+      return;
+    }
+
+    const profileName = await promptForProfileSelection(store);
+    if (profileName === undefined) {
+      return;
+    }
+
+    const name = await promptForNonEmptyInput(
+      'Config name',
+      'A value is required.',
+    );
+    if (name === undefined) {
+      return;
+    }
+
+    const target = await store.addConfigEntry(file, name, profileName);
+    await syncUiWithWorkspace();
+    await editorPanel.open(target);
+  };
+
+  const registerDataFileCommands = (
+    kind: DataFileKind,
+  ): vscode.Disposable[] => {
+    const commands = DATA_FILE_COMMANDS[kind];
+
+    return [
+      registerSafeCommand(commands.addFile, async () => {
+        const file = await promptForNonEmptyInput(
+          commands.fileNamePlaceHolder,
+          'A file name is required.',
+        );
+        if (file === undefined) {
+          return;
+        }
+
+        const created = await store.createDataFile(kind, file);
+        await syncUiWithWorkspace();
+        void vscode.window.showInformationMessage(`Created ${created}.`);
+      }),
+      registerSafeCommand(commands.openJson, async (node?: TreeNode) => {
+        const fileNode = getFileNode(node, kind);
+        if (fileNode === undefined) {
+          return;
+        }
+
+        await store.openDataFileAsJson(kind, fileNode.file);
+      }),
+      registerSafeCommand(commands.copyPath, async (node?: TreeNode) => {
+        const fileNode = getFileNode(node, kind);
+        if (fileNode === undefined) {
+          return;
+        }
+
+        await vscode.env.clipboard.writeText(
+          store.getDataFilePath(kind, fileNode.file),
+        );
+      }),
+      registerSafeCommand(
+        commands.copyRelativePath,
+        async (node?: TreeNode) => {
+          const fileNode = getFileNode(node, kind);
+          if (fileNode === undefined) {
+            return;
+          }
+
+          await vscode.env.clipboard.writeText(
+            store.getDataFileRelativePath(kind, fileNode.file),
+          );
+        },
+      ),
+      registerSafeCommand(commands.renameFile, async (node?: TreeNode) => {
+        const fileNode = getFileNode(node, kind);
+        if (fileNode === undefined) {
+          return;
+        }
+
+        const nextFile = await promptForNonEmptyInput(
+          commands.fileNamePlaceHolder,
+          'A file name is required.',
+          fileNode.file,
+        );
+        if (nextFile === undefined) {
+          return;
+        }
+
+        await store.renameDataFile(kind, fileNode.file, nextFile);
+        await syncUiWithWorkspace();
+      }),
+      registerSafeCommand(commands.deleteFile, async (node?: TreeNode) => {
+        const fileNode = getFileNode(node, kind);
+        if (fileNode === undefined) {
+          return;
+        }
+
+        if (!(await confirmDelete(`Delete ${fileNode.file}?`))) {
+          return;
+        }
+
+        await store.deleteDataFile(kind, fileNode.file);
+        await syncUiWithWorkspace();
+      }),
+      registerSafeCommand(commands.addEntry, async (node?: TreeNode) => {
+        const fileNode = getFileNode(node, kind);
+        if (fileNode === undefined) {
+          return;
+        }
+
+        await addDataEntry(kind, fileNode.file);
+      }),
+    ];
+  };
+
   context.subscriptions.push(
     profileView,
     configView,
     profileWatcher,
     configWatcher,
     checkboxSubscription,
-    registerCommand(COMMANDS.generate, async () => {
-      try {
-        await handleGenerate();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.init, async () => {
-      try {
-        await handleInitialize();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.addProfile, async () => {
-      try {
-        await handleAddProfile();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.addProfileFile, async () => {
-      try {
-        const file = await promptForFileName('Profile file name');
-        if (file === undefined) {
-          return;
-        }
-
-        const created = await store.createDataFile('profile', file);
-        await syncUiWithWorkspace();
-        void vscode.window.showInformationMessage(`Created ${created}.`);
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.openProfileFileJson, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'profile');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        await store.openDataFileAsJson('profile', fileNode.file);
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.copyProfileFilePath, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'profile');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        await vscode.env.clipboard.writeText(
-          store.getDataFilePath('profile', fileNode.file),
-        );
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(
-      COMMANDS.copyProfileFileRelativePath,
-      async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, 'profile');
-        if (fileNode === undefined) {
-          return;
-        }
-
-        try {
-          await vscode.env.clipboard.writeText(
-            store.getDataFileRelativePath('profile', fileNode.file),
-          );
-        } catch (error) {
-          showError(error);
-        }
-      },
+    registerSafeCommand(COMMANDS.generate, handleGenerate),
+    registerSafeCommand(COMMANDS.init, handleInitialize),
+    registerSafeCommand(COMMANDS.addProfile, handleAddProfile),
+    ...registerDataFileCommands('profile'),
+    ...registerDataFileCommands('config'),
+    registerSafeCommand(COMMANDS.includeAllConfigs, (node?: TreeNode) =>
+      setConfigFileIncluded(node, true, store, syncChangedConfigFile),
     ),
-    registerCommand(COMMANDS.renameProfileFile, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'profile');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        const nextFile = await promptForFileName(
-          'Profile file name',
-          fileNode.file,
-        );
-        if (nextFile === undefined) {
-          return;
-        }
-
-        await store.renameDataFile('profile', fileNode.file, nextFile);
-        await syncUiWithWorkspace();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.deleteProfileFile, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'profile');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        if (!(await confirmDelete(`Delete ${fileNode.file}?`))) {
-          return;
-        }
-
-        await store.deleteDataFile('profile', fileNode.file);
-        await syncUiWithWorkspace();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.addProfileEntry, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'profile');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        await addProfileEntry(
-          store,
-          fileNode.file,
-          editorPanel,
-          syncUiWithWorkspace,
-        );
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.addConfigFile, async () => {
-      try {
-        const file = await promptForFileName('Config file name');
-        if (file === undefined) {
-          return;
-        }
-
-        const created = await store.createDataFile('config', file);
-        await syncUiWithWorkspace();
-        void vscode.window.showInformationMessage(`Created ${created}.`);
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.openConfigFileJson, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'config');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        await store.openDataFileAsJson('config', fileNode.file);
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.copyConfigFilePath, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'config');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        await vscode.env.clipboard.writeText(
-          store.getDataFilePath('config', fileNode.file),
-        );
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(
-      COMMANDS.copyConfigFileRelativePath,
-      async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, 'config');
-        if (fileNode === undefined) {
-          return;
-        }
-
-        try {
-          await vscode.env.clipboard.writeText(
-            store.getDataFileRelativePath('config', fileNode.file),
-          );
-        } catch (error) {
-          showError(error);
-        }
-      },
+    registerSafeCommand(COMMANDS.excludeAllConfigs, (node?: TreeNode) =>
+      setConfigFileIncluded(node, false, store, syncChangedConfigFile),
     ),
-    registerCommand(COMMANDS.renameConfigFile, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'config');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        const nextFile = await promptForFileName(
-          'Config file name',
-          fileNode.file,
-        );
-        if (nextFile === undefined) {
-          return;
-        }
-
-        await store.renameDataFile('config', fileNode.file, nextFile);
-        await syncUiWithWorkspace();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.deleteConfigFile, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'config');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        if (!(await confirmDelete(`Delete ${fileNode.file}?`))) {
-          return;
-        }
-
-        await store.deleteDataFile('config', fileNode.file);
-        await syncUiWithWorkspace();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.addConfigEntry, async (node?: TreeNode) => {
-      const fileNode = getFileNode(node, 'config');
-      if (fileNode === undefined) {
-        return;
-      }
-
-      try {
-        const profileName = await promptForProfileSelection(store);
-        if (profileName === undefined) {
-          return;
-        }
-
-        const name = await promptForRequiredValue('Config name');
-        if (name === undefined) {
-          return;
-        }
-
-        const target = await store.addConfigEntry(
-          fileNode.file,
-          name,
-          profileName,
-        );
-        await syncUiWithWorkspace();
-        await editorPanel.open(target);
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.includeAllConfigs, async (node?: TreeNode) => {
-      await setConfigFileIncluded(node, true, store, async (file) => {
-        queueWatcherEvent('config', file);
-        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-      });
-    }),
-    registerCommand(COMMANDS.excludeAllConfigs, async (node?: TreeNode) => {
-      await setConfigFileIncluded(node, false, store, async (file) => {
-        queueWatcherEvent('config', file);
-        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-      });
-    }),
-    registerCommand(COMMANDS.editItem, async (node?: TreeNode) => {
+    registerSafeCommand(COMMANDS.editItem, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {
         return;
       }
 
-      try {
-        await editorPanel.open(entryNode.target);
-      } catch (error) {
-        showError(error);
-      }
+      await editorPanel.open(entryNode.target);
     }),
-    registerCommand(COMMANDS.openActiveEditorJson, async () => {
-      try {
-        await editorPanel.openCurrentAsJson();
-      } catch (error) {
-        showError(error);
-      }
-    }),
-    registerCommand(COMMANDS.openItemJson, async (node?: TreeNode) => {
+    registerSafeCommand(COMMANDS.openActiveEditorJson, () =>
+      editorPanel.openCurrentAsJson(),
+    ),
+    registerSafeCommand(COMMANDS.openItemJson, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {
         return;
       }
 
-      try {
-        await store.openEntryAsJson(entryNode.target);
-      } catch (error) {
-        showError(error);
-      }
+      await store.openEntryAsJson(entryNode.target);
     }),
-    registerCommand(COMMANDS.copyItemFilePath, async (node?: TreeNode) => {
+    registerSafeCommand(COMMANDS.copyItemFilePath, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {
         return;
       }
 
-      try {
-        await vscode.env.clipboard.writeText(
-          store.getEntryFilePath(entryNode.target),
-        );
-      } catch (error) {
-        showError(error);
-      }
+      await vscode.env.clipboard.writeText(
+        store.getEntryFilePath(entryNode.target),
+      );
     }),
-    registerCommand(
+    registerSafeCommand(
       COMMANDS.copyItemFileRelativePath,
       async (node?: TreeNode) => {
         const entryNode = getEntryNode(node);
@@ -691,74 +566,52 @@ export function activate(context: vscode.ExtensionContext): void {
           return;
         }
 
-        try {
-          await vscode.env.clipboard.writeText(
-            store.getEntryFileRelativePath(entryNode.target),
-          );
-        } catch (error) {
-          showError(error);
-        }
+        await vscode.env.clipboard.writeText(
+          store.getEntryFileRelativePath(entryNode.target),
+        );
       },
     ),
-    registerCommand(COMMANDS.renameItem, async (node?: TreeNode) => {
+    registerSafeCommand(COMMANDS.renameItem, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {
         return;
       }
 
-      try {
-        const nextName = await promptForRequiredValue(
-          entryNode.target.kind === 'profile' ? 'Profile name' : 'Config name',
-          entryNode.label,
-        );
-        if (nextName === undefined) {
-          return;
-        }
-
-        await store.renameEntry(entryNode.target, nextName);
-        await syncUiWithWorkspace();
-      } catch (error) {
-        showError(error);
+      const nextName = await promptForNonEmptyInput(
+        entryNode.target.kind === 'profile' ? 'Profile name' : 'Config name',
+        'A value is required.',
+        entryNode.label,
+      );
+      if (nextName === undefined) {
+        return;
       }
+
+      await store.renameEntry(entryNode.target, nextName);
+      await syncUiWithWorkspace();
     }),
-    registerCommand(COMMANDS.deleteItem, async (node?: TreeNode) => {
+    registerSafeCommand(COMMANDS.deleteItem, async (node?: TreeNode) => {
       const entryNode = getEntryNode(node);
       if (entryNode === undefined) {
         return;
       }
 
-      try {
-        if (!(await confirmDelete(`Delete ${entryNode.label}?`))) {
-          return;
-        }
-
-        await store.deleteEntry(entryNode.target);
-        await syncUiWithWorkspace();
-      } catch (error) {
-        showError(error);
+      if (!(await confirmDelete(`Delete ${entryNode.label}?`))) {
+        return;
       }
+
+      await store.deleteEntry(entryNode.target);
+      await syncUiWithWorkspace();
     }),
-    registerCommand(COMMANDS.includeConfig, async (node?: TreeNode) => {
-      await setConfigIncluded(node, true, store, async (file) => {
-        queueWatcherEvent('config', file);
-        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-      });
-    }),
-    registerCommand(COMMANDS.excludeConfig, async (node?: TreeNode) => {
-      await setConfigIncluded(node, false, store, async (file) => {
-        queueWatcherEvent('config', file);
-        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-      });
-    }),
-    registerCommand(COMMANDS.toggleIncluded, async (node?: TreeNode) => {
-      try {
-        if (node?.type === 'entry' && node.target.kind === 'config') {
-          await store.toggleConfigExcluded(node.target.file, node.target.index);
-          queueWatcherEvent('config', node.target.file);
-          await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-        }
-      } catch (error) {
-        showError(error);
+    registerSafeCommand(COMMANDS.includeConfig, (node?: TreeNode) =>
+      setConfigIncluded(node, true, store, syncChangedConfigFile),
+    ),
+    registerSafeCommand(COMMANDS.excludeConfig, (node?: TreeNode) =>
+      setConfigIncluded(node, false, store, syncChangedConfigFile),
+    ),
+    registerSafeCommand(COMMANDS.toggleIncluded, async (node?: TreeNode) => {
+      if (node?.type === 'entry' && node.target.kind === 'config') {
+        await store.toggleConfigExcluded(node.target.file, node.target.index);
+        await syncChangedConfigFile(node.target.file);
       }
     }),
   );
@@ -773,6 +626,19 @@ function registerCommand<T extends unknown[]>(
   );
 }
 
+function registerSafeCommand<T extends unknown[]>(
+  command: string,
+  callback: (...args: T) => unknown,
+) {
+  return registerCommand(command, async (...args: T) => {
+    try {
+      await callback(...args);
+    } catch (error) {
+      showError(error);
+    }
+  });
+}
+
 function getWorkspaceRoot(): vscode.WorkspaceFolder | undefined {
   const folders = vscode.workspace.workspaceFolders ?? [];
   return folders.length === 1 ? folders[0] : undefined;
@@ -784,7 +650,10 @@ async function addProfileEntry(
   editorPanel: EditorPanelController,
   refreshViews: () => Promise<void>,
 ): Promise<void> {
-  const name = await promptForRequiredValue('Profile name');
+  const name = await promptForNonEmptyInput(
+    'Profile name',
+    'A value is required.',
+  );
   if (name === undefined) {
     return;
   }
@@ -820,8 +689,9 @@ async function selectOrCreateFile(
     return selection.value;
   }
 
-  const fileName = await promptForFileName(
+  const fileName = await promptForNonEmptyInput(
     kind === 'profile' ? 'Profile file name' : 'Config file name',
+    'A file name is required.',
   );
   if (fileName === undefined) {
     return undefined;
@@ -865,31 +735,15 @@ async function promptForProfileSelection(
   return 'value' in selection ? selection.value : undefined;
 }
 
-async function promptForFileName(
+async function promptForNonEmptyInput(
   placeHolder: string,
+  requiredMessage: string,
   value?: string,
 ): Promise<string | undefined> {
   const options: vscode.InputBoxOptions = {
     placeHolder,
     validateInput(value) {
-      return value.trim() === '' ? 'A file name is required.' : undefined;
-    },
-  };
-  if (value !== undefined) {
-    options.value = value;
-  }
-
-  return vscode.window.showInputBox(options);
-}
-
-async function promptForRequiredValue(
-  placeHolder: string,
-  value?: string,
-): Promise<string | undefined> {
-  const options: vscode.InputBoxOptions = {
-    placeHolder,
-    validateInput(value) {
-      return value.trim() === '' ? 'A value is required.' : undefined;
+      return value.trim() === '' ? requiredMessage : undefined;
     },
   };
   if (value !== undefined) {
@@ -1002,16 +856,12 @@ async function setConfigIncluded(
     return;
   }
 
-  try {
-    await store.setConfigExcluded(
-      entryNode.target.file,
-      entryNode.target.index,
-      !included,
-    );
-    await onDidChange(entryNode.target.file);
-  } catch (error) {
-    showError(error);
-  }
+  await store.setConfigExcluded(
+    entryNode.target.file,
+    entryNode.target.index,
+    !included,
+  );
+  await onDidChange(entryNode.target.file);
 }
 
 async function setConfigFileIncluded(
@@ -1025,12 +875,8 @@ async function setConfigFileIncluded(
     return;
   }
 
-  try {
-    await store.setConfigFileExcluded(fileNode.file, !included);
-    await onDidChange(fileNode.file);
-  } catch (error) {
-    showError(error);
-  }
+  await store.setConfigFileExcluded(fileNode.file, !included);
+  await onDidChange(fileNode.file);
 }
 
 export function deactivate(): void {}
