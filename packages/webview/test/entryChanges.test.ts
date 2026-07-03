@@ -2,11 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  updateConfigArgs,
   updateConfigArgsFile,
+  updateConfigCwd,
   updateConfigEnabled,
   updateConfigProfile,
+  updateConfigStopAtEntry,
+  updateProfileArgs,
+  updateProfileCwd,
   updateProfileProgram,
   updateProfileRequest,
+  updateProfileStopAtEntry,
   updateProfileType,
 } from '../src/components/entryChanges.js';
 
@@ -251,6 +257,149 @@ test('updateConfigEnabled includes configs by deleting excluded', () => {
     {
       type: 'delete',
       path: ['excluded'],
+    },
+  ]);
+});
+
+test('configuration string updaters share optional field semantics', () => {
+  const profileChange = updateProfileCwd(
+    {
+      name: 'node',
+      configuration: {
+        cwd: '${workspaceFolder}',
+      },
+    },
+    '   ',
+  );
+  const configChange = updateConfigCwd(
+    {
+      name: 'Launch',
+      profile: 'cpp',
+    },
+    '${workspaceFolder}/app',
+  );
+
+  assert.deepEqual(profileChange.data, {
+    name: 'node',
+  });
+  assert.deepEqual(profileChange.patches, [
+    {
+      type: 'delete',
+      path: ['configuration', 'cwd'],
+    },
+  ]);
+  assert.deepEqual(configChange.data, {
+    name: 'Launch',
+    profile: 'cpp',
+    configuration: {
+      cwd: '${workspaceFolder}/app',
+    },
+  });
+  assert.deepEqual(configChange.patches, [
+    {
+      type: 'set',
+      path: ['configuration', 'cwd'],
+      value: '${workspaceFolder}/app',
+    },
+  ]);
+});
+
+test('configuration boolean updaters emit matching stopAtEntry changes', () => {
+  const profileChange = updateProfileStopAtEntry(
+    {
+      name: 'node',
+      configuration: {
+        type: 'node',
+        request: 'launch',
+      },
+    },
+    true,
+  );
+  const configChange = updateConfigStopAtEntry(
+    {
+      name: 'Launch',
+      profile: 'cpp',
+      configuration: {
+        stopAtEntry: true,
+      },
+    },
+    false,
+  );
+
+  assert.deepEqual(profileChange.data, {
+    name: 'node',
+    configuration: {
+      type: 'node',
+      request: 'launch',
+      stopAtEntry: true,
+    },
+  });
+  assert.deepEqual(profileChange.patches, [
+    {
+      type: 'set',
+      path: ['configuration', 'stopAtEntry'],
+      value: true,
+    },
+  ]);
+  assert.deepEqual(configChange.data, {
+    name: 'Launch',
+    profile: 'cpp',
+    configuration: {
+      stopAtEntry: false,
+    },
+  });
+  assert.deepEqual(configChange.patches, [
+    {
+      type: 'set',
+      path: ['configuration', 'stopAtEntry'],
+      value: false,
+    },
+  ]);
+});
+
+test('optional args updaters delete empty arrays and preserve non-empty arrays', () => {
+  const profileChange = updateProfileArgs(
+    {
+      name: 'node',
+      args: ['--old'],
+      configuration: {
+        type: 'node',
+        request: 'launch',
+      },
+    },
+    [],
+  );
+  const configChange = updateConfigArgs(
+    {
+      name: 'Launch',
+      profile: 'cpp',
+    },
+    ['--debug'],
+  );
+
+  assert.deepEqual(profileChange.data, {
+    name: 'node',
+    configuration: {
+      type: 'node',
+      request: 'launch',
+    },
+  });
+  assert.deepEqual(profileChange.patches, [
+    {
+      type: 'delete',
+      path: ['args'],
+    },
+  ]);
+  assert.deepEqual(configChange.data, {
+    name: 'Launch',
+    profile: 'cpp',
+    args: ['--debug'],
+  });
+  assert.deepEqual(configChange.patches, [
+    {
+      type: 'set',
+      path: ['args'],
+      value: ['--debug'],
     },
   ]);
 });

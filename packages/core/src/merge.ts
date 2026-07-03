@@ -16,7 +16,7 @@ export function buildLaunchConfig(
     merged.args = args;
   }
 
-  merged.type = ensureRequiredLaunchField(merged.type);
+  merged.type = requireRequiredLaunchField('type', merged.type);
   merged.request = requireDebugRequest(merged.request);
 
   return merged;
@@ -46,8 +46,14 @@ export function buildLaunchArgs(
     : [...(argsFileArgs ?? []), ...configArgs];
 }
 
-function ensureRequiredLaunchField(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+function requireRequiredLaunchField(field: string, value: unknown): string {
+  if (typeof value === 'string' && value !== '') {
+    return value;
+  }
+
+  throw new Error(
+    `Required launch field "${field}" must be a non-empty string.`,
+  );
 }
 
 function requireDebugRequest(value: unknown): 'launch' | 'attach' {

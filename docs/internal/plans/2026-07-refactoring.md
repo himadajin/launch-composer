@@ -135,14 +135,14 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 
 各項目は独立。既存の公開 API・エクスポート名は維持し、呼び出し側とテストの変更を最小にする。
 
-### 3-1. core: フィールド形状チェックのテーブル駆動化
+### 3-1. core: フィールド形状チェックのテーブル駆動化 [完了]
 
 - **対象**: `packages/core/src/validate.ts` の `validateProfileEntries` / `validateConfigEntries`
 - **問題**: 合計約 170 行が「`if (述語) errors.push(createValidationError({...}))`」の繰り返しで、field 名・述語・メッセージだけが異なる 9 個の同型ブロックである。フィールドが増えるたびに線形に伸びる。
 - **変更**: `{ field, applies?, valid, message }` のルール配列 + 1 ループに置き換える。横断ルール（`validateNameUniqueness` / `validateConfigSemantics` / `validateArgsFile`)はテーブルに合わないので現状の関数のまま残す。`BLOCKED_OVERRIDE_KEYS` はデータとして維持する（`docs/internal/pending.md` に `configuration.program` を許可するかの保留課題があり、決定時に 1 行のデータ変更で済ませるため）。
 - **前提**: Phase 1-1 のテストが先。エラーメッセージ文字列と `ValidationError` の形状を変えないこと。
 
-### 3-2. core: argsFile ロジックの重複と到達不能な防御コードの整理
+### 3-2. core: argsFile ロジックの重複と到達不能な防御コードの整理 [完了]
 
 - **対象**: `packages/core/src/generate.ts` の `resolveArgsForConfig` / `isStringArrayPayload`、`packages/core/src/merge.ts` の `ensureRequiredLaunchField` / `requireDebugRequest`
 - **問題**:
@@ -152,20 +152,20 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: `resolveArgsForConfig` は `state.argsFileCache` を唯一のソースとし（ミス時は invariant 違反として明示的に throw）、再読込ロジックと `isStringArrayPayload` を削除する。共有型ガードは validate 側の実装に寄せる。merge の silent fallback は明示的な invariant エラーに置き換える。
 - **前提**: 「validation エラーあり ⇒ generate は早期 return」という不変条件に依存する。この不変条件をコメントとして `generate` に明記し、キャッシュ消費のテストを追加する。
 
-### 3-3. extension: ファイル読込 boilerplate の統一
+### 3-3. extension: ファイル読込 boilerplate の統一 [完了]
 
 - **対象**: `packages/extension/src/io/workspaceStore.ts`
 - **問題**: 「`vscode.workspace.fs.readFile` → `isMissingFileSystemError` 判定 → `decodeText`」のブロックが 5 箇所（`getDataFileRevision` / `readConfigFileResult` / `readArrayFile` / `readRequiredDataFileText` / `patchArrayEntry`）にコピーされ、missing 時の挙動（null 返却 / issue 返却 / throw）だけが異なる。
 - **変更**: private `readTextFile(uri): Promise<{ status: 'ok'; text: string } | { status: 'missing' }>` を 1 つ作り、3 種の挙動は呼び出し側で導出する。
 - **検証**: `workspaceStore.test.ts` が ENOENT / vscode / vscode-enoent の各エラースタイルを明示的にテストしているので、それが通ること。
 
-### 3-4. extension: throw 版 / result 版パーサの統合
+### 3-4. extension: throw 版 / result 版パーサの統合 [完了]
 
 - **対象**: `workspaceStore.ts` の `readConfigFileResult` vs `parseConfigFileContent`、`readArrayFile` vs `parseProfileEntries`
 - **問題**: 「JSONC をパースして形状を確認する」ロジックが kind ごとに失敗チャネス違い（issue 返却 / throw）で二重実装され、形状チェックとエラーメッセージがコピペである。
 - **変更**: kind ごとに result 返却版パーサ 1 本（`parseProfileDocument` / `parseConfigDocument`）+ throw が必要な呼び出し側用の一行 `unwrap` アダプタに統合する。エラーメッセージ文字列は変えない（テストが固定している）。
 
-### 3-5. extension: コマンド登録の重複除去
+### 3-5. extension: コマンド登録の重複除去 [完了]
 
 - **対象**: `packages/extension/src/extension.ts`
 - **問題**:
@@ -176,20 +176,20 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **変更**: `registerSafeCommand(id, handler)`（catch + showError を一元化）を導入し、`registerFileCommands(kind: 'profile' | 'config')` がコマンド ID と文言のテーブルから 7 コマンドを生成する形に統合する。プロンプト 2 関数は `promptForNonEmptyInput(placeHolder, requiredMessage, value?)` に統合。共有ラムダは関数に括り出す。
 - **検証**: `extensionCommands.test.ts`(571 行)が init / add / rename / delete / include / exclude / clipboard の各フローを押さえている。ユーザー向け文言(プロンプト、エラー)を変えないこと。
 
-### 3-6. webview: RPC の型付けと手書き型ガードの削除
+### 3-6. webview: RPC の型付けと手書き型ガードの削除 [完了]
 
 - **対象**: `packages/webview/src/utils/rpc.ts`、`packages/webview/src/App.tsx`
 - **問題**: `sendRequest` の戻りが全レスポンス payload の union のため、呼び出し側が手書きガード（`isInitialDataPayload` / `isFileSelected` / `isUpdateResult` / `isRenameResult`）で再絞り込みしている。`isUpdateResult` と `isRenameResult` は構造的に同一で `generate-result` の payload も受理してしまい、実際には区別能力がない。`renameEntry` はガードの成否どちらでも `requestLatestPayload()` を呼ぶデッドロジックになっている。また `RpcClient.sendRequest` は reject もタイムアウトもせず、host が応答しない場合 pending resolver がリークする。
 - **変更**: リクエストの `type` からレスポンス payload 型を引く mapped type で `sendRequest` を型付けし（`Extract<HostMessage, { type: 'update-result' }>['payload']` 方式）、App.tsx のガード 4 つと `renameEntry` のデッド分岐を削除する。タイムアウト（reject + pending クリア）を追加する。rpc.ts は DOM 非依存なので `node --test` でユニットテストを追加する。
 
-### 3-7. webview: entryChanges の updater をファクトリに集約
+### 3-7. webview: entryChanges の updater をファクトリに集約 [完了]
 
 - **対象**: `packages/webview/src/components/entryChanges.ts`
 - **問題**: 11 個の exported updater のうち、`updateProfileCwd` ≡ `updateConfigCwd`、`updateProfileStopAtEntry` ≡ `updateConfigStopAtEntry`、`updateProfileArgs` ≡ `updateConfigArgs` が本体完全同一のペア、`updateProfileType` ≡ `updateProfileRequest` がキー名違いのみ。さらに「データ更新」（editorUtils の `updateOptionalString` 等）と「パッチ生成」（`createOptionalStringPatch` 等）が同じ optional/required セマンティクス（trim して空なら削除）を二重に符号化している。
 - **変更**: `updateConfigurationString(data, key, value, { required })` / `updateOptionalArrayField` / `updateBooleanConfigurationField` の 3 ファクトリに集約し、既存の名前付き export は 1 行ラッパーとして残す（コンポーネント呼び出し側と既存テストを変えないため)。可能なら「フィールドのセマンティクス記述子」1 つからデータ更新とパッチ生成の両方を導出し、二者が食い違えない構造にする。
 - **検証**: `entryChanges.test.ts`（256 行）が data と patches の両出力を固定している。このパッケージで最も安全に着手できる項目である。
 
-### 3-8. webview: select 状態パターンの共通化（任意）
+### 3-8. webview: select 状態パターンの共通化（任意） [完了]
 
 - **対象**: `packages/webview/src/components/profileSelect.ts` / `profileRequestSelect.ts`
 - **問題**: sentinel 定数 + internal 値ガード + `{value, options, optionLabels, helperMessage}` リゾルバという同型パターンの二重実装。profileSelect 内では同じ二分岐オブジェクトリテラルが 3 回繰り返されている。
@@ -310,9 +310,17 @@ Phase 2（完了: 2-1 → 2-2 → 2-3 → 2-4 → 2-5）
   2-5 docs / AGENTS 同期ルール更新 [完了]
 
 Phase 3（各項目独立）
-  3-3, 3-4 ────────────────→ 4-1 の前提
-  3-5 ─────────────────────→ 4-2 と組み合わせる
-  3-6 ─────────────────────→ 4-3 の前提
+  3-1 core フィールド形状チェックのテーブル駆動化 [完了]
+  3-2 core argsFile ロジックと到達不能防御コードの整理 [完了]
+  3-3 extension ファイル読込 boilerplate の統一 [完了]
+  3-4 extension throw/result パーサの統合 [完了]
+  3-3, 3-4 ────────────────→ 4-1 の前提 [完了]
+  3-5 extension コマンド登録の重複除去 [完了]
+  3-5 ─────────────────────→ 4-2 と組み合わせる [完了]
+  3-6 webview RPC 型付けと手書き型ガード削除 [完了]
+  3-6 ─────────────────────→ 4-3 の前提 [完了]
+  3-7 webview entryChanges updater ファクトリ集約 [完了]
+  3-8 webview select 状態パターンの共通化 [完了]
 
 Phase 4（対応する Phase 1 / 3 項目の後）
 Phase 5（任意順序・いつでも）

@@ -13,6 +13,86 @@ import { resolveArgsFilePath } from './variables.js';
 const BLOCKED_OVERRIDE_KEYS = ['program', 'type', 'request'] as const;
 const DEBUG_REQUEST_VALUES = ['launch', 'attach'] as const;
 
+interface FieldValidationRule<TRef> {
+  field: string;
+  applies?: (ref: TRef) => boolean;
+  valid: (ref: TRef) => boolean;
+  message: string;
+  blocksRemaining?: boolean;
+}
+
+const PROFILE_FIELD_RULES: readonly FieldValidationRule<ProfileRef>[] = [
+  {
+    field: 'name',
+    valid: (profileRef) => isNonEmptyString(profileRef.data.name),
+    message: 'Profile name is required.',
+  },
+  {
+    field: 'args',
+    applies: (profileRef) => Object.hasOwn(profileRef.data, 'args'),
+    valid: (profileRef) => isStringArray(profileRef.data.args),
+    message: 'Profile args must be an array of strings.',
+  },
+  {
+    field: 'configuration',
+    applies: (profileRef) => profileRef.data.configuration !== undefined,
+    valid: (profileRef) => isRecord(profileRef.data.configuration),
+    message: 'Profile configuration must be an object.',
+    blocksRemaining: true,
+  },
+  {
+    field: 'configuration.request',
+    valid: (profileRef) =>
+      isDebugRequestValue(profileRef.data.configuration?.request),
+    message: `Profile request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
+  },
+  {
+    field: 'configuration.type',
+    valid: (profileRef) =>
+      isNonEmptyString(profileRef.data.configuration?.type),
+    message: 'Profile type is required.',
+  },
+];
+
+const CONFIG_FIELD_RULES: readonly FieldValidationRule<ConfigRef>[] = [
+  {
+    field: 'name',
+    valid: (configRef) => isNonEmptyString(configRef.data.name),
+    message: 'Config name is required.',
+  },
+  {
+    field: 'excluded',
+    applies: (configRef) => Object.hasOwn(configRef.data, 'excluded'),
+    valid: (configRef) => typeof configRef.data.excluded === 'boolean',
+    message: 'Config excluded must be a boolean.',
+  },
+  {
+    field: 'profile',
+    valid: (configRef) => isNonEmptyString(configRef.data.profile),
+    message: 'Config profile is required.',
+  },
+  {
+    field: 'argsFile',
+    applies: (configRef) =>
+      Object.hasOwn(configRef.data, 'argsFile') &&
+      configRef.data.argsFile !== undefined,
+    valid: (configRef) => typeof configRef.data.argsFile === 'string',
+    message: 'Config argsFile must be a string.',
+  },
+  {
+    field: 'args',
+    applies: (configRef) => Object.hasOwn(configRef.data, 'args'),
+    valid: (configRef) => isStringArray(configRef.data.args),
+    message: 'Config args must be an array of strings.',
+  },
+  {
+    field: 'configuration',
+    applies: (configRef) => configRef.data.configuration !== undefined,
+    valid: (configRef) => isRecord(configRef.data.configuration),
+    message: 'Config configuration must be an object.',
+  },
+];
+
 export async function validateGenerateInput(
   input: GenerateInput,
 ): Promise<ValidationError[]> {
@@ -102,71 +182,14 @@ function validateProfileEntries(
   errors: ValidationError[],
 ): void {
   for (const profileRef of profileRefs) {
-    if (!isNonEmptyString(profileRef.data.name)) {
-      errors.push(
-        createValidationError({
-          file: profileRef.file,
-          field: 'name',
-          message: 'Profile name is required.',
-          target: profileTarget(profileRef),
-        }),
-      );
-    }
-
-    if (
-      Object.hasOwn(profileRef.data, 'args') &&
-      !isStringArray(profileRef.data.args)
-    ) {
-      errors.push(
-        createValidationError({
-          file: profileRef.file,
-          field: 'args',
-          message: 'Profile args must be an array of strings.',
-          target: profileTarget(profileRef),
-        }),
-      );
-    }
-
-    const profileEntry = profileRef.data.configuration;
-
-    if (
-      profileEntry !== undefined &&
-      (typeof profileEntry !== 'object' ||
-        profileEntry === null ||
-        Array.isArray(profileEntry))
-    ) {
-      errors.push(
-        createValidationError({
-          file: profileRef.file,
-          field: 'configuration',
-          message: 'Profile configuration must be an object.',
-          target: profileTarget(profileRef),
-        }),
-      );
-      continue;
-    }
-
-    if (!isDebugRequestValue(profileEntry?.request)) {
-      errors.push(
-        createValidationError({
-          file: profileRef.file,
-          field: 'configuration.request',
-          message: `Profile request must be one of: ${DEBUG_REQUEST_VALUES.join(', ')}.`,
-          target: profileTarget(profileRef),
-        }),
-      );
-    }
-
-    if (!isNonEmptyString(profileEntry?.type)) {
-      errors.push(
-        createValidationError({
-          file: profileRef.file,
-          field: 'configuration.type',
-          message: 'Profile type is required.',
-          target: profileTarget(profileRef),
-        }),
-      );
-    }
+    validateFieldRules(profileRef, PROFILE_FIELD_RULES, errors, (rule) =>
+      createValidationError({
+        file: profileRef.file,
+        field: rule.field,
+        message: rule.message,
+        target: profileTarget(profileRef),
+      }),
+    );
   }
 }
 
@@ -175,93 +198,36 @@ function validateConfigEntries(
   errors: ValidationError[],
 ): void {
   for (const configRef of configRefs) {
-    if (!isNonEmptyString(configRef.data.name)) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          field: 'name',
-          message: 'Config name is required.',
-          target: configTarget(configRef),
-        }),
-      );
-    }
+    validateFieldRules(configRef, CONFIG_FIELD_RULES, errors, (rule) =>
+      createValidationError({
+        file: configRef.file,
+        configName: safeConfigName(configRef.data.name),
+        field: rule.field,
+        message: rule.message,
+        target: configTarget(configRef),
+      }),
+    );
+  }
+}
 
-    if (
-      Object.hasOwn(configRef.data, 'excluded') &&
-      typeof configRef.data.excluded !== 'boolean'
-    ) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          configName: safeConfigName(configRef.data.name),
-          field: 'excluded',
-          message: 'Config excluded must be a boolean.',
-          target: configTarget(configRef),
-        }),
-      );
-    }
-
-    if (!isNonEmptyString(configRef.data.profile)) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          configName: safeConfigName(configRef.data.name),
-          field: 'profile',
-          message: 'Config profile is required.',
-          target: configTarget(configRef),
-        }),
-      );
-    }
-
-    if (
-      Object.hasOwn(configRef.data, 'argsFile') &&
-      configRef.data.argsFile !== undefined &&
-      typeof configRef.data.argsFile !== 'string'
-    ) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          configName: safeConfigName(configRef.data.name),
-          field: 'argsFile',
-          message: 'Config argsFile must be a string.',
-          target: configTarget(configRef),
-        }),
-      );
-    }
-
-    if (
-      Object.hasOwn(configRef.data, 'args') &&
-      !isStringArray(configRef.data.args)
-    ) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          configName: safeConfigName(configRef.data.name),
-          field: 'args',
-          message: 'Config args must be an array of strings.',
-          target: configTarget(configRef),
-        }),
-      );
-    }
-
-    const configEntry = configRef.data.configuration;
-
-    if (
-      configEntry !== undefined &&
-      (typeof configEntry !== 'object' ||
-        configEntry === null ||
-        Array.isArray(configEntry))
-    ) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          configName: safeConfigName(configRef.data.name),
-          field: 'configuration',
-          message: 'Config configuration must be an object.',
-          target: configTarget(configRef),
-        }),
-      );
+function validateFieldRules<TRef>(
+  ref: TRef,
+  rules: readonly FieldValidationRule<TRef>[],
+  errors: ValidationError[],
+  createError: (rule: FieldValidationRule<TRef>) => ValidationError,
+): void {
+  for (const rule of rules) {
+    if (rule.applies !== undefined && !rule.applies(ref)) {
       continue;
+    }
+
+    if (rule.valid(ref)) {
+      continue;
+    }
+
+    errors.push(createError(rule));
+    if (rule.blocksRemaining === true) {
+      return;
     }
   }
 }

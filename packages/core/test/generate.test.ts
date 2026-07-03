@@ -146,6 +146,69 @@ test('generate resolves argsFile via workspaceFolder and appends config args', a
   ]);
 });
 
+test('generate reuses the validated argsFile cache for matching configs', async () => {
+  let readCount = 0;
+  const result = await generate({
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [
+          {
+            name: 'cpp',
+            configuration: {
+              type: 'cppdbg',
+              request: 'launch',
+            },
+          },
+        ],
+      },
+    ],
+    configs: [
+      {
+        file: 'configs.json',
+        configurations: [
+          {
+            name: 'First',
+            profile: 'cpp',
+            argsFile: '/tmp/shared-args.json',
+          },
+          {
+            name: 'Second',
+            profile: 'cpp',
+            argsFile: '/tmp/shared-args.json',
+            args: ['--second'],
+          },
+        ],
+      },
+    ],
+    readArgsFile(resolvedPath) {
+      readCount += 1;
+      assert.equal(resolvedPath, '/tmp/shared-args.json');
+      return {
+        kind: 'success',
+        data: { args: ['--from-file'] },
+      };
+    },
+  });
+
+  assert.equal(result.success, true);
+  if (!result.success) {
+    throw new Error('Expected success');
+  }
+
+  assert.equal(readCount, 1);
+  assert.deepEqual(
+    result.launchJson.configurations.map((configuration) => ({
+      name: configuration.name,
+      args: configuration.args,
+    })),
+    [
+      { name: 'First', args: ['--from-file'] },
+      { name: 'Second', args: ['--from-file', '--second'] },
+    ],
+  );
+});
+
 test('validateGenerateInput reports spec violations together', async () => {
   const errors = await validateGenerateInput({
     profiles: [

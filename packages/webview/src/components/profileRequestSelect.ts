@@ -1,13 +1,15 @@
 import { DEBUG_REQUEST_OPTIONS } from './editorUtils.js';
+import {
+  isInternalSelectValue,
+  missingValueState,
+  placeholderState,
+  selectState,
+  type SelectState,
+} from './selectState.js';
 
 const MISSING_REQUEST_OPTION = '__launch_composer_missing_request__';
 
-export interface ProfileRequestSelectState {
-  value: string;
-  options: string[];
-  optionLabels: string[];
-  helperMessage?: string;
-}
+export type ProfileRequestSelectState = SelectState;
 
 export function isDebugRequestOption(
   value: string,
@@ -16,46 +18,48 @@ export function isDebugRequestOption(
 }
 
 export function isInternalProfileRequestSelectValue(value: string): boolean {
-  return value === MISSING_REQUEST_OPTION;
+  return isInternalSelectValue(value, [MISSING_REQUEST_OPTION]);
 }
 
 export function resolveProfileRequestSelectState(
   requestValue: unknown,
 ): ProfileRequestSelectState {
   if (isDebugRequestOptionValue(requestValue)) {
-    return {
+    return selectState({
       value: requestValue,
-      options: [...DEBUG_REQUEST_OPTIONS],
-      optionLabels: [...DEBUG_REQUEST_OPTIONS],
-    };
+      options: DEBUG_REQUEST_OPTIONS,
+    });
   }
 
   if (requestValue === undefined || requestValue === '') {
-    return {
-      value: MISSING_REQUEST_OPTION,
-      options: [MISSING_REQUEST_OPTION, ...DEBUG_REQUEST_OPTIONS],
-      optionLabels: ['Select a request...', ...DEBUG_REQUEST_OPTIONS],
-      helperMessage:
-        'Profile request is required for Generate. Choose launch or attach.',
-    };
+    return requestPlaceholderState(
+      'Profile request is required for Generate. Choose launch or attach.',
+    );
   }
 
   if (typeof requestValue === 'string') {
-    return {
+    return missingValueState({
       value: requestValue,
-      options: [...DEBUG_REQUEST_OPTIONS, requestValue],
-      optionLabels: [...DEBUG_REQUEST_OPTIONS, `${requestValue} (invalid)`],
+      options: DEBUG_REQUEST_OPTIONS,
+      label: `${requestValue} (invalid)`,
       helperMessage: `Profile request "${requestValue}" is invalid. Choose launch or attach.`,
-    };
+    });
   }
 
-  return {
+  return requestPlaceholderState(
+    'This profile has an invalid request value in JSON. Choose launch or attach to repair it.',
+  );
+}
+
+function requestPlaceholderState(
+  helperMessage: string,
+): ProfileRequestSelectState {
+  return placeholderState({
     value: MISSING_REQUEST_OPTION,
-    options: [MISSING_REQUEST_OPTION, ...DEBUG_REQUEST_OPTIONS],
-    optionLabels: ['Select a request...', ...DEBUG_REQUEST_OPTIONS],
-    helperMessage:
-      'This profile has an invalid request value in JSON. Choose launch or attach to repair it.',
-  };
+    options: DEBUG_REQUEST_OPTIONS,
+    label: 'Select a request...',
+    helperMessage,
+  });
 }
 
 function isDebugRequestOptionValue(
