@@ -15,6 +15,7 @@ import type {
   WorkspaceDataSnapshot,
   WorkspaceStore,
 } from '../io/workspaceStore.js';
+import { rewriteWebviewHtml } from './webviewHtml.js';
 
 interface EditorPanelOptions {
   context: vscode.ExtensionContext;
@@ -458,25 +459,12 @@ async function getWebviewHtml(
     ].join('');
   }
 
-  const replacedScripts = html.replace(
-    /<script type="module" crossorigin src="([^"]+)"><\/script>/g,
-    (_match, src: string) => {
-      const assetUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(webviewRoot, src),
-      );
-      return `<script type="module" src="${assetUri.toString()}"></script>`;
-    },
-  );
-
-  return replacedScripts.replace(
-    /<link rel="stylesheet" crossorigin href="([^"]+)">/g,
-    (_match, href: string) => {
-      const assetUri = webview.asWebviewUri(
-        vscode.Uri.joinPath(webviewRoot, href),
-      );
-      return `<link rel="stylesheet" href="${assetUri.toString()}">`;
-    },
-  );
+  return rewriteWebviewHtml(html, (assetPath) => {
+    const assetUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(webviewRoot, assetPath),
+    );
+    return assetUri.toString();
+  });
 }
 
 async function browseFile(): Promise<string | null> {
