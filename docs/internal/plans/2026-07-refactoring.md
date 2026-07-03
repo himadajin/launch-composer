@@ -182,7 +182,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 - **問題**: `sendRequest` の戻りが全レスポンス payload の union のため、呼び出し側が手書きガード（`isInitialDataPayload` / `isFileSelected` / `isUpdateResult` / `isRenameResult`）で再絞り込みしている。`isUpdateResult` と `isRenameResult` は構造的に同一で `generate-result` の payload も受理してしまい、実際には区別能力がない。`renameEntry` はガードの成否どちらでも `requestLatestPayload()` を呼ぶデッドロジックになっている。また `RpcClient.sendRequest` は reject もタイムアウトもせず、host が応答しない場合 pending resolver がリークする。
 - **変更**: リクエストの `type` からレスポンス payload 型を引く mapped type で `sendRequest` を型付けし（`Extract<HostMessage, { type: 'update-result' }>['payload']` 方式）、App.tsx のガード 4 つと `renameEntry` のデッド分岐を削除する。タイムアウト（reject + pending クリア）を追加する。rpc.ts は DOM 非依存なので `node --test` でユニットテストを追加する。
 
-### 3-7. webview: entryChanges の updater をファクトリに集約
+### 3-7. webview: entryChanges の updater をファクトリに集約 [完了]
 
 - **対象**: `packages/webview/src/components/entryChanges.ts`
 - **問題**: 11 個の exported updater のうち、`updateProfileCwd` ≡ `updateConfigCwd`、`updateProfileStopAtEntry` ≡ `updateConfigStopAtEntry`、`updateProfileArgs` ≡ `updateConfigArgs` が本体完全同一のペア、`updateProfileType` ≡ `updateProfileRequest` がキー名違いのみ。さらに「データ更新」（editorUtils の `updateOptionalString` 等）と「パッチ生成」（`createOptionalStringPatch` 等）が同じ optional/required セマンティクス（trim して空なら削除）を二重に符号化している。
@@ -319,6 +319,7 @@ Phase 3（各項目独立）
   3-5 ─────────────────────→ 4-2 と組み合わせる [完了]
   3-6 webview RPC 型付けと手書き型ガード削除 [完了]
   3-6 ─────────────────────→ 4-3 の前提 [完了]
+  3-7 webview entryChanges updater ファクトリ集約 [完了]
 
 Phase 4（対応する Phase 1 / 3 項目の後）
 Phase 5（任意順序・いつでも）

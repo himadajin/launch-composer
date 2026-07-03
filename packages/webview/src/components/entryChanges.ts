@@ -1,123 +1,61 @@
 import type { ConfigData, EntryPatchOperation, ProfileData } from '../types.js';
-import {
-  updateOptionalString,
-  updateRequiredString,
-  withConfiguration,
-} from './editorUtils.js';
+import { withConfiguration } from './editorUtils.js';
 
 export interface EntryChange<T> {
   data: T;
   patches: EntryPatchOperation[];
 }
 
+interface EntryWithConfiguration {
+  configuration?: Record<string, unknown>;
+}
+
+interface StringFieldOptions {
+  required?: boolean;
+  trimValue?: boolean;
+  deletePatchMode?: 'value-present' | 'property-present';
+}
+
 export function updateProfileType(
   data: ProfileData,
   value: string,
 ): EntryChange<ProfileData> {
-  return {
-    data: {
-      ...data,
-      configuration: updateRequiredString(
-        { ...data.configuration },
-        'type',
-        value,
-      ),
-    },
-    patches: createSetIfChangedPatch(
-      ['configuration', 'type'],
-      data.configuration?.type,
-      value,
-    ),
-  };
+  return updateConfigurationString(data, 'type', value, { required: true });
 }
 
 export function updateProfileRequest(
   data: ProfileData,
   value: string,
 ): EntryChange<ProfileData> {
-  return {
-    data: {
-      ...data,
-      configuration: updateRequiredString(
-        { ...data.configuration },
-        'request',
-        value,
-      ),
-    },
-    patches: createSetIfChangedPatch(
-      ['configuration', 'request'],
-      data.configuration?.request,
-      value,
-    ),
-  };
+  return updateConfigurationString(data, 'request', value, { required: true });
 }
 
 export function updateProfileProgram(
   data: ProfileData,
   value: string,
 ): EntryChange<ProfileData> {
-  return {
-    data: withConfiguration(
-      data,
-      updateOptionalString({ ...data.configuration }, 'program', value),
-    ),
-    patches: createOptionalStringPatch(
-      ['configuration', 'program'],
-      data.configuration?.program,
-      value,
-    ),
-  };
+  return updateConfigurationString(data, 'program', value);
 }
 
 export function updateProfileCwd(
   data: ProfileData,
   value: string,
 ): EntryChange<ProfileData> {
-  return {
-    data: withConfiguration(
-      data,
-      updateOptionalString({ ...data.configuration }, 'cwd', value),
-    ),
-    patches: createOptionalStringPatch(
-      ['configuration', 'cwd'],
-      data.configuration?.cwd,
-      value,
-    ),
-  };
+  return updateConfigurationString(data, 'cwd', value);
 }
 
 export function updateProfileStopAtEntry(
   data: ProfileData,
   checked: boolean,
 ): EntryChange<ProfileData> {
-  return {
-    data: {
-      ...data,
-      configuration: { ...data.configuration, stopAtEntry: checked },
-    },
-    patches: createSetIfChangedPatch(
-      ['configuration', 'stopAtEntry'],
-      data.configuration?.stopAtEntry,
-      checked,
-    ),
-  };
+  return updateBooleanConfigurationField(data, 'stopAtEntry', checked);
 }
 
 export function updateProfileArgs(
   data: ProfileData,
   args: string[],
 ): EntryChange<ProfileData> {
-  const next = { ...data };
-  if (args.length === 0) {
-    delete next.args;
-  } else {
-    next.args = args;
-  }
-
-  return {
-    data: next,
-    patches: createOptionalArrayPatch(['args'], data.args, args),
-  };
+  return updateOptionalArrayField(data, 'args', args);
 }
 
 export function updateConfigProfile(
@@ -160,75 +98,138 @@ export function updateConfigCwd(
   data: ConfigData,
   value: string,
 ): EntryChange<ConfigData> {
-  return {
-    data: withConfiguration(
-      data,
-      updateOptionalString({ ...data.configuration }, 'cwd', value),
-    ),
-    patches: createOptionalStringPatch(
-      ['configuration', 'cwd'],
-      data.configuration?.cwd,
-      value,
-    ),
-  };
+  return updateConfigurationString(data, 'cwd', value);
 }
 
 export function updateConfigStopAtEntry(
   data: ConfigData,
   checked: boolean,
 ): EntryChange<ConfigData> {
-  return {
-    data: {
-      ...data,
-      configuration: { ...data.configuration, stopAtEntry: checked },
-    },
-    patches: createSetIfChangedPatch(
-      ['configuration', 'stopAtEntry'],
-      data.configuration?.stopAtEntry,
-      checked,
-    ),
-  };
+  return updateBooleanConfigurationField(data, 'stopAtEntry', checked);
 }
 
 export function updateConfigArgsFile(
   data: ConfigData,
   value: string,
 ): EntryChange<ConfigData> {
-  const trimmed = value.trim();
-
-  if (trimmed === '') {
-    const next = { ...data };
-    delete next.argsFile;
-    return {
-      data: next,
-      patches: createDeleteIfPresentPatch(['argsFile'], data, 'argsFile'),
-    };
-  }
-
-  return {
-    data: {
-      ...data,
-      argsFile: trimmed,
-    },
-    patches: createSetIfChangedPatch(['argsFile'], data.argsFile, trimmed),
-  };
+  return updateOptionalStringField(data, 'argsFile', value, {
+    trimValue: true,
+  });
 }
 
 export function updateConfigArgs(
   data: ConfigData,
   args: string[],
 ): EntryChange<ConfigData> {
-  const next = { ...data };
-  if (args.length === 0) {
-    delete next.args;
+  return updateOptionalArrayField(data, 'args', args);
+}
+
+function updateConfigurationString<T extends EntryWithConfiguration>(
+  data: T,
+  key: string,
+  value: string,
+  options: StringFieldOptions = {},
+): EntryChange<T> {
+  const nextConfiguration = { ...data.configuration };
+  const patches = updateStringRecord(
+    nextConfiguration,
+    key,
+    data.configuration?.[key],
+    ['configuration', key],
+    value,
+    options,
+  );
+
+  return {
+    data: withConfiguration(data, nextConfiguration),
+    patches,
+  };
+}
+
+function updateOptionalStringField<T extends object>(
+  data: T,
+  key: string,
+  value: string,
+  options: StringFieldOptions = {},
+): EntryChange<T> {
+  const next = { ...data } as Record<string, unknown>;
+  const patches = updateStringRecord(next, key, next[key], [key], value, {
+    ...options,
+    deletePatchMode: 'property-present',
+  });
+
+  return {
+    data: next as T,
+    patches,
+  };
+}
+
+function updateBooleanConfigurationField<T extends EntryWithConfiguration>(
+  data: T,
+  key: string,
+  checked: boolean,
+): EntryChange<T> {
+  const nextConfiguration = { ...data.configuration, [key]: checked };
+
+  return {
+    data: withConfiguration(data, nextConfiguration),
+    patches: createSetIfChangedPatch(
+      ['configuration', key],
+      data.configuration?.[key],
+      checked,
+    ),
+  };
+}
+
+function updateOptionalArrayField<T extends object>(
+  data: T,
+  key: string,
+  value: string[],
+): EntryChange<T> {
+  const next = { ...data } as Record<string, unknown>;
+  const current = next[key] as string[] | undefined;
+  if (value.length === 0) {
+    delete next[key];
   } else {
-    next.args = args;
+    next[key] = value;
   }
 
   return {
-    data: next,
-    patches: createOptionalArrayPatch(['args'], data.args, args),
+    data: next as T,
+    patches: createOptionalArrayPatch([key], current, value),
   };
+}
+
+function updateStringRecord(
+  holder: Record<string, unknown>,
+  key: string,
+  current: unknown,
+  path: (string | number)[],
+  value: string,
+  {
+    required = false,
+    trimValue = false,
+    deletePatchMode = 'value-present',
+  }: StringFieldOptions = {},
+): EntryPatchOperation[] {
+  const hadKey = Object.hasOwn(holder, key);
+  if (!required && value.trim() === '') {
+    delete holder[key];
+    const shouldDelete =
+      deletePatchMode === 'property-present' ? hadKey : current !== undefined;
+    return shouldDelete
+      ? [
+          {
+            type: 'delete',
+            path,
+          },
+        ]
+      : [];
+  }
+
+  const next = trimValue ? value.trim() : value;
+  holder[key] = next;
+  return createSetIfChangedPatch(path, current, next);
 }
 
 function createSetIfChangedPatch(
@@ -245,25 +246,6 @@ function createSetIfChangedPatch(
           value: next,
         },
       ];
-}
-
-function createOptionalStringPatch(
-  path: (string | number)[],
-  current: unknown,
-  value: string,
-): EntryPatchOperation[] {
-  if (value.trim() === '') {
-    return current === undefined
-      ? []
-      : [
-          {
-            type: 'delete',
-            path,
-          },
-        ];
-  }
-
-  return createSetIfChangedPatch(path, current, value);
 }
 
 function createOptionalArrayPatch(
