@@ -1,6 +1,6 @@
 import { context } from 'esbuild';
 
-import { nodeTarget } from '../../buildConfig.mjs';
+import { nodeMainFields, nodeTarget } from '../../buildConfig.mjs';
 
 const watch = process.argv.includes('--watch');
 
@@ -11,6 +11,7 @@ const ctx = await context({
   platform: 'node',
   format: 'cjs',
   target: nodeTarget,
+  mainFields: nodeMainFields,
   external: ['vscode'],
   outfile: 'dist/extension.js',
   logLevel: 'info',

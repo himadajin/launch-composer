@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
 
-import { nodeTarget } from '../../../buildConfig.mjs';
+import { nodeMainFields, nodeTarget } from '../../../buildConfig.mjs';
 
 const packageDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(packageDir, '..');
@@ -28,6 +28,7 @@ await build({
   platform: 'node',
   sourcemap: 'inline',
   target: nodeTarget,
+  mainFields: nodeMainFields,
   alias: {
     vscode: resolve(rootDir, 'test/stubs/vscode.ts'),
   },
