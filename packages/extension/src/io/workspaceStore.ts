@@ -30,6 +30,7 @@ import {
   type JsonParseIssue,
   stringifyJsonFile,
 } from './json.js';
+import { DataFileIo } from './dataFileIo.js';
 import {
   COMPOSER_DIR,
   CONFIGS_DIR,
@@ -91,9 +92,6 @@ type ConfigFileReadResult =
 type DocumentParseResult<T> =
   { status: 'ok'; data: T } | { status: 'invalid'; issue: ComposerDataIssue };
 
-type TextFileReadResult =
-  { status: 'ok'; text: string } | { status: 'missing' };
-
 export type EntryPatchResult =
   | {
       status: 'ok';
@@ -106,9 +104,11 @@ export type EntryPatchResult =
 
 export class WorkspaceStore {
   private readonly layout: WorkspaceLayout;
+  private readonly io: DataFileIo;
 
   constructor(workspaceRoot: vscode.Uri) {
     this.layout = new WorkspaceLayout(workspaceRoot);
+    this.io = new DataFileIo(this.layout);
   }
 
   getWorkspaceRootPath(): string {
@@ -267,15 +267,14 @@ export class WorkspaceStore {
     resolvedPath: string,
   ): Promise<ArgsFileLoadResult> {
     try {
-      const uri = vscode.Uri.file(resolvedPath);
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      const value = parseJsonc<unknown>(decodeText(bytes), resolvedPath);
-      return { kind: 'success', data: value };
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
+      const result = await this.io.readTextFile(vscode.Uri.file(resolvedPath));
+      if (result.status === 'missing') {
         return { kind: 'not-found' };
       }
 
+      const value = parseJsonc<unknown>(result.text, resolvedPath);
+      return { kind: 'success', data: value };
+    } catch (error) {
       return {
         kind: 'error',
         message:
@@ -308,7 +307,9 @@ export class WorkspaceStore {
   }
 
   async listFiles(kind: 'profile' | 'config'): Promise<string[]> {
-    const entries = await this.readDirectory(this.layout.getDataDirUri(kind));
+    const entries = await this.io.readDirectory(
+      this.layout.getDataDirUri(kind),
+    );
 
     return entries
       .filter(
@@ -332,7 +333,7 @@ export class WorkspaceStore {
     const ensuredDirectories: string[] = [];
 
     for (const [label, uri] of targets) {
-      await vscode.workspace.fs.createDirectory(uri);
+      await this.io.createDirectory(uri);
       ensuredDirectories.push(label);
     }
 
@@ -364,22 +365,18 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     rawFileName: string,
   ): Promise<string> {
-    await this.ensureInitializedDirectory(kind);
+    await this.io.ensureDataDirectory(kind);
 
     const fileName = normalizeFileName(rawFileName);
     const uri = this.layout.getDataFileUri(kind, fileName);
 
-    if (await this.hasDataFile(kind, fileName)) {
+    if (await this.io.hasDataFile(kind, fileName)) {
       throw new Error(`File already exists: ${fileName}`);
     }
 
-    await vscode.workspace.fs.writeFile(
+    await this.io.writeTextFile(
       uri,
-      encodeText(
-        kind === 'profile'
-          ? '[]\n'
-          : stringifyJsonFile(createEmptyConfigFile()),
-      ),
+      kind === 'profile' ? '[]\n' : stringifyJsonFile(createEmptyConfigFile()),
     );
     return fileName;
   }
@@ -404,13 +401,7 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): Promise<string | null> {
-    const uri = this.layout.getDataFileUri(kind, file);
-    const result = await this.readTextFile(uri);
-    if (result.status === 'missing') {
-      return null;
-    }
-
-    return createTextRevision(result.text);
+    return this.io.getDataFileRevision(kind, file);
   }
 
   async renameDataFile(
@@ -418,7 +409,7 @@ export class WorkspaceStore {
     file: string,
     rawFileName: string,
   ): Promise<string> {
-    await this.ensureInitializedDirectory(kind);
+    await this.io.ensureDataDirectory(kind);
 
     const currentFileName = normalizeFileName(file);
     const nextFileName = normalizeFileName(rawFileName);
@@ -426,7 +417,7 @@ export class WorkspaceStore {
       return currentFileName;
     }
 
-    if (await this.hasDataFile(kind, nextFileName)) {
+    if (await this.io.hasDataFile(kind, nextFileName)) {
       throw new Error(`File already exists: ${nextFileName}`);
     }
 
@@ -459,13 +450,13 @@ export class WorkspaceStore {
 
   async addProfileEntry(file: string, name: string): Promise<EditorTarget> {
     await this.ensureArrayDataFile('profile', file);
-    const text = await this.readRequiredDataFileText('profile', file);
+    const text = await this.io.readRequiredDataFileText('profile', file);
     const entries = this.parseProfileEntries(file, text);
     const nextText = appendJsonArrayValue(text, [], {
       name,
       configuration: { type: '', request: 'launch' },
     });
-    await this.writeDataFileText('profile', file, nextText);
+    await this.io.writeDataFileText('profile', file, nextText);
 
     return {
       kind: 'profile',
@@ -480,12 +471,12 @@ export class WorkspaceStore {
     profileName: string,
   ): Promise<EditorTarget> {
     await this.ensureConfigDataFile(file);
-    const text = await this.readRequiredDataFileText('config', file);
+    const text = await this.io.readRequiredDataFileText('config', file);
     const configFile = this.parseConfigFileContent(file, text);
     const data: ConfigData = { name, profile: profileName };
 
     const nextText = appendJsonArrayValue(text, ['configurations'], data);
-    await this.writeDataFileText('config', file, nextText);
+    await this.io.writeDataFileText('config', file, nextText);
 
     return {
       kind: 'config',
@@ -513,7 +504,7 @@ export class WorkspaceStore {
   }
 
   async toggleConfigExcluded(file: string, index: number): Promise<void> {
-    const text = await this.readRequiredDataFileText('config', file);
+    const text = await this.io.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
     assertIndex(fileData.configurations, index, file);
     const current = fileData.configurations[index]!;
@@ -534,7 +525,7 @@ export class WorkspaceStore {
             },
           ],
     );
-    await this.writeDataFileText('config', file, nextText);
+    await this.io.writeDataFileText('config', file, nextText);
   }
 
   async setConfigExcluded(
@@ -542,7 +533,7 @@ export class WorkspaceStore {
     index: number,
     excluded: boolean,
   ): Promise<void> {
-    const text = await this.readRequiredDataFileText('config', file);
+    const text = await this.io.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
     assertIndex(fileData.configurations, index, file);
     const current = fileData.configurations[index]!;
@@ -567,11 +558,11 @@ export class WorkspaceStore {
             },
           ],
     );
-    await this.writeDataFileText('config', file, nextText);
+    await this.io.writeDataFileText('config', file, nextText);
   }
 
   async setConfigFileExcluded(file: string, excluded: boolean): Promise<void> {
-    const text = await this.readRequiredDataFileText('config', file);
+    const text = await this.io.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
     const patches: JsonObjectPatchOperation[] = [];
 
@@ -600,12 +591,15 @@ export class WorkspaceStore {
     }
 
     const nextText = applyJsonDocumentPatches(text, patches);
-    await this.writeDataFileText('config', file, nextText);
+    await this.io.writeDataFileText('config', file, nextText);
   }
 
   async deleteEntry(target: EditorTarget): Promise<void> {
     if (target.kind === 'profile') {
-      const text = await this.readRequiredDataFileText('profile', target.file);
+      const text = await this.io.readRequiredDataFileText(
+        'profile',
+        target.file,
+      );
       const profiles = this.parseProfileEntries(target.file, text);
       assertIndex(profiles, target.index, target.file);
       const profile = profiles[target.index]!;
@@ -623,11 +617,11 @@ export class WorkspaceStore {
           path: [target.index],
         },
       ]);
-      await this.writeDataFileText('profile', target.file, nextText);
+      await this.io.writeDataFileText('profile', target.file, nextText);
       return;
     }
 
-    const text = await this.readRequiredDataFileText('config', target.file);
+    const text = await this.io.readRequiredDataFileText('config', target.file);
     const fileData = this.parseConfigFileContent(target.file, text);
     assertIndex(fileData.configurations, target.index, target.file);
     const nextText = applyJsonDocumentPatches(text, [
@@ -636,7 +630,7 @@ export class WorkspaceStore {
         path: ['configurations', target.index],
       },
     ]);
-    await this.writeDataFileText('config', target.file, nextText);
+    await this.io.writeDataFileText('config', target.file, nextText);
   }
 
   async renameEntry(target: EditorTarget, rawName: string): Promise<void> {
@@ -644,7 +638,10 @@ export class WorkspaceStore {
     await this.assertUniqueEntryName(nextName, target);
 
     if (target.kind === 'profile') {
-      const text = await this.readRequiredDataFileText('profile', target.file);
+      const text = await this.io.readRequiredDataFileText(
+        'profile',
+        target.file,
+      );
       const profiles = this.parseProfileEntries(target.file, text);
       assertIndex(profiles, target.index, target.file);
       const current = profiles[target.index]!;
@@ -659,12 +656,12 @@ export class WorkspaceStore {
           value: nextName,
         },
       ]);
-      await this.writeDataFileText('profile', target.file, nextText);
+      await this.io.writeDataFileText('profile', target.file, nextText);
       await this.updateProfileReferences(current.name, nextName);
       return;
     }
 
-    const text = await this.readRequiredDataFileText('config', target.file);
+    const text = await this.io.readRequiredDataFileText('config', target.file);
     const fileData = this.parseConfigFileContent(target.file, text);
     assertIndex(fileData.configurations, target.index, target.file);
     const current = fileData.configurations[target.index]!;
@@ -679,7 +676,7 @@ export class WorkspaceStore {
         value: nextName,
       },
     ]);
-    await this.writeDataFileText('config', target.file, nextText);
+    await this.io.writeDataFileText('config', target.file, nextText);
   }
 
   async openDataFileAsJson(
@@ -769,17 +766,14 @@ export class WorkspaceStore {
       '// Do not edit manually. Changes will be overwritten.\n' +
       stringifyJsonFile(result.launchJson);
 
-    await vscode.workspace.fs.createDirectory(
+    await this.io.createDirectory(
       vscode.Uri.joinPath(this.layout.workspaceRoot, '.vscode'),
     );
-    await vscode.workspace.fs.writeFile(
-      this.layout.getLaunchJsonUri(),
-      encodeText(content),
-    );
+    await this.io.writeTextFile(this.layout.getLaunchJsonUri(), content);
   }
 
   async launchJsonExists(): Promise<boolean> {
-    return this.exists(this.layout.getLaunchJsonUri());
+    return this.io.exists(this.layout.getLaunchJsonUri());
   }
 
   private async readProfileFiles(): Promise<{
@@ -809,7 +803,7 @@ export class WorkspaceStore {
     | { status: 'missing' }
     | { status: 'invalid'; issue: ComposerDataIssue }
   > {
-    const result = await this.readTextFile(
+    const result = await this.io.readTextFile(
       this.layout.getDataFileUri('profile', file),
     );
     if (result.status === 'missing') {
@@ -831,7 +825,7 @@ export class WorkspaceStore {
     file: string,
   ): Promise<ConfigFileReadResult> {
     const uri = this.layout.getDataFileUri('config', file);
-    const result = await this.readTextFile(uri);
+    const result = await this.io.readTextFile(uri);
     if (result.status === 'missing') {
       return { status: 'missing' };
     }
@@ -929,29 +923,6 @@ export class WorkspaceStore {
     return result.data;
   }
 
-  private async readRequiredDataFileText(
-    kind: 'profile' | 'config',
-    file: string,
-  ): Promise<string> {
-    const uri = this.layout.getDataFileUri(kind, file);
-    const result = await this.readTextFile(uri);
-    if (result.status === 'missing') {
-      throw new Error(`File not found: ${file}`);
-    }
-
-    return result.text;
-  }
-
-  private async writeDataFileText(
-    kind: 'profile' | 'config',
-    file: string,
-    text: string,
-  ): Promise<void> {
-    await this.ensureInitializedDirectory(kind);
-    const uri = this.layout.getDataFileUri(kind, file);
-    await vscode.workspace.fs.writeFile(uri, encodeText(text));
-  }
-
   private async patchArrayEntry(
     kind: 'profile' | 'config',
     file: string,
@@ -972,7 +943,7 @@ export class WorkspaceStore {
     }
 
     const uri = this.layout.getDataFileUri(kind, file);
-    const result = await this.readTextFile(uri);
+    const result = await this.io.readTextFile(uri);
     if (result.status === 'missing') {
       throw new Error(`File not found: ${file}`);
     }
@@ -1009,7 +980,7 @@ export class WorkspaceStore {
       };
     }
 
-    await vscode.workspace.fs.writeFile(uri, encodeText(nextText));
+    await this.io.writeTextFile(uri, nextText);
     return {
       status: 'ok',
       revision: createTextRevision(nextText),
@@ -1029,33 +1000,6 @@ export class WorkspaceStore {
     }
 
     return references;
-  }
-
-  private async readDirectory(
-    uri: vscode.Uri,
-  ): Promise<[string, vscode.FileType][]> {
-    try {
-      return await vscode.workspace.fs.readDirectory(uri);
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return [];
-      }
-
-      throw error;
-    }
-  }
-
-  private async readTextFile(uri: vscode.Uri): Promise<TextFileReadResult> {
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      return { status: 'ok', text: decodeText(bytes) };
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return { status: 'missing' };
-      }
-
-      throw error;
-    }
   }
 
   private async readExistingFiles<T>(
@@ -1153,56 +1097,43 @@ export class WorkspaceStore {
           return;
         }
 
-        const text = await this.readRequiredDataFileText(
+        const text = await this.io.readRequiredDataFileText(
           'config',
           fileData.file,
         );
         const nextText = applyJsonDocumentPatches(text, patches);
-        await this.writeDataFileText('config', fileData.file, nextText);
+        await this.io.writeDataFileText('config', fileData.file, nextText);
       }),
     );
-  }
-
-  private async exists(uri: vscode.Uri): Promise<boolean> {
-    try {
-      await vscode.workspace.fs.stat(uri);
-      return true;
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return false;
-      }
-
-      throw error;
-    }
   }
 
   private async ensureArrayDataFile(
     kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
-    await this.ensureInitializedDirectory(kind);
+    await this.io.ensureDataDirectory(kind);
 
     const fileName = normalizeFileName(file);
-    if (await this.hasDataFile(kind, fileName)) {
+    if (await this.io.hasDataFile(kind, fileName)) {
       return;
     }
 
     const uri = this.layout.getDataFileUri(kind, fileName);
-    await vscode.workspace.fs.writeFile(uri, encodeText('[]\n'));
+    await this.io.writeTextFile(uri, '[]\n');
   }
 
   private async ensureConfigDataFile(file: string): Promise<void> {
-    await this.ensureInitializedDirectory('config');
+    await this.io.ensureDataDirectory('config');
 
     const fileName = normalizeFileName(file);
-    if (await this.hasDataFile('config', fileName)) {
+    if (await this.io.hasDataFile('config', fileName)) {
       return;
     }
 
     const uri = this.layout.getDataFileUri('config', fileName);
-    await vscode.workspace.fs.writeFile(
+    await this.io.writeTextFile(
       uri,
-      encodeText(stringifyJsonFile(createEmptyConfigFile())),
+      stringifyJsonFile(createEmptyConfigFile()),
     );
   }
 
@@ -1211,15 +1142,15 @@ export class WorkspaceStore {
     file: string,
     content: string,
   ): Promise<boolean> {
-    await this.ensureInitializedDirectory(kind);
+    await this.io.ensureDataDirectory(kind);
 
     const fileName = normalizeFileName(file);
-    if (await this.hasDataFile(kind, fileName)) {
+    if (await this.io.hasDataFile(kind, fileName)) {
       return false;
     }
 
     const uri = this.layout.getDataFileUri(kind, fileName);
-    await vscode.workspace.fs.writeFile(uri, encodeText(content));
+    await this.io.writeTextFile(uri, content);
     return true;
   }
 
@@ -1228,7 +1159,9 @@ export class WorkspaceStore {
     file: string,
   ): Promise<boolean> {
     const fileName = normalizeFileName(file);
-    const entries = await this.readDirectory(this.layout.getDataDirUri(kind));
+    const entries = await this.io.readDirectory(
+      this.layout.getDataDirUri(kind),
+    );
 
     return entries.some(
       ([entryName, fileType]) =>
@@ -1315,14 +1248,6 @@ function findConfigEntry(
   return data === undefined ? undefined : { index, data };
 }
 
-function decodeText(bytes: Uint8Array): string {
-  return new TextDecoder().decode(bytes);
-}
-
-function encodeText(text: string): Uint8Array {
-  return new TextEncoder().encode(text);
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -1331,20 +1256,4 @@ function createEmptyConfigFile(): Omit<ConfigFileData, 'file'> {
   return {
     configurations: [],
   };
-}
-
-function isMissingFileSystemError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const errorWithCode = error as Error & { code?: unknown; name?: unknown };
-  return (
-    (error instanceof vscode.FileSystemError &&
-      /ENOENT|FileNotFound/i.test(error.message)) ||
-    errorWithCode.code === 'ENOENT' ||
-    (typeof errorWithCode.name === 'string' &&
-      /FileNotFound/i.test(errorWithCode.name)) ||
-    /ENOENT|FileNotFound/i.test(error.message)
-  );
 }
