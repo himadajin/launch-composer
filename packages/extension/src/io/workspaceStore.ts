@@ -41,6 +41,12 @@ import {
   PROFILES_DIR,
   WorkspaceLayout,
 } from './workspaceLayout.js';
+import {
+  WorkspaceReader,
+  type ConfigWorkspaceData,
+  type ProfileWorkspaceData,
+  type WorkspaceDataWithoutReadiness,
+} from './workspaceReader.js';
 
 const DEFAULT_PROFILE_FILE = 'profile.json';
 const DEFAULT_CONFIG_FILE = 'config.json';
@@ -56,6 +62,11 @@ const DEFAULT_CONFIG_CONTENT =
   '}\n';
 
 export type { ComposerDataIssue } from '../messages.js';
+export type {
+  ConfigWorkspaceData,
+  ProfileWorkspaceData,
+  WorkspaceDataWithoutReadiness,
+} from './workspaceReader.js';
 
 export interface WorkspaceDataSnapshot {
   profiles: ProfileFileData[];
@@ -64,33 +75,12 @@ export interface WorkspaceDataSnapshot {
   generateReadiness: GenerateReadiness;
 }
 
-export interface WorkspaceDataWithoutReadiness {
-  profiles: ProfileFileData[];
-  configs: ConfigFileData[];
-  issues: ComposerDataIssue[];
-}
-
-export interface ProfileWorkspaceData {
-  profiles: ProfileFileData[];
-  issues: ComposerDataIssue[];
-}
-
-export interface ConfigWorkspaceData {
-  configs: ConfigFileData[];
-  issues: ComposerDataIssue[];
-}
-
 export type WorkspaceGenerateResult =
   | GenerateSuccess
   | {
       success: false;
       issueCount: number;
     };
-
-type ConfigFileReadResult =
-  | { status: 'ok'; data: ConfigFileData }
-  | { status: 'missing' }
-  | { status: 'invalid'; issue: ComposerDataIssue };
 
 export type EntryPatchResult =
   | {
@@ -105,10 +95,12 @@ export type EntryPatchResult =
 export class WorkspaceStore {
   private readonly layout: WorkspaceLayout;
   private readonly io: DataFileIo;
+  private readonly reader: WorkspaceReader;
 
   constructor(workspaceRoot: vscode.Uri) {
     this.layout = new WorkspaceLayout(workspaceRoot);
     this.io = new DataFileIo(this.layout);
+    this.reader = new WorkspaceReader(this.layout, this.io);
   }
 
   getWorkspaceRootPath(): string {
@@ -124,16 +116,7 @@ export class WorkspaceStore {
   }
 
   async readAll(): Promise<WorkspaceDataSnapshot> {
-    const [profilesResult, configsResult] = await Promise.all([
-      this.readProfilesWithIssues(),
-      this.readConfigsWithIssues(),
-    ]);
-
-    return this.withGenerateReadiness({
-      profiles: profilesResult.profiles,
-      configs: configsResult.configs,
-      issues: [...profilesResult.issues, ...configsResult.issues],
-    });
+    return this.withGenerateReadiness(await this.reader.readAllData());
   }
 
   async withGenerateReadiness(
@@ -284,40 +267,19 @@ export class WorkspaceStore {
   }
 
   async readProfilesWithIssues(): Promise<ProfileWorkspaceData> {
-    const result = await this.readProfileFiles();
-    return {
-      profiles: result.data,
-      issues: result.issues,
-    };
+    return this.reader.readProfilesWithIssues();
   }
 
   async readConfigsWithIssues(): Promise<ConfigWorkspaceData> {
-    const result = await this.readConfigFiles();
-    return {
-      configs: result.data,
-      issues: result.issues,
-    };
+    return this.reader.readConfigsWithIssues();
   }
 
   async listProfileNames(): Promise<string[]> {
-    const data = await this.readProfileFiles();
-    return data.data.flatMap((fileData) =>
-      fileData.profiles.map((profile) => profile.name),
-    );
+    return this.reader.listProfileNames();
   }
 
   async listFiles(kind: 'profile' | 'config'): Promise<string[]> {
-    const entries = await this.io.readDirectory(
-      this.layout.getDataDirUri(kind),
-    );
-
-    return entries
-      .filter(
-        ([name, fileType]) =>
-          fileType === vscode.FileType.File && name.endsWith('.json'),
-      )
-      .map(([name]) => name)
-      .sort((left, right) => left.localeCompare(right));
+    return this.reader.listFiles(kind);
   }
 
   async ensureInitialized(): Promise<{
@@ -720,23 +682,7 @@ export class WorkspaceStore {
   }
 
   async hasEntry(target: EditorTarget): Promise<boolean> {
-    if (target.kind === 'profile') {
-      const result = await this.readProfileFileResult(target.file);
-      if (result.status !== 'ok') {
-        return false;
-      }
-
-      return target.index >= 0 && target.index < result.data.profiles.length;
-    }
-
-    const result = await this.readConfigFileResult(target.file);
-    if (result.status !== 'ok') {
-      return false;
-    }
-
-    return (
-      target.index >= 0 && target.index < result.data.configurations.length
-    );
+    return this.reader.hasEntry(target);
   }
 
   async generateLaunchJson(): Promise<WorkspaceGenerateResult> {
@@ -774,74 +720,6 @@ export class WorkspaceStore {
 
   async launchJsonExists(): Promise<boolean> {
     return this.io.exists(this.layout.getLaunchJsonUri());
-  }
-
-  private async readProfileFiles(): Promise<{
-    data: ProfileFileData[];
-    issues: ComposerDataIssue[];
-  }> {
-    const entries = await this.listFiles('profile');
-    return this.readExistingFiles(entries, (file) =>
-      this.readProfileFileResult(file),
-    );
-  }
-
-  private async readConfigFiles(): Promise<{
-    data: ConfigFileData[];
-    issues: ComposerDataIssue[];
-  }> {
-    const entries = await this.listFiles('config');
-    return this.readExistingFiles(entries, (file) =>
-      this.readConfigFileResult(file),
-    );
-  }
-
-  private async readProfileFileResult(
-    file: string,
-  ): Promise<
-    | { status: 'ok'; data: ProfileFileData }
-    | { status: 'missing' }
-    | { status: 'invalid'; issue: ComposerDataIssue }
-  > {
-    const result = await this.io.readTextFile(
-      this.layout.getDataFileUri('profile', file),
-    );
-    if (result.status === 'missing') {
-      return { status: 'missing' };
-    }
-
-    const parsed = parseProfileDocument(file, result.text);
-    if (parsed.status === 'invalid') {
-      return parsed;
-    }
-
-    return {
-      status: 'ok',
-      data: { file, profiles: parsed.data },
-    };
-  }
-
-  private async readConfigFileResult(
-    file: string,
-  ): Promise<ConfigFileReadResult> {
-    const uri = this.layout.getDataFileUri('config', file);
-    const result = await this.io.readTextFile(uri);
-    if (result.status === 'missing') {
-      return { status: 'missing' };
-    }
-
-    const parsed = parseConfigDocument(file, result.text);
-    if (parsed.status === 'invalid') {
-      return parsed;
-    }
-
-    return {
-      status: 'ok',
-      data: {
-        file,
-        configurations: parsed.data.configurations,
-      },
-    };
   }
 
   private parseProfileEntries(file: string, text: string): ProfileData[] {
@@ -920,10 +798,10 @@ export class WorkspaceStore {
   }
 
   private async findConfigReferences(profileName: string): Promise<string[]> {
-    const configFiles = await this.readConfigFiles();
+    const configFiles = await this.reader.readConfigsWithIssues();
     const references: string[] = [];
 
-    for (const fileData of configFiles.data) {
+    for (const fileData of configFiles.configs) {
       fileData.configurations.forEach((config) => {
         if (config.profile === profileName) {
           references.push(`${fileData.file}:${config.name}`);
@@ -932,34 +810,6 @@ export class WorkspaceStore {
     }
 
     return references;
-  }
-
-  private async readExistingFiles<T>(
-    files: string[],
-    readFile: (
-      file: string,
-    ) => Promise<
-      | { status: 'ok'; data: T }
-      | { status: 'missing' }
-      | { status: 'invalid'; issue: ComposerDataIssue }
-    >,
-  ): Promise<{ data: T[]; issues: ComposerDataIssue[] }> {
-    const results: T[] = [];
-    const issues: ComposerDataIssue[] = [];
-
-    for (const file of files) {
-      const result = await readFile(file);
-      if (result.status === 'ok') {
-        results.push(result.data);
-        continue;
-      }
-
-      if (result.status === 'invalid') {
-        issues.push(result.issue);
-      }
-    }
-
-    return { data: results, issues };
   }
 
   private async assertUniqueEntryName(
@@ -1009,10 +859,10 @@ export class WorkspaceStore {
       return;
     }
 
-    const configFiles = await this.readConfigFiles();
+    const configFiles = await this.reader.readConfigsWithIssues();
 
     await Promise.all(
-      configFiles.data.map(async (fileData) => {
+      configFiles.configs.map(async (fileData) => {
         const patches = fileData.configurations.flatMap((config, index) =>
           config.profile === currentName
             ? ([
@@ -1084,28 +934,6 @@ export class WorkspaceStore {
     const uri = this.layout.getDataFileUri(kind, fileName);
     await this.io.writeTextFile(uri, content);
     return true;
-  }
-
-  private async hasDataFile(
-    kind: 'profile' | 'config',
-    file: string,
-  ): Promise<boolean> {
-    const fileName = normalizeFileName(file);
-    const entries = await this.io.readDirectory(
-      this.layout.getDataDirUri(kind),
-    );
-
-    return entries.some(
-      ([entryName, fileType]) =>
-        entryName === fileName && fileType === vscode.FileType.File,
-    );
-  }
-
-  private async ensureInitializedDirectory(
-    kind: 'profile' | 'config',
-  ): Promise<void> {
-    await vscode.workspace.fs.createDirectory(this.layout.getComposerDirUri());
-    await vscode.workspace.fs.createDirectory(this.layout.getDataDirUri(kind));
   }
 }
 
