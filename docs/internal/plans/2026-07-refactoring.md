@@ -199,7 +199,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 
 ## Phase 4: 大型ファイルの分割（中リスク・Phase 1〜3 の完了が前提）
 
-### 4-1. workspaceStore.ts（1,464 行）の責務分割
+### 4-1. workspaceStore.ts（1,464 行）の責務分割 [完了]
 
 - **対象**: `packages/extension/src/io/workspaceStore.ts`
 - **問題**: 1 クラスが 6 責務を混在させている: ①パス/URI/watcher パターン計算、②低レベル FS + テキスト codec + missing エラー正規化、③スナップショット読込/パース/issue 変換、④JSONC ミューテーション（add/patch/rename/delete/exclude、参照更新、名前一意性）、⑤Generate readiness 診断 + launch.json 生成、⑥`openDataFileAsJson` / `openEntryAsJson`（`vscode.window` を使うエディタ UI 操作。`io/` にあること自体がレイヤー違反）。

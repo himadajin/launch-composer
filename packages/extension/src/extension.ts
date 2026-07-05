@@ -1,5 +1,3 @@
-import * as path from 'node:path';
-
 import * as vscode from 'vscode';
 
 import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from './commands.js';
@@ -10,6 +8,16 @@ import {
   type WorkspaceDataWithoutReadiness,
 } from './io/workspaceStore.js';
 import type { EditorTarget } from './messages.js';
+import {
+  showError,
+  showGenerateBlockedWarning,
+  showWorkspaceRequiredError,
+} from './notifications/errors.js';
+import { IssueReporter } from './notifications/issueReporter.js';
+import {
+  registerDataWatcher,
+  WatcherEchoFilter,
+} from './sync/watcherEchoFilter.js';
 import {
   LaunchComposerTreeProvider,
   type TreeNode,
@@ -75,8 +83,8 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
-  const activeIssues = new Map<string, string>();
-  const pendingWatcherEvents = new Map<string, number>();
+  const issueReporter = new IssueReporter();
+  const echoFilter = new WatcherEchoFilter();
   const snapshotCache: {
     profiles?: WorkspaceDataSnapshot['profiles'];
     configs?: WorkspaceDataSnapshot['configs'];
@@ -84,33 +92,6 @@ export function activate(context: vscode.ExtensionContext): void {
     configIssues?: ComposerDataIssue[];
   } = {};
   let syncQueue = Promise.resolve();
-
-  const queueWatcherEvent = (
-    kind: 'profile' | 'config',
-    file: string,
-  ): void => {
-    const key = `${kind}:${file}`;
-    pendingWatcherEvents.set(key, (pendingWatcherEvents.get(key) ?? 0) + 1);
-  };
-
-  const shouldIgnoreWatcherEvent = (
-    kind: 'profile' | 'config',
-    uri: vscode.Uri,
-  ): boolean => {
-    const key = `${kind}:${path.basename(uri.fsPath)}`;
-    const remaining = pendingWatcherEvents.get(key);
-    if (remaining === undefined) {
-      return false;
-    }
-
-    if (remaining <= 1) {
-      pendingWatcherEvents.delete(key);
-    } else {
-      pendingWatcherEvents.set(key, remaining - 1);
-    }
-
-    return true;
-  };
 
   const applySnapshot = (
     snapshot: WorkspaceDataSnapshot,
@@ -121,29 +102,6 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     if (kind === 'both' || kind === 'config') {
       configProvider.refresh(snapshot);
-    }
-  };
-
-  const reportIssues = (issues: ComposerDataIssue[]): void => {
-    const nextIssues = new Map(
-      issues.map((issue) => [getIssueKey(issue), getIssueFingerprint(issue)]),
-    );
-
-    for (const issue of issues) {
-      const key = getIssueKey(issue);
-      const fingerprint = getIssueFingerprint(issue);
-      if (activeIssues.get(key) === fingerprint) {
-        continue;
-      }
-
-      activeIssues.set(key, fingerprint);
-      void vscode.window.showWarningMessage(issue.message);
-    }
-
-    for (const key of [...activeIssues.keys()]) {
-      if (!nextIssues.has(key)) {
-        activeIssues.delete(key);
-      }
     }
   };
 
@@ -207,7 +165,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const kind = options?.kind ?? 'both';
       const snapshot = await readSnapshotForKind(kind);
       if (options?.notifyIssues !== false) {
-        reportIssues(snapshot.issues);
+        issueReporter.report(snapshot.issues);
       }
       applySnapshot(snapshot, kind);
       if (options?.syncEditor !== false) {
@@ -228,7 +186,7 @@ export function activate(context: vscode.ExtensionContext): void {
     syncEditor?: boolean;
   }): void => {
     options?.expectedWatchers?.forEach(({ kind, file }) =>
-      queueWatcherEvent(kind, file),
+      echoFilter.expect(kind, file),
     );
     const syncOptions: {
       notifyIssues: boolean;
@@ -271,7 +229,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       if (changedFiles.size > 0) {
-        changedFiles.forEach((file) => queueWatcherEvent('config', file));
+        changedFiles.forEach((file) => echoFilter.expect('config', file));
         await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
       }
     } catch (error) {
@@ -332,64 +290,27 @@ export function activate(context: vscode.ExtensionContext): void {
     onDidGenerate: handleGenerate,
   });
 
-  const profileWatcher = vscode.workspace.createFileSystemWatcher(
+  const profileWatcher = registerDataWatcher(
     store.getRelativeProfilePattern(),
+    'profile',
+    echoFilter,
+    syncUiWithWorkspace,
+    showError,
   );
-  profileWatcher.onDidCreate((uri) => {
-    if (shouldIgnoreWatcherEvent('profile', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: false, kind: 'profile' }).catch(
-      showError,
-    );
-  });
-  profileWatcher.onDidChange((uri) => {
-    if (shouldIgnoreWatcherEvent('profile', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: true, kind: 'profile' }).catch(
-      showError,
-    );
-  });
-  profileWatcher.onDidDelete((uri) => {
-    if (shouldIgnoreWatcherEvent('profile', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ kind: 'profile' }).catch(showError);
-  });
-
-  const configWatcher = vscode.workspace.createFileSystemWatcher(
+  const configWatcher = registerDataWatcher(
     store.getRelativeConfigPattern(),
+    'config',
+    echoFilter,
+    syncUiWithWorkspace,
+    showError,
   );
-  configWatcher.onDidCreate((uri) => {
-    if (shouldIgnoreWatcherEvent('config', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: false, kind: 'config' }).catch(
-      showError,
-    );
-  });
-  configWatcher.onDidChange((uri) => {
-    if (shouldIgnoreWatcherEvent('config', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: true, kind: 'config' }).catch(
-      showError,
-    );
-  });
-  configWatcher.onDidDelete((uri) => {
-    if (shouldIgnoreWatcherEvent('config', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ kind: 'config' }).catch(showError);
-  });
 
   const checkboxSubscription = configView.onDidChangeCheckboxState((event) =>
     handleConfigCheckboxChange(event),
   );
 
   const syncChangedConfigFile = async (file: string): Promise<void> => {
-    queueWatcherEvent('config', file);
+    echoFilter.expect('config', file);
     await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
   };
 
@@ -790,34 +711,6 @@ async function confirmOverwrite(store: WorkspaceStore): Promise<boolean> {
   }
 
   return result === 'Yes';
-}
-
-function showGenerateBlockedWarning(issueCount: number): void {
-  void vscode.window.showWarningMessage(
-    `Generate is blocked by ${issueCount} issue${
-      issueCount === 1 ? '' : 's'
-    }. Open Launch Composer to review highlighted fields and JSON status.`,
-  );
-}
-
-function showError(error: unknown): void {
-  const message =
-    error instanceof Error ? error.message : 'An unknown error occurred.';
-  void vscode.window.showErrorMessage(message);
-}
-
-function showWorkspaceRequiredError(): void {
-  void vscode.window.showErrorMessage(
-    'Launch Composer requires exactly one workspace folder.',
-  );
-}
-
-function getIssueKey(issue: ComposerDataIssue): string {
-  return `${issue.kind}:${issue.file}`;
-}
-
-function getIssueFingerprint(issue: ComposerDataIssue): string {
-  return `${issue.code}:${issue.message}`;
 }
 
 function getFileNode(
