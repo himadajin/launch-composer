@@ -1,5 +1,7 @@
 import { context } from 'esbuild';
 
+import { nodeTarget } from '../../buildConfig.mjs';
+
 const watch = process.argv.includes('--watch');
 
 const ctx = await context({
@@ -8,7 +10,7 @@ const ctx = await context({
   sourcemap: true,
   platform: 'node',
   format: 'cjs',
-  target: 'node24',
+  target: nodeTarget,
   external: ['vscode'],
   outfile: 'dist/extension.js',
   logLevel: 'info',
