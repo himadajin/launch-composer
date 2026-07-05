@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function useDebouncedCommit(
   value: string,
@@ -22,4 +22,43 @@ export function useDebouncedCommit(
     };
     // onCommit is intentionally excluded — always current via ref above
   }, [delay, value]);
+}
+
+/**
+ * Editable text field state that debounce-commits user edits.
+ *
+ * Distinguishes user input from external data syncs the way VS Code's
+ * settings editor does ("clear handler → set value → re-register
+ * handler"): external syncs reset the changed-by-user flag, so opening
+ * an editor or receiving a workspace update never causes a file write.
+ */
+export function useEditableField(
+  externalValue: string,
+  autoSaveDelay: number,
+  commit: (value: string) => void,
+  options?: { readOnly?: boolean },
+): { value: string; onChange: (value: string) => void } {
+  const [value, setValue] = useState(externalValue);
+  const changedByUserRef = useRef(false);
+  const readOnly = options?.readOnly === true;
+
+  useEffect(() => {
+    changedByUserRef.current = false;
+    setValue(externalValue);
+  }, [externalValue]);
+
+  useDebouncedCommit(value, autoSaveDelay, (nextValue) => {
+    if (readOnly || !changedByUserRef.current) {
+      return;
+    }
+
+    commit(nextValue);
+  });
+
+  const onChange = (nextValue: string) => {
+    changedByUserRef.current = true;
+    setValue(nextValue);
+  };
+
+  return { value, onChange };
 }
