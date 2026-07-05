@@ -16,7 +16,7 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
-    "@launch-composer/core": "0.1.1",
+    "@launch-composer/core": "*",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
