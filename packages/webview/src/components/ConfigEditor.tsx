@@ -4,11 +4,9 @@ import {
   FormContainer,
   FormGroup,
   FormHelper,
-  ListEditor,
   Select,
   TextInput,
 } from '@himadajin/vscode-components';
-import { useEffect, useRef, useState } from 'react';
 
 import type {
   ComposerDataIssue,
@@ -16,6 +14,7 @@ import type {
   GenerateDiagnostic,
   ProfileData,
 } from '../types.js';
+import { ArgsField } from './ArgsField.js';
 import { EntryIssuesRow, renderHelperMessages } from './DiagnosticMessages.js';
 import type { EntryChange } from './entryChanges.js';
 import {
@@ -27,17 +26,20 @@ import {
   updateConfigStopAtEntry,
 } from './entryChanges.js';
 import { stringOrEmpty } from './editorUtils.js';
-import { useDebouncedCommit } from './hooks.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 import {
   getEntryIssueDiagnostics,
   getFieldDiagnosticMessages,
   mergeHelperMessages,
 } from './generateReadiness.js';
+import { useEditableField } from './hooks.js';
+import { JsonStatusRow } from './JsonStatusRow.js';
+import { NameField } from './NameField.js';
 import {
   isInternalProfileSelectValue,
   resolveConfigProfileSelectState,
 } from './profileSelect.js';
+import { StopAtEntryField } from './StopAtEntryField.js';
 
 const CONFIG_VISIBLE_DIAGNOSTIC_FIELDS = [
   'name',
@@ -75,28 +77,19 @@ export function ConfigEditor({
   readOnlyIssue,
 }: ConfigEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
-  const configEntry = data.configuration ?? {};
-  const [name, setName] = useState(data.name);
-  const [cwd, setCwd] = useState(stringOrEmpty(configEntry.cwd));
-  const [argsFile, setArgsFile] = useState(stringOrEmpty(data.argsFile));
-  // Tracks whether cwd was changed by the user (vs. synced from data prop).
-  // Reset to false on external data sync; set to true on user input.
-  // This mirrors VS Code's "clear handler → set value → re-register handler"
-  // pattern, so that opening the editor never causes spurious file writes.
-  const cwdChangedByUserRef = useRef(false);
 
-  useEffect(() => {
-    setName(data.name);
-  }, [data.name]);
-
-  useEffect(() => {
-    cwdChangedByUserRef.current = false;
-    setCwd(stringOrEmpty(data.configuration?.cwd));
-  }, [data.configuration?.cwd]);
-
-  useEffect(() => {
-    setArgsFile(stringOrEmpty(data.argsFile));
-  }, [data.argsFile]);
+  const cwdField = useEditableField(
+    stringOrEmpty(data.configuration?.cwd),
+    autoSaveDelay,
+    (value) => onChange(updateConfigCwd(data, value)),
+    { readOnly },
+  );
+  const argsFileField = useEditableField(
+    stringOrEmpty(data.argsFile),
+    autoSaveDelay,
+    (value) => onChange(updateConfigArgsFile(data, value)),
+    { readOnly },
+  );
 
   const currentProfile = profiles.find(
     (profile) => profile.name === data.profile,
@@ -130,66 +123,14 @@ export function ConfigEditor({
     CONFIG_VISIBLE_DIAGNOSTIC_FIELDS,
   );
 
-  const handleCwdChange = (value: string) => {
-    cwdChangedByUserRef.current = true;
-    setCwd(value);
-  };
-
-  useDebouncedCommit(cwd, autoSaveDelay, (value) => {
-    if (readOnly || !cwdChangedByUserRef.current) {
-      return;
-    }
-
-    onChange(updateConfigCwd(data, value));
-  });
-
-  useDebouncedCommit(argsFile, autoSaveDelay, (value) => {
-    if (readOnly) {
-      return;
-    }
-
-    onChange(updateConfigArgsFile(data, value));
-  });
-
-  const commitName = async () => {
-    if (readOnly || name === data.name) {
-      return;
-    }
-
-    await onRename(name);
-  };
-
   return (
     <div className="composer-editor">
       <FormContainer className="composer-form">
-        {readOnlyIssue !== undefined ? (
-          <FormGroup
-            label="JSON Status"
-            description={readOnlyIssue.message}
-            helper={
-              <div className="composer-json-status">
-                <FormHelper tone="warning">
-                  {readOnlyIssue.details ??
-                    'Fix the JSON file to resume form editing.'}
-                </FormHelper>
-                <button
-                  type="button"
-                  className="composer-json-link"
-                  onClick={onOpenJson}
-                >
-                  Edit in {sourceFile}
-                </button>
-              </div>
-            }
-            fill
-          >
-            <TextInput
-              readOnly
-              value={sourceFile}
-              style={{ width: '100%', maxWidth: 'none' }}
-            />
-          </FormGroup>
-        ) : null}
+        <JsonStatusRow
+          issue={readOnlyIssue}
+          sourceFile={sourceFile}
+          onOpenJson={onOpenJson}
+        />
 
         <EntryIssuesRow
           diagnostics={entryIssueDiagnostics}
@@ -197,29 +138,14 @@ export function ConfigEditor({
           onOpenJson={onOpenJson}
         />
 
-        <FormGroup
-          category="Launch Composer"
+        <NameField
           label="Config: Name"
           description="Configuration name written to the generated launch.json entry."
+          externalName={data.name}
+          readOnly={readOnly}
           helper={renderHelperMessages(nameHelperMessages)}
-        >
-          <TextInput
-            disabled={readOnly}
-            value={name}
-            onChange={setName}
-            onBlur={() => {
-              void commitName();
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') {
-                return;
-              }
-
-              event.preventDefault();
-              event.currentTarget.blur();
-            }}
-          />
-        </FormGroup>
+          onRename={onRename}
+        />
 
         <FormGroup
           label="Config: Profile"
@@ -269,33 +195,20 @@ export function ConfigEditor({
         >
           <TextInput
             disabled={readOnly}
-            value={cwd}
-            onChange={handleCwdChange}
+            value={cwdField.value}
+            onChange={cwdField.onChange}
           />
         </FormGroup>
 
-        <FormGroup
+        <StopAtEntryField
           label="Config: Stop At Entry"
-          description="Pause execution immediately after the program starts."
-          modified={data.configuration?.stopAtEntry === true}
+          checked={data.configuration?.stopAtEntry === true}
+          readOnly={readOnly}
           helper={renderHelperMessages(stopAtEntryHelperMessages)}
-        >
-          <Checkbox
-            toggle
-            checked={data.configuration?.stopAtEntry === true}
-            disabled={readOnly}
-            label={
-              data.configuration?.stopAtEntry === true ? 'Enabled' : 'Disabled'
-            }
-            onChange={(checked) => {
-              if (readOnly) {
-                return;
-              }
-
-              onChange(updateConfigStopAtEntry(data, checked));
-            }}
-          />
-        </FormGroup>
+          onChange={(checked) => {
+            onChange(updateConfigStopAtEntry(data, checked));
+          }}
+        />
 
         <FormGroup
           label="Config: Args File"
@@ -314,8 +227,8 @@ export function ConfigEditor({
           <div className="composer-input-action-row">
             <TextInput
               disabled={readOnly || argsFileDisabled}
-              value={argsFile}
-              onChange={setArgsFile}
+              value={argsFileField.value}
+              onChange={argsFileField.onChange}
               style={{ width: '100%', maxWidth: 'none' }}
             />
             <Button
@@ -333,7 +246,7 @@ export function ConfigEditor({
                   return;
                 }
 
-                setArgsFile(selected);
+                argsFileField.onChange(selected);
                 onChange(updateConfigArgsFile(data, selected));
               }}
             >
@@ -342,29 +255,15 @@ export function ConfigEditor({
           </div>
         </FormGroup>
 
-        <FormGroup
+        <ArgsField
           label="Config: Args"
-          description="Arguments appended to the debug configuration."
+          args={data.args}
+          readOnly={readOnly}
           helper={renderHelperMessages(argsHelperMessages)}
-          fill
-        >
-          {readOnly ? (
-            <TextInput
-              readOnly
-              value={(data.args ?? []).join(', ')}
-              style={{ width: '100%', maxWidth: 'none' }}
-            />
-          ) : (
-            <ListEditor
-              reorderable
-              addPlaceholder="Add argument"
-              value={data.args ?? []}
-              onChange={(args) => {
-                onChange(updateConfigArgs(data, args));
-              }}
-            />
-          )}
-        </FormGroup>
+          onChange={(args) => {
+            onChange(updateConfigArgs(data, args));
+          }}
+        />
 
         <EditInJsonHint
           fileLabel={sourceFile}

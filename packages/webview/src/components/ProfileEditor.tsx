@@ -1,19 +1,16 @@
 import {
-  Checkbox,
   FormContainer,
   FormGroup,
-  FormHelper,
-  ListEditor,
   Select,
   TextInput,
 } from '@himadajin/vscode-components';
-import { useEffect, useRef, useState } from 'react';
 
 import type {
   ComposerDataIssue,
   GenerateDiagnostic,
   ProfileData,
 } from '../types.js';
+import { ArgsField } from './ArgsField.js';
 import { EntryIssuesRow, renderHelperMessages } from './DiagnosticMessages.js';
 import type { EntryChange } from './entryChanges.js';
 import {
@@ -35,8 +32,11 @@ import {
   mergeHelperMessages,
 } from './generateReadiness.js';
 import { stringOrEmpty } from './editorUtils.js';
-import { useDebouncedCommit } from './hooks.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
+import { useEditableField } from './hooks.js';
+import { JsonStatusRow } from './JsonStatusRow.js';
+import { NameField } from './NameField.js';
+import { StopAtEntryField } from './StopAtEntryField.js';
 
 const PROFILE_VISIBLE_DIAGNOSTIC_FIELDS = [
   'name',
@@ -70,87 +70,30 @@ export function ProfileEditor({
   readOnlyIssue,
 }: ProfileEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
-  const [name, setName] = useState(data.name);
-  const [type, setType] = useState(stringOrEmpty(data.configuration?.type));
-  const [program, setProgram] = useState(
-    stringOrEmpty(data.configuration?.program),
+
+  const typeField = useEditableField(
+    stringOrEmpty(data.configuration?.type),
+    autoSaveDelay,
+    (value) => onChange(updateProfileType(data, value)),
+    { readOnly },
   );
-  const [cwd, setCwd] = useState(stringOrEmpty(data.configuration?.cwd));
-  // Tracks whether each text field was changed by the user (vs. synced from
-  // data prop). Reset to false on external data sync; set to true on user
-  // input. Mirrors VS Code's "clear handler → set value → re-register handler"
-  // pattern so that opening the editor never causes spurious file writes.
-  const typeChangedByUserRef = useRef(false);
-  const programChangedByUserRef = useRef(false);
-  const cwdChangedByUserRef = useRef(false);
+  const programField = useEditableField(
+    stringOrEmpty(data.configuration?.program),
+    autoSaveDelay,
+    (value) => onChange(updateProfileProgram(data, value)),
+    { readOnly },
+  );
+  const cwdField = useEditableField(
+    stringOrEmpty(data.configuration?.cwd),
+    autoSaveDelay,
+    (value) => onChange(updateProfileCwd(data, value)),
+    { readOnly },
+  );
 
-  useEffect(() => {
-    setName(data.name);
-  }, [data.name]);
-
-  useEffect(() => {
-    typeChangedByUserRef.current = false;
-    setType(stringOrEmpty(data.configuration?.type));
-  }, [data.configuration?.type]);
-
-  useEffect(() => {
-    programChangedByUserRef.current = false;
-    setProgram(stringOrEmpty(data.configuration?.program));
-  }, [data.configuration?.program]);
-
-  useEffect(() => {
-    cwdChangedByUserRef.current = false;
-    setCwd(stringOrEmpty(data.configuration?.cwd));
-  }, [data.configuration?.cwd]);
-
-  const handleTypeChange = (value: string) => {
-    typeChangedByUserRef.current = true;
-    setType(value);
-  };
-
-  const handleProgramChange = (value: string) => {
-    programChangedByUserRef.current = true;
-    setProgram(value);
-  };
-
-  const handleCwdChange = (value: string) => {
-    cwdChangedByUserRef.current = true;
-    setCwd(value);
-  };
-
-  useDebouncedCommit(type, autoSaveDelay, (value) => {
-    if (readOnly || !typeChangedByUserRef.current) {
-      return;
-    }
-
-    onChange(updateProfileType(data, value));
-  });
-
-  useDebouncedCommit(program, autoSaveDelay, (value) => {
-    if (readOnly || !programChangedByUserRef.current) {
-      return;
-    }
-
-    onChange(updateProfileProgram(data, value));
-  });
-
-  useDebouncedCommit(cwd, autoSaveDelay, (value) => {
-    if (readOnly || !cwdChangedByUserRef.current) {
-      return;
-    }
-
-    onChange(updateProfileCwd(data, value));
-  });
-
-  const commitName = async () => {
-    if (readOnly || name === data.name) {
-      return;
-    }
-
-    await onRename(name);
-  };
   const typeHelperMessage =
-    type.trim() === '' ? 'Profile type is required for Generate.' : undefined;
+    typeField.value.trim() === ''
+      ? 'Profile type is required for Generate.'
+      : undefined;
   const requestSelect = resolveProfileRequestSelectState(
     data.configuration?.request,
   );
@@ -184,34 +127,11 @@ export function ProfileEditor({
   return (
     <div className="composer-editor">
       <FormContainer className="composer-form">
-        {readOnlyIssue !== undefined ? (
-          <FormGroup
-            label="JSON Status"
-            description={readOnlyIssue.message}
-            helper={
-              <div className="composer-json-status">
-                <FormHelper tone="warning">
-                  {readOnlyIssue.details ??
-                    'Fix the JSON file to resume form editing.'}
-                </FormHelper>
-                <button
-                  type="button"
-                  className="composer-json-link"
-                  onClick={onOpenJson}
-                >
-                  Edit in {sourceFile}
-                </button>
-              </div>
-            }
-            fill
-          >
-            <TextInput
-              readOnly
-              value={sourceFile}
-              style={{ width: '100%', maxWidth: 'none' }}
-            />
-          </FormGroup>
-        ) : null}
+        <JsonStatusRow
+          issue={readOnlyIssue}
+          sourceFile={sourceFile}
+          onOpenJson={onOpenJson}
+        />
 
         <EntryIssuesRow
           diagnostics={entryIssueDiagnostics}
@@ -219,29 +139,14 @@ export function ProfileEditor({
           onOpenJson={onOpenJson}
         />
 
-        <FormGroup
-          category="Launch Composer"
+        <NameField
           label="Profile: Name"
           description="Profile identifier. Config profile references this value."
+          externalName={data.name}
+          readOnly={readOnly}
           helper={renderHelperMessages(nameHelperMessages)}
-        >
-          <TextInput
-            disabled={readOnly}
-            value={name}
-            onChange={setName}
-            onBlur={() => {
-              void commitName();
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') {
-                return;
-              }
-
-              event.preventDefault();
-              event.currentTarget.blur();
-            }}
-          />
-        </FormGroup>
+          onRename={onRename}
+        />
 
         <FormGroup
           label="Profile: Type"
@@ -250,8 +155,8 @@ export function ProfileEditor({
         >
           <TextInput
             disabled={readOnly}
-            value={type}
-            onChange={handleTypeChange}
+            value={typeField.value}
+            onChange={typeField.onChange}
           />
         </FormGroup>
 
@@ -286,8 +191,8 @@ export function ProfileEditor({
         >
           <TextInput
             disabled={readOnly}
-            value={program}
-            onChange={handleProgramChange}
+            value={programField.value}
+            onChange={programField.onChange}
           />
         </FormGroup>
 
@@ -298,57 +203,30 @@ export function ProfileEditor({
         >
           <TextInput
             disabled={readOnly}
-            value={cwd}
-            onChange={handleCwdChange}
+            value={cwdField.value}
+            onChange={cwdField.onChange}
           />
         </FormGroup>
 
-        <FormGroup
+        <StopAtEntryField
           label="Profile: Stop At Entry"
-          description="Pause execution immediately after the program starts."
-          modified={data.configuration?.stopAtEntry === true}
+          checked={data.configuration?.stopAtEntry === true}
+          readOnly={readOnly}
           helper={renderHelperMessages(stopAtEntryHelperMessages)}
-        >
-          <Checkbox
-            toggle
-            checked={data.configuration?.stopAtEntry === true}
-            disabled={readOnly}
-            label={
-              data.configuration?.stopAtEntry === true ? 'Enabled' : 'Disabled'
-            }
-            onChange={(checked) => {
-              if (readOnly) {
-                return;
-              }
+          onChange={(checked) => {
+            onChange(updateProfileStopAtEntry(data, checked));
+          }}
+        />
 
-              onChange(updateProfileStopAtEntry(data, checked));
-            }}
-          />
-        </FormGroup>
-
-        <FormGroup
+        <ArgsField
           label="Profile: Args"
-          description="Arguments appended to the debug configuration."
+          args={data.args}
+          readOnly={readOnly}
           helper={renderHelperMessages(argsHelperMessages)}
-          fill
-        >
-          {readOnly ? (
-            <TextInput
-              readOnly
-              value={(data.args ?? []).join(', ')}
-              style={{ width: '100%', maxWidth: 'none' }}
-            />
-          ) : (
-            <ListEditor
-              reorderable
-              addPlaceholder="Add argument"
-              value={data.args ?? []}
-              onChange={(args) => {
-                onChange(updateProfileArgs(data, args));
-              }}
-            />
-          )}
-        </FormGroup>
+          onChange={(args) => {
+            onChange(updateProfileArgs(data, args));
+          }}
+        />
 
         <EditInJsonHint
           fileLabel={sourceFile}
