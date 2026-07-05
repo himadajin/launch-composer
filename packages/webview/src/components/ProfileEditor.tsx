@@ -34,7 +34,8 @@ import {
   getFieldDiagnosticMessages,
   mergeHelperMessages,
 } from './generateReadiness.js';
-import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
+import { stringOrEmpty } from './editorUtils.js';
+import { useDebouncedCommit } from './hooks.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 
 const PROFILE_VISIBLE_DIAGNOSTIC_FIELDS = [

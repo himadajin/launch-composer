@@ -230,7 +230,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
   - `EditorPanelOptions.onDidMutate` と `refreshViews` が構造的一致だけで結ばれている `{ kind, expectedWatchers, syncEditor }` 形状に共有型 `RefreshRequest` を定義し、両者で使う。
 - **リスクと注意**: 同期キュー・キャッシュ・watcher 抑制カウンタの相互作用は繊細である。`extensionCommands.test.ts` が activate() 経由の E2E 安全網になるが、抽出後は各モジュールへの直接ユニットテストを追加すること（それがこの分割の主目的でもある）。
 
-### 4-3. App.tsx（475 行)のフック分割
+### 4-3. App.tsx（475 行)のフック分割 [完了]
 
 - **対象**: `packages/webview/src/App.tsx`
 - **問題**: 1 コンポーネントが RPC 配線、逐次更新キュー + リビジョン管理（3 つの `useEffect` に分散し壊しやすい）、`vscode.getState/setState` 永続化、楽観的更新、表示の全てを持つ。

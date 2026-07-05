@@ -26,7 +26,8 @@ import {
   updateConfigProfile,
   updateConfigStopAtEntry,
 } from './entryChanges.js';
-import { stringOrEmpty, useDebouncedCommit } from './editorUtils.js';
+import { stringOrEmpty } from './editorUtils.js';
+import { useDebouncedCommit } from './hooks.js';
 import { EditInJsonHint } from './EditInJsonHint.js';
 import {
   getEntryIssueDiagnostics,
