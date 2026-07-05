@@ -30,11 +30,14 @@ import {
   type JsonParseIssue,
   stringifyJsonFile,
 } from './json.js';
+import {
+  COMPOSER_DIR,
+  CONFIGS_DIR,
+  normalizeFileName,
+  PROFILES_DIR,
+  WorkspaceLayout,
+} from './workspaceLayout.js';
 
-const COMPOSER_DIR = '.vscode/launch-composer';
-const PROFILES_DIR = `${COMPOSER_DIR}/profiles`;
-const CONFIGS_DIR = `${COMPOSER_DIR}/configs`;
-const LAUNCH_FILE = '.vscode/launch.json';
 const DEFAULT_PROFILE_FILE = 'profile.json';
 const DEFAULT_CONFIG_FILE = 'config.json';
 const DEFAULT_PROFILE_CONTENT =
@@ -102,24 +105,22 @@ export type EntryPatchResult =
     };
 
 export class WorkspaceStore {
-  constructor(private readonly workspaceRoot: vscode.Uri) {}
+  private readonly layout: WorkspaceLayout;
+
+  constructor(workspaceRoot: vscode.Uri) {
+    this.layout = new WorkspaceLayout(workspaceRoot);
+  }
 
   getWorkspaceRootPath(): string {
-    return this.workspaceRoot.fsPath;
+    return this.layout.getWorkspaceRootPath();
   }
 
   getRelativeProfilePattern(): vscode.RelativePattern {
-    return new vscode.RelativePattern(
-      this.workspaceRoot,
-      `${PROFILES_DIR}/**/*.json`,
-    );
+    return this.layout.getRelativeProfilePattern();
   }
 
   getRelativeConfigPattern(): vscode.RelativePattern {
-    return new vscode.RelativePattern(
-      this.workspaceRoot,
-      `${CONFIGS_DIR}/**/*.json`,
-    );
+    return this.layout.getRelativeConfigPattern();
   }
 
   async readAll(): Promise<WorkspaceDataSnapshot> {
@@ -256,7 +257,7 @@ export class WorkspaceStore {
       profiles: snapshot.profiles,
       configs: snapshot.configs,
       variables: {
-        workspaceFolder: this.workspaceRoot.fsPath,
+        workspaceFolder: this.layout.getWorkspaceRootPath(),
       },
       readArgsFile: (resolvedPath) => this.readArgsFile(resolvedPath),
     };
@@ -307,9 +308,7 @@ export class WorkspaceStore {
   }
 
   async listFiles(kind: 'profile' | 'config'): Promise<string[]> {
-    const directory =
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
-    const entries = await this.readDirectory(directory);
+    const entries = await this.readDirectory(this.layout.getDataDirUri(kind));
 
     return entries
       .filter(
@@ -325,9 +324,9 @@ export class WorkspaceStore {
     ensuredFiles: string[];
   }> {
     const targets = [
-      [COMPOSER_DIR, this.getComposerDirUri()],
-      [PROFILES_DIR, this.getProfilesDirUri()],
-      [CONFIGS_DIR, this.getConfigsDirUri()],
+      [COMPOSER_DIR, this.layout.getComposerDirUri()],
+      [PROFILES_DIR, this.layout.getDataDirUri('profile')],
+      [CONFIGS_DIR, this.layout.getDataDirUri('config')],
     ] as const;
 
     const ensuredDirectories: string[] = [];
@@ -368,9 +367,7 @@ export class WorkspaceStore {
     await this.ensureInitializedDirectory(kind);
 
     const fileName = normalizeFileName(rawFileName);
-    const targetDir =
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
-    const uri = vscode.Uri.joinPath(targetDir, fileName);
+    const uri = this.layout.getDataFileUri(kind, fileName);
 
     if (await this.hasDataFile(kind, fileName)) {
       throw new Error(`File already exists: ${fileName}`);
@@ -388,14 +385,11 @@ export class WorkspaceStore {
   }
 
   getDataFilePath(kind: 'profile' | 'config', file: string): string {
-    return this.getDataFileUri(kind, file).fsPath;
+    return this.layout.getDataFilePath(kind, file);
   }
 
   getDataFileRelativePath(kind: 'profile' | 'config', file: string): string {
-    return vscode.workspace.asRelativePath(
-      this.getDataFileUri(kind, file),
-      false,
-    );
+    return this.layout.getDataFileRelativePath(kind, file);
   }
 
   getEntryFilePath(target: EditorTarget): string {
@@ -410,7 +404,7 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): Promise<string | null> {
-    const uri = this.getDataFileUri(kind, file);
+    const uri = this.layout.getDataFileUri(kind, file);
     const result = await this.readTextFile(uri);
     if (result.status === 'missing') {
       return null;
@@ -436,8 +430,8 @@ export class WorkspaceStore {
       throw new Error(`File already exists: ${nextFileName}`);
     }
 
-    const sourceUri = this.getDataFileUri(kind, currentFileName);
-    const destinationUri = this.getDataFileUri(kind, nextFileName);
+    const sourceUri = this.layout.getDataFileUri(kind, currentFileName);
+    const destinationUri = this.layout.getDataFileUri(kind, nextFileName);
     const bytes = await vscode.workspace.fs.readFile(sourceUri);
 
     await vscode.workspace.fs.writeFile(destinationUri, bytes);
@@ -450,7 +444,7 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
-    const uri = this.getDataFileUri(kind, file);
+    const uri = this.layout.getDataFileUri(kind, file);
     const edit = new vscode.WorkspaceEdit();
     edit.deleteFile(uri, {
       ignoreIfNotExists: true,
@@ -692,7 +686,7 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
-    const uri = this.getDataFileUri(kind, file);
+    const uri = this.layout.getDataFileUri(kind, file);
     const document = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(document, {
       preview: false,
@@ -703,11 +697,11 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): vscode.Uri {
-    return this.getDataFileUri(kind, file);
+    return this.layout.getDataFileUri(kind, file);
   }
 
   async openEntryAsJson(target: EditorTarget): Promise<void> {
-    const uri = this.getDataFileUri(target.kind, target.file);
+    const uri = this.layout.getDataFileUri(target.kind, target.file);
     const document = await vscode.workspace.openTextDocument(uri);
     const text = document.getText();
     const offset =
@@ -776,16 +770,16 @@ export class WorkspaceStore {
       stringifyJsonFile(result.launchJson);
 
     await vscode.workspace.fs.createDirectory(
-      vscode.Uri.joinPath(this.workspaceRoot, '.vscode'),
+      vscode.Uri.joinPath(this.layout.workspaceRoot, '.vscode'),
     );
     await vscode.workspace.fs.writeFile(
-      this.getLaunchJsonUri(),
+      this.layout.getLaunchJsonUri(),
       encodeText(content),
     );
   }
 
   async launchJsonExists(): Promise<boolean> {
-    return this.exists(this.getLaunchJsonUri());
+    return this.exists(this.layout.getLaunchJsonUri());
   }
 
   private async readProfileFiles(): Promise<{
@@ -816,7 +810,7 @@ export class WorkspaceStore {
     | { status: 'invalid'; issue: ComposerDataIssue }
   > {
     const result = await this.readTextFile(
-      this.getDataFileUri('profile', file),
+      this.layout.getDataFileUri('profile', file),
     );
     if (result.status === 'missing') {
       return { status: 'missing' };
@@ -836,7 +830,7 @@ export class WorkspaceStore {
   private async readConfigFileResult(
     file: string,
   ): Promise<ConfigFileReadResult> {
-    const uri = this.getDataFileUri('config', file);
+    const uri = this.layout.getDataFileUri('config', file);
     const result = await this.readTextFile(uri);
     if (result.status === 'missing') {
       return { status: 'missing' };
@@ -939,7 +933,7 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): Promise<string> {
-    const uri = this.getDataFileUri(kind, file);
+    const uri = this.layout.getDataFileUri(kind, file);
     const result = await this.readTextFile(uri);
     if (result.status === 'missing') {
       throw new Error(`File not found: ${file}`);
@@ -954,7 +948,7 @@ export class WorkspaceStore {
     text: string,
   ): Promise<void> {
     await this.ensureInitializedDirectory(kind);
-    const uri = this.getDataFileUri(kind, file);
+    const uri = this.layout.getDataFileUri(kind, file);
     await vscode.workspace.fs.writeFile(uri, encodeText(text));
   }
 
@@ -977,7 +971,7 @@ export class WorkspaceStore {
       };
     }
 
-    const uri = this.getDataFileUri(kind, file);
+    const uri = this.layout.getDataFileUri(kind, file);
     const result = await this.readTextFile(uri);
     if (result.status === 'missing') {
       throw new Error(`File not found: ${file}`);
@@ -1182,22 +1176,6 @@ export class WorkspaceStore {
     }
   }
 
-  private getComposerDirUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, COMPOSER_DIR);
-  }
-
-  private getProfilesDirUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, PROFILES_DIR);
-  }
-
-  private getConfigsDirUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, CONFIGS_DIR);
-  }
-
-  private getLaunchJsonUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, LAUNCH_FILE);
-  }
-
   private async ensureArrayDataFile(
     kind: 'profile' | 'config',
     file: string,
@@ -1209,7 +1187,7 @@ export class WorkspaceStore {
       return;
     }
 
-    const uri = this.getDataFileUri(kind, fileName);
+    const uri = this.layout.getDataFileUri(kind, fileName);
     await vscode.workspace.fs.writeFile(uri, encodeText('[]\n'));
   }
 
@@ -1221,7 +1199,7 @@ export class WorkspaceStore {
       return;
     }
 
-    const uri = this.getDataFileUri('config', fileName);
+    const uri = this.layout.getDataFileUri('config', fileName);
     await vscode.workspace.fs.writeFile(
       uri,
       encodeText(stringifyJsonFile(createEmptyConfigFile())),
@@ -1240,7 +1218,7 @@ export class WorkspaceStore {
       return false;
     }
 
-    const uri = this.getDataFileUri(kind, fileName);
+    const uri = this.layout.getDataFileUri(kind, fileName);
     await vscode.workspace.fs.writeFile(uri, encodeText(content));
     return true;
   }
@@ -1250,9 +1228,7 @@ export class WorkspaceStore {
     file: string,
   ): Promise<boolean> {
     const fileName = normalizeFileName(file);
-    const directory =
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
-    const entries = await this.readDirectory(directory);
+    const entries = await this.readDirectory(this.layout.getDataDirUri(kind));
 
     return entries.some(
       ([entryName, fileType]) =>
@@ -1260,20 +1236,11 @@ export class WorkspaceStore {
     );
   }
 
-  private getDataFileUri(kind: 'profile' | 'config', file: string): vscode.Uri {
-    const fileName = normalizeFileName(file);
-    return kind === 'profile'
-      ? vscode.Uri.joinPath(this.getProfilesDirUri(), fileName)
-      : vscode.Uri.joinPath(this.getConfigsDirUri(), fileName);
-  }
-
   private async ensureInitializedDirectory(
     kind: 'profile' | 'config',
   ): Promise<void> {
-    await vscode.workspace.fs.createDirectory(this.getComposerDirUri());
-    await vscode.workspace.fs.createDirectory(
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri(),
-    );
+    await vscode.workspace.fs.createDirectory(this.layout.getComposerDirUri());
+    await vscode.workspace.fs.createDirectory(this.layout.getDataDirUri(kind));
   }
 
   private createParseIssue(
@@ -1304,15 +1271,6 @@ export class WorkspaceStore {
         .join(', '),
     };
   }
-}
-
-function normalizeFileName(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed === '') {
-    throw new Error('File name is required.');
-  }
-
-  return trimmed.endsWith('.json') ? trimmed : `${trimmed}.json`;
 }
 
 function normalizeEntryName(value: string): string {
