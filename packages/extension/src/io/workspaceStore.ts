@@ -7,7 +7,8 @@ import {
   type WorkspaceDataSnapshot,
   type WorkspaceGenerateResult,
 } from '../generate/launchJsonService.js';
-import { findArrayEntryOffset, type JsonObjectPatchOperation } from './json.js';
+import { JsonEditorOpener } from '../ui/jsonEditorOpener.js';
+import type { JsonObjectPatchOperation } from './json.js';
 import { DataFileIo } from './dataFileIo.js';
 import { WorkspaceLayout } from './workspaceLayout.js';
 import {
@@ -39,6 +40,7 @@ export class WorkspaceStore {
   private readonly reader: WorkspaceReader;
   private readonly mutations: WorkspaceMutations;
   private readonly launchJson: LaunchJsonService;
+  private readonly jsonEditorOpener: JsonEditorOpener;
 
   constructor(workspaceRoot: vscode.Uri) {
     this.layout = new WorkspaceLayout(workspaceRoot);
@@ -46,6 +48,7 @@ export class WorkspaceStore {
     this.reader = new WorkspaceReader(this.layout, this.io);
     this.mutations = new WorkspaceMutations(this.layout, this.io, this.reader);
     this.launchJson = new LaunchJsonService(this.layout, this.io, this.reader);
+    this.jsonEditorOpener = new JsonEditorOpener(this.layout);
   }
 
   getWorkspaceRootPath(): string {
@@ -210,11 +213,7 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
-    const uri = this.layout.getDataFileUri(kind, file);
-    const document = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(document, {
-      preview: false,
-    });
+    return this.jsonEditorOpener.openDataFileAsJson(kind, file);
   }
 
   getDataFileUriForTreeItem(
@@ -225,25 +224,7 @@ export class WorkspaceStore {
   }
 
   async openEntryAsJson(target: EditorTarget): Promise<void> {
-    const uri = this.layout.getDataFileUri(target.kind, target.file);
-    const document = await vscode.workspace.openTextDocument(uri);
-    const text = document.getText();
-    const offset =
-      findArrayEntryOffset(
-        text,
-        target.kind === 'profile'
-          ? [target.index]
-          : ['configurations', target.index],
-      ) ?? 0;
-    const position = document.positionAt(offset);
-    const editor = await vscode.window.showTextDocument(document, {
-      preview: false,
-    });
-    editor.revealRange(
-      new vscode.Range(position, position),
-      vscode.TextEditorRevealType.InCenter,
-    );
-    editor.selection = new vscode.Selection(position, position);
+    return this.jsonEditorOpener.openEntryAsJson(target);
   }
 
   async hasEntry(target: EditorTarget): Promise<boolean> {
