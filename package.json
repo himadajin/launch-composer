@@ -19,7 +19,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -b packages/core/tsconfig.json packages/webview/tsconfig.json packages/extension/tsconfig.json packages/extension/tsconfig.test.json",
+    "typecheck": "tsc -b packages/core/tsconfig.json packages/core/tsconfig.test.json packages/webview/tsconfig.json packages/extension/tsconfig.json packages/extension/tsconfig.test.json",
     "test": "npm run test -w @launch-composer/core && npm run test -w @launch-composer/webview && npm run test -w launch-composer"
   },
   "devDependencies": {

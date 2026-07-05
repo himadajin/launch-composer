@@ -2,12 +2,12 @@
   "name": "@launch-composer/core",
   "version": "0.1.1",
   "type": "module",
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/src/index.d.ts",
-      "default": "./dist/src/index.js"
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
     }
   },
   "files": [
@@ -15,7 +15,8 @@
   ],
   "scripts": {
     "build": "tsc -b tsconfig.json",
-    "typecheck": "tsc -b tsconfig.json --noEmit",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "build:test": "node test/build-tests.mjs",
+    "typecheck": "tsc -b tsconfig.json tsconfig.test.json",
+    "test": "npm run build:test && node --test .test-dist/*.test.js"
   }
 }
