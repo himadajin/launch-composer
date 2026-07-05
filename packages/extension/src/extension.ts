@@ -3,9 +3,7 @@ import * as vscode from 'vscode';
 import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from './commands.js';
 import {
   WorkspaceStore,
-  type ComposerDataIssue,
   type WorkspaceDataSnapshot,
-  type WorkspaceDataWithoutReadiness,
 } from './io/workspaceStore.js';
 import type { EditorTarget } from './messages.js';
 import {
@@ -19,6 +17,10 @@ import {
   WatcherEchoFilter,
 } from './sync/watcherEchoFilter.js';
 import {
+  WorkspaceSyncController,
+  type SnapshotKind,
+} from './sync/workspaceSyncController.js';
+import {
   LaunchComposerTreeProvider,
   type TreeNode,
 } from './treeview/provider.js';
@@ -26,7 +28,6 @@ import { EditorPanelController } from './webview/editorPanel.js';
 
 type ProfileSelectionItem =
   { label: string; value: string; description?: string } | vscode.QuickPickItem;
-type SnapshotKind = 'profile' | 'config' | 'both';
 type DataFileKind = 'profile' | 'config';
 
 const DATA_FILE_COMMANDS = {
@@ -85,13 +86,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const issueReporter = new IssueReporter();
   const echoFilter = new WatcherEchoFilter();
-  const snapshotCache: {
-    profiles?: WorkspaceDataSnapshot['profiles'];
-    configs?: WorkspaceDataSnapshot['configs'];
-    profileIssues?: ComposerDataIssue[];
-    configIssues?: ComposerDataIssue[];
-  } = {};
-  let syncQueue = Promise.resolve();
 
   const applySnapshot = (
     snapshot: WorkspaceDataSnapshot,
@@ -105,105 +99,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
-  const cacheSnapshot = (snapshot: WorkspaceDataSnapshot): void => {
-    snapshotCache.profiles = snapshot.profiles;
-    snapshotCache.configs = snapshot.configs;
-    snapshotCache.profileIssues = snapshot.issues.filter(
-      (issue) => issue.kind === 'profile',
-    );
-    snapshotCache.configIssues = snapshot.issues.filter(
-      (issue) => issue.kind === 'config',
-    );
-  };
-
-  const getCachedSnapshot = (): WorkspaceDataWithoutReadiness | undefined => {
-    if (
-      snapshotCache.profiles === undefined ||
-      snapshotCache.configs === undefined ||
-      snapshotCache.profileIssues === undefined ||
-      snapshotCache.configIssues === undefined
-    ) {
-      return undefined;
-    }
-
-    return {
-      profiles: snapshotCache.profiles,
-      configs: snapshotCache.configs,
-      issues: [...snapshotCache.profileIssues, ...snapshotCache.configIssues],
-    };
-  };
-
-  const readSnapshotForKind = async (
-    kind: SnapshotKind,
-  ): Promise<WorkspaceDataSnapshot> => {
-    const cachedSnapshot = getCachedSnapshot();
-    if (kind === 'both' || cachedSnapshot === undefined) {
-      const snapshot = await store.readAll();
-      cacheSnapshot(snapshot);
-      return snapshot;
-    }
-
-    if (kind === 'profile') {
-      const profileData = await store.readProfilesWithIssues();
-      snapshotCache.profiles = profileData.profiles;
-      snapshotCache.profileIssues = profileData.issues;
-    } else {
-      const configData = await store.readConfigsWithIssues();
-      snapshotCache.configs = configData.configs;
-      snapshotCache.configIssues = configData.issues;
-    }
-
-    return store.withGenerateReadiness(getCachedSnapshot() ?? cachedSnapshot);
-  };
-
-  const syncUiWithWorkspace = async (options?: {
-    notifyIssues?: boolean;
-    kind?: SnapshotKind;
-    syncEditor?: boolean;
-  }): Promise<void> => {
-    const nextSync = syncQueue.then(async () => {
-      const kind = options?.kind ?? 'both';
-      const snapshot = await readSnapshotForKind(kind);
-      if (options?.notifyIssues !== false) {
-        issueReporter.report(snapshot.issues);
-      }
-      applySnapshot(snapshot, kind);
-      if (options?.syncEditor !== false) {
-        await editorPanel.syncWithWorkspaceData(snapshot, { kind });
-      }
-    });
-
-    syncQueue = nextSync.catch(() => undefined);
-    await nextSync;
-  };
-
-  const refreshViews = (options?: {
-    kind?: SnapshotKind;
-    expectedWatchers?: ReadonlyArray<{
-      kind: 'profile' | 'config';
-      file: string;
-    }>;
-    syncEditor?: boolean;
-  }): void => {
-    options?.expectedWatchers?.forEach(({ kind, file }) =>
-      echoFilter.expect(kind, file),
-    );
-    const syncOptions: {
-      notifyIssues: boolean;
-      kind?: SnapshotKind;
-      syncEditor?: boolean;
-    } = {
-      notifyIssues: false,
-    };
-    if (options?.kind !== undefined) {
-      syncOptions.kind = options.kind;
-    }
-    if (options?.syncEditor !== undefined) {
-      syncOptions.syncEditor = options.syncEditor;
-    }
-
-    void syncUiWithWorkspace(syncOptions).catch(showError);
-  };
+  const syncController = new WorkspaceSyncController({
+    store,
+    echoFilter,
+    applySnapshot,
+    reportIssues: (issues) => issueReporter.report(issues),
+    onError: showError,
+  });
+  const syncUiWithWorkspace = (
+    options?: Parameters<WorkspaceSyncController['sync']>[0],
+  ): Promise<void> => syncController.sync(options);
 
   const handleConfigCheckboxChange = async (
     event: vscode.TreeCheckboxChangeEvent<TreeNode>,
@@ -285,10 +190,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const editorPanel = new EditorPanelController({
     context,
     store,
-    onDidMutate: refreshViews,
+    onDidMutate: (mutation) => syncController.refresh(mutation),
     onDidReveal: revealTarget,
     onDidGenerate: handleGenerate,
   });
+  syncController.setEditorSync((snapshot, kind) =>
+    editorPanel.syncWithWorkspaceData(snapshot, { kind }),
+  );
 
   const profileWatcher = registerDataWatcher(
     store.getRelativeProfilePattern(),

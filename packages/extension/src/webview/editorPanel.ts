@@ -15,19 +15,13 @@ import type {
   WorkspaceDataSnapshot,
   WorkspaceStore,
 } from '../io/workspaceStore.js';
+import type { RefreshRequest } from '../sync/workspaceSyncController.js';
 import { rewriteWebviewHtml } from './webviewHtml.js';
 
 interface EditorPanelOptions {
   context: vscode.ExtensionContext;
   store: WorkspaceStore;
-  onDidMutate: (mutation: {
-    kind: 'profile' | 'config' | 'both';
-    expectedWatchers?: ReadonlyArray<{
-      kind: 'profile' | 'config';
-      file: string;
-    }>;
-    syncEditor?: boolean;
-  }) => void;
+  onDidMutate: (mutation: RefreshRequest) => void;
   onDidReveal: (target: EditorTarget) => Promise<void>;
   onDidGenerate: () => Promise<{ success: boolean }>;
 }
