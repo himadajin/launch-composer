@@ -240,7 +240,9 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
   - `GenerateStatus` コンポーネントを独立ファイルへ（1 コンポーネント 1 ファイルの既存慣習に合わせる）
   - エディタ 2 分岐で約 40 行ずつ重複しているハンドラ配線（`onChange` / `onRename` / `onOpenJson` のインラインクロージャ）を `useEditorHandlers(editorTarget)` に集約。`readOnlyIssue` の条件付きスプレッドは、prop 型を `ComposerDataIssue | undefined` 受け入れに変えて解消。
 
-### 4-4. ConfigEditor / ProfileEditor の共通化
+### 4-4. ConfigEditor / ProfileEditor の共通化 [完了]
+
+※実装メモ: vitest + jsdom + @testing-library/react を webview に最小導入した（`node --test` は `test/*.test.ts`、vitest は `test/*.test.tsx` を所有）。`useEditableField` は `components/hooks.ts` にあり、debounce / changed-by-user / 外部同期の挙動を `useEditableField.test.tsx` が固定している。argsFile の changed-by-user ガード欠落はフック化により解消済み（挙動としては「外部同期だけでは書き込みがスケジュールされない」方向の修正）。
 
 - **対象**: `packages/webview/src/components/ConfigEditor.tsx` / `ProfileEditor.tsx`
 - **問題**: 5 ブロックがほぼ逐語重複している（約 150〜200 行）: ①読み取り専用 JSON ステータス行、②blur/Enter でコミットする Name フィールド、③「changed-by-user ref + 同期 effect + debounce コミット」のテキストフィールドパターン×4 箇所、④Stop At Entry チェックボックス、⑤Args ListEditor + readOnly フォールバック。さらに ConfigEditor の `argsFile` フィールドだけ changed-by-user ガードが欠けている非対称があり、2 ファイルを diff しないと気づけない。
