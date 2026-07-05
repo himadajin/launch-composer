@@ -259,15 +259,15 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
 
 ---
 
-## Phase 5: ビルド・設定の衛生化（任意順序・独立）
+## Phase 5: ビルド・設定の衛生化（任意順序・独立） [完了]
 
-1. **esbuild ターゲット統一**: 本番バンドル（`packages/extension/esbuild.mjs`）は `node24`、テストバンドル(`packages/extension/test/build-tests.mjs`、`packages/webview/test/build-tests.mjs`）は `node20` と食い違っている。テストが通っても出荷物と構文レベルが違う。ルートの `engines.node >= 24` に合わせ `node24` に統一し、共有定数（例: `buildConfig.mjs`)に一元化する。
-2. **tsconfig の lib 整合**: `packages/extension/tsconfig.json` が `"lib": ["ES2022"]` でベースの `target: ES2024` と不整合。override を削除するか ES2024 に揃える。
-3. **ルート package.json の依存重複**: `jsonc-parser` / `react` / `react-dom` がルートと各パッケージの両方に宣言されている。npm workspaces では hoisting されるためルート側は冗長で、バージョン更新点が二重になる。ルート側を削除する(ルート直下に import する者がいないことは確認済み)。
-4. **core バージョンの完全固定ピン**: `packages/extension/package.json` の `"@launch-composer/core": "0.1.1"` は core のバージョンを上げるたびに手動同期が要る。core は esbuild でバンドルされ runtime 依存として公開されないため、`"*"`(workspace 解決)にして同期点を消す。
-5. **jsonc-parser の深部 import**: `packages/extension/src/io/json.ts` が `jsonc-parser/lib/esm/main.js` を import している。パッケージング変更に脆いのでルート import に変更する（esbuild バンドル下でルート export は動作する）。
-6. **lint スクリプト**: ルート `package.json` の `lint` が 8 パスを列挙しており、新ディレクトリがサイレントにリント対象から漏れる。`eslint.config.mjs` の `ignores` は dist 等を除外済みなので `eslint .` に変更する。
-7. **core の tsconfig 分割**: core は `test/**` を同じ tsconfig でコンパイルし `dist/test/` を生成する。`files: ["dist"]` のためコンパイル済みテストが公開物に混入し得る。また `test` スクリプトが毎回フルビルドを要求する。extension に倣い src 用と test 用の tsconfig を分ける。
+1. **esbuild ターゲット統一** [完了]: 本番バンドル（`packages/extension/esbuild.mjs`）は `node24`、テストバンドル(`packages/extension/test/build-tests.mjs`、`packages/webview/test/build-tests.mjs`）は `node20` と食い違っている。テストが通っても出荷物と構文レベルが違う。ルートの `engines.node >= 24` に合わせ `node24` に統一し、共有定数（例: `buildConfig.mjs`)に一元化する。
+2. **tsconfig の lib 整合** [完了]: `packages/extension/tsconfig.json` が `"lib": ["ES2022"]` でベースの `target: ES2024` と不整合。override を削除するか ES2024 に揃える。
+3. **ルート package.json の依存重複** [完了]: `jsonc-parser` / `react` / `react-dom` がルートと各パッケージの両方に宣言されている。npm workspaces では hoisting されるためルート側は冗長で、バージョン更新点が二重になる。ルート側を削除する(ルート直下に import する者がいないことは確認済み)。
+4. **core バージョンの完全固定ピン** [完了]: `packages/extension/package.json` の `"@launch-composer/core": "0.1.1"` は core のバージョンを上げるたびに手動同期が要る。core は esbuild でバンドルされ runtime 依存として公開されないため、`"*"`(workspace 解決)にして同期点を消す。
+5. **jsonc-parser の深部 import** [完了]: `packages/extension/src/io/json.ts` が `jsonc-parser/lib/esm/main.js` を import している。パッケージング変更に脆いのでルート import に変更する。※当初の「esbuild バンドル下でルート export は動作する」という記述は誤りだった: jsonc-parser の `main` は UMD ローダーを指し、esbuild の CJS バンドル内で遅延 `require()` が壊れる（`bundle.test.ts` がこれをガードしている）。実装では esbuild の `mainFields: ['module', 'main']`（`buildConfig.mjs` で共有）により ESM 解決へ切り替えたうえでルート import 化した。
+6. **lint スクリプト** [完了]: ルート `package.json` の `lint` が 8 パスを列挙しており、新ディレクトリがサイレントにリント対象から漏れる。`eslint.config.mjs` の `ignores` は dist 等を除外済みなので `eslint .` に変更する。※実装時の発見: flat config の `ignores` は他のキーと同居するとグローバル ignore にならないため、専用オブジェクトへ分離する修正が必要だった。
+7. **core の tsconfig 分割** [完了]: core は `test/**` を同じ tsconfig でコンパイルし `dist/test/` を生成する。`files: ["dist"]` のためコンパイル済みテストが公開物に混入し得る。また `test` スクリプトが毎回フルビルドを要求する。extension に倣い src 用と test 用の tsconfig を分ける。※実装ではテスト実行も他 2 パッケージと同じ esbuild バンドル方式（`test/build-tests.mjs` + `.test-dist`）に揃え、`dist` はフラット化（`dist/index.js`）した。
 
 ---
 
