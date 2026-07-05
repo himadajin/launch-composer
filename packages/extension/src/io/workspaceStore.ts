@@ -25,12 +25,15 @@ import {
   findArrayEntryOffset,
   joinJsonPatchPath,
   parseJsonc,
-  parseJsoncDocument,
   type JsonObjectPatchOperation,
-  type JsonParseIssue,
   stringifyJsonFile,
 } from './json.js';
 import { DataFileIo } from './dataFileIo.js';
+import {
+  parseConfigDocument,
+  parseProfileDocument,
+  unwrapParsedDocument,
+} from './dataFileParser.js';
 import {
   COMPOSER_DIR,
   CONFIGS_DIR,
@@ -88,9 +91,6 @@ type ConfigFileReadResult =
   | { status: 'ok'; data: ConfigFileData }
   | { status: 'missing' }
   | { status: 'invalid'; issue: ComposerDataIssue };
-
-type DocumentParseResult<T> =
-  { status: 'ok'; data: T } | { status: 'invalid'; issue: ComposerDataIssue };
 
 export type EntryPatchResult =
   | {
@@ -810,7 +810,7 @@ export class WorkspaceStore {
       return { status: 'missing' };
     }
 
-    const parsed = this.parseProfileDocument(file, result.text);
+    const parsed = parseProfileDocument(file, result.text);
     if (parsed.status === 'invalid') {
       return parsed;
     }
@@ -830,7 +830,7 @@ export class WorkspaceStore {
       return { status: 'missing' };
     }
 
-    const parsed = this.parseConfigDocument(file, result.text);
+    const parsed = parseConfigDocument(file, result.text);
     if (parsed.status === 'invalid') {
       return parsed;
     }
@@ -845,82 +845,14 @@ export class WorkspaceStore {
   }
 
   private parseProfileEntries(file: string, text: string): ProfileData[] {
-    return this.unwrapParsedDocument(this.parseProfileDocument(file, text));
+    return unwrapParsedDocument(parseProfileDocument(file, text));
   }
 
   private parseConfigFileContent(
     file: string,
     text: string,
   ): Omit<ConfigFileData, 'file'> {
-    return this.unwrapParsedDocument(this.parseConfigDocument(file, text));
-  }
-
-  private parseProfileDocument(
-    file: string,
-    text: string,
-  ): DocumentParseResult<ProfileData[]> {
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      return {
-        status: 'invalid',
-        issue: this.createParseIssue('profile', file, text, parsed.issues),
-      };
-    }
-
-    if (!Array.isArray(parsed.value)) {
-      return {
-        status: 'invalid',
-        issue: {
-          kind: 'profile',
-          file,
-          code: 'invalid-shape',
-          message: `${file} must contain a JSON array.`,
-        },
-      };
-    }
-
-    return { status: 'ok', data: parsed.value as ProfileData[] };
-  }
-
-  private parseConfigDocument(
-    file: string,
-    text: string,
-  ): DocumentParseResult<Omit<ConfigFileData, 'file'>> {
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      return {
-        status: 'invalid',
-        issue: this.createParseIssue('config', file, text, parsed.issues),
-      };
-    }
-
-    if (
-      !isRecord(parsed.value) ||
-      !Array.isArray(parsed.value.configurations)
-    ) {
-      return {
-        status: 'invalid',
-        issue: {
-          kind: 'config',
-          file,
-          code: 'invalid-shape',
-          message: `${file} must contain an object with a "configurations" array.`,
-        },
-      };
-    }
-
-    return {
-      status: 'ok',
-      data: { configurations: parsed.value.configurations as ConfigData[] },
-    };
-  }
-
-  private unwrapParsedDocument<T>(result: DocumentParseResult<T>): T {
-    if (result.status === 'invalid') {
-      throw new Error(result.issue.message);
-    }
-
-    return result.data;
+    return unwrapParsedDocument(parseConfigDocument(file, text));
   }
 
   private async patchArrayEntry(
@@ -1175,35 +1107,6 @@ export class WorkspaceStore {
     await vscode.workspace.fs.createDirectory(this.layout.getComposerDirUri());
     await vscode.workspace.fs.createDirectory(this.layout.getDataDirUri(kind));
   }
-
-  private createParseIssue(
-    kind: 'profile' | 'config',
-    file: string,
-    text: string,
-    issues: JsonParseIssue[],
-  ): ComposerDataIssue {
-    if (text.trim() === '') {
-      return {
-        kind,
-        file,
-        code: 'empty',
-        message:
-          kind === 'profile'
-            ? `${file} is empty. Expected a JSON array such as [].`
-            : `${file} is empty. Expected an object with a "configurations" array.`,
-      };
-    }
-
-    return {
-      kind,
-      file,
-      code: 'invalid-json',
-      message: `Invalid JSON in ${file}. Open the file and fix the syntax.`,
-      details: issues
-        .map((issue) => `${issue.code} at ${issue.offset}`)
-        .join(', '),
-    };
-  }
 }
 
 function normalizeEntryName(value: string): string {
@@ -1246,10 +1149,6 @@ function findConfigEntry(
     index
   ];
   return data === undefined ? undefined : { index, data };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function createEmptyConfigFile(): Omit<ConfigFileData, 'file'> {
