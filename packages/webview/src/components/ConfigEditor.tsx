@@ -58,7 +58,7 @@ interface ConfigEditorProps {
   onChange: (change: EntryChange<ConfigData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
-  readOnlyIssue?: ComposerDataIssue;
+  readOnlyIssue?: ComposerDataIssue | undefined;
 }
 
 export function ConfigEditor({

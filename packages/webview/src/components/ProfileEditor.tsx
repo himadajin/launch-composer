@@ -55,7 +55,7 @@ interface ProfileEditorProps {
   onChange: (change: EntryChange<ProfileData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
-  readOnlyIssue?: ComposerDataIssue;
+  readOnlyIssue?: ComposerDataIssue | undefined;
 }
 
 export function ProfileEditor({

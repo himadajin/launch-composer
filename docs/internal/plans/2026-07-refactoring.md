@@ -213,7 +213,7 @@ Phase 2 以降で触るコードのうち、現在テストがない箇所を先
   - `ui/jsonEditorOpener.ts` — `openDataFileAsJson` / `openEntryAsJson`（`vscode.window` 消費側）
 - **順序**: Phase 3-3 / 3-4 を先に済ませてから移動する（移動と書き換えを同じ PR でやらない）。1 モジュールずつ抽出し、各段階でテストを通す。
 
-### 4-2. extension.ts の activate()（約 740 行)の分解
+### 4-2. extension.ts の activate()（約 740 行)の分解 [完了]
 
 - **対象**: `packages/extension/src/extension.ts`
 - **問題**: `activate()` が共有ミュータブル状態を閉じ込めた巨大クロージャで、次の 4 責務を混在させている。いずれも `activate()` 全体を起動しないとテストできない。
