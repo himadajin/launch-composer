@@ -5,7 +5,7 @@ import {
   parseTree,
   printParseErrorCode,
   type ParseError,
-} from 'jsonc-parser/lib/esm/main.js';
+} from 'jsonc-parser';
 
 import type { EntryPatchOperation } from '../messages.js';
 

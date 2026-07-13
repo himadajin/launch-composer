@@ -1,401 +1,116 @@
-import {
-  generate,
-  validateGenerateInput,
-  type ArgsFileLoadResult,
-  type ConfigData,
-  type ConfigFileData,
-  type GenerateInput,
-  type GenerateSuccess,
-  type ProfileData,
-  type ProfileFileData,
-  type ValidationError,
-} from '@launch-composer/core';
+import type { GenerateSuccess } from '@launch-composer/core';
 import * as vscode from 'vscode';
 
-import type {
-  ComposerDataIssue,
-  EditorTarget,
-  GenerateDiagnostic,
-  GenerateReadiness,
-} from '../messages.js';
+import type { EditorTarget } from '../messages.js';
 import {
-  appendJsonArrayValue,
-  applyJsonDocumentPatches,
-  createTextRevision,
-  findArrayEntryOffset,
-  joinJsonPatchPath,
-  parseJsonc,
-  parseJsoncDocument,
-  type JsonObjectPatchOperation,
-  type JsonParseIssue,
-  stringifyJsonFile,
-} from './json.js';
-
-const COMPOSER_DIR = '.vscode/launch-composer';
-const PROFILES_DIR = `${COMPOSER_DIR}/profiles`;
-const CONFIGS_DIR = `${COMPOSER_DIR}/configs`;
-const LAUNCH_FILE = '.vscode/launch.json';
-const DEFAULT_PROFILE_FILE = 'profile.json';
-const DEFAULT_CONFIG_FILE = 'config.json';
-const DEFAULT_PROFILE_CONTENT =
-  '// Add profile entries to this array.\n' +
-  '// Each profile should have a unique "name".\n' +
-  '[]\n';
-const DEFAULT_CONFIG_CONTENT =
-  '// Configure this file and add entries to "configurations".\n' +
-  '// Set "profile" to reference a profile.\n' +
-  '{\n' +
-  '  "configurations": []\n' +
-  '}\n';
+  LaunchJsonService,
+  type WorkspaceDataSnapshot,
+  type WorkspaceGenerateResult,
+} from '../generate/launchJsonService.js';
+import { JsonEditorOpener } from '../ui/jsonEditorOpener.js';
+import type { JsonObjectPatchOperation } from './json.js';
+import { DataFileIo } from './dataFileIo.js';
+import { WorkspaceLayout } from './workspaceLayout.js';
+import {
+  WorkspaceMutations,
+  type EntryPatchResult,
+} from './workspaceMutations.js';
+import {
+  WorkspaceReader,
+  type ConfigWorkspaceData,
+  type ProfileWorkspaceData,
+  type WorkspaceDataWithoutReadiness,
+} from './workspaceReader.js';
 
 export type { ComposerDataIssue } from '../messages.js';
-
-export interface WorkspaceDataSnapshot {
-  profiles: ProfileFileData[];
-  configs: ConfigFileData[];
-  issues: ComposerDataIssue[];
-  generateReadiness: GenerateReadiness;
-}
-
-export interface WorkspaceDataWithoutReadiness {
-  profiles: ProfileFileData[];
-  configs: ConfigFileData[];
-  issues: ComposerDataIssue[];
-}
-
-export interface ProfileWorkspaceData {
-  profiles: ProfileFileData[];
-  issues: ComposerDataIssue[];
-}
-
-export interface ConfigWorkspaceData {
-  configs: ConfigFileData[];
-  issues: ComposerDataIssue[];
-}
-
-export type WorkspaceGenerateResult =
-  | GenerateSuccess
-  | {
-      success: false;
-      issueCount: number;
-    };
-
-type ConfigFileReadResult =
-  | { status: 'ok'; data: ConfigFileData }
-  | { status: 'missing' }
-  | { status: 'invalid'; issue: ComposerDataIssue };
-
-type DocumentParseResult<T> =
-  { status: 'ok'; data: T } | { status: 'invalid'; issue: ComposerDataIssue };
-
-type TextFileReadResult =
-  { status: 'ok'; text: string } | { status: 'missing' };
-
-export type EntryPatchResult =
-  | {
-      status: 'ok';
-      revision: string | null;
-    }
-  | {
-      status: 'conflict';
-      revision: string | null;
-    };
+export type {
+  WorkspaceDataSnapshot,
+  WorkspaceGenerateResult,
+} from '../generate/launchJsonService.js';
+export type { EntryPatchResult } from './workspaceMutations.js';
+export type {
+  ConfigWorkspaceData,
+  ProfileWorkspaceData,
+  WorkspaceDataWithoutReadiness,
+} from './workspaceReader.js';
 
 export class WorkspaceStore {
-  constructor(private readonly workspaceRoot: vscode.Uri) {}
+  private readonly layout: WorkspaceLayout;
+  private readonly io: DataFileIo;
+  private readonly reader: WorkspaceReader;
+  private readonly mutations: WorkspaceMutations;
+  private readonly launchJson: LaunchJsonService;
+  private readonly jsonEditorOpener: JsonEditorOpener;
+
+  constructor(workspaceRoot: vscode.Uri) {
+    this.layout = new WorkspaceLayout(workspaceRoot);
+    this.io = new DataFileIo(this.layout);
+    this.reader = new WorkspaceReader(this.layout, this.io);
+    this.mutations = new WorkspaceMutations(this.layout, this.io, this.reader);
+    this.launchJson = new LaunchJsonService(this.layout, this.io, this.reader);
+    this.jsonEditorOpener = new JsonEditorOpener(this.layout);
+  }
 
   getWorkspaceRootPath(): string {
-    return this.workspaceRoot.fsPath;
+    return this.layout.getWorkspaceRootPath();
   }
 
   getRelativeProfilePattern(): vscode.RelativePattern {
-    return new vscode.RelativePattern(
-      this.workspaceRoot,
-      `${PROFILES_DIR}/**/*.json`,
-    );
+    return this.layout.getRelativeProfilePattern();
   }
 
   getRelativeConfigPattern(): vscode.RelativePattern {
-    return new vscode.RelativePattern(
-      this.workspaceRoot,
-      `${CONFIGS_DIR}/**/*.json`,
-    );
+    return this.layout.getRelativeConfigPattern();
   }
 
   async readAll(): Promise<WorkspaceDataSnapshot> {
-    const [profilesResult, configsResult] = await Promise.all([
-      this.readProfilesWithIssues(),
-      this.readConfigsWithIssues(),
-    ]);
-
-    return this.withGenerateReadiness({
-      profiles: profilesResult.profiles,
-      configs: configsResult.configs,
-      issues: [...profilesResult.issues, ...configsResult.issues],
-    });
+    return this.launchJson.withGenerateReadiness(
+      await this.reader.readAllData(),
+    );
   }
 
   async withGenerateReadiness(
     snapshot: WorkspaceDataWithoutReadiness,
   ): Promise<WorkspaceDataSnapshot> {
-    return {
-      ...snapshot,
-      generateReadiness: await this.getGenerateReadiness(snapshot),
-    };
-  }
-
-  private async getGenerateReadiness(
-    snapshot: WorkspaceDataWithoutReadiness,
-  ): Promise<GenerateReadiness> {
-    if (snapshot.issues.length > 0) {
-      return {
-        diagnostics: snapshot.issues.map((issue) =>
-          this.createInvalidFileDiagnostic(issue),
-        ),
-      };
-    }
-
-    const errors = await validateGenerateInput(
-      this.createGenerateInput(snapshot),
-    );
-
-    return {
-      diagnostics: errors.map((error) =>
-        this.createCoreValidationDiagnostic(error, snapshot),
-      ),
-    };
-  }
-
-  private createInvalidFileDiagnostic(
-    issue: ComposerDataIssue,
-  ): GenerateDiagnostic {
-    return {
-      source: 'invalid-file',
-      file: issue.file,
-      message: issue.message,
-      target: { kind: 'file' },
-    };
-  }
-
-  private createCoreValidationDiagnostic(
-    error: ValidationError,
-    snapshot: WorkspaceDataWithoutReadiness,
-  ): GenerateDiagnostic {
-    if (error.target.kind === 'profile') {
-      const profile = findProfileEntry(
-        snapshot.profiles,
-        error.file,
-        error.target.index,
-      );
-      const target: GenerateDiagnostic['target'] = {
-        kind: 'profile',
-      };
-      if (error.target.index !== undefined) {
-        target.index = error.target.index;
-      }
-      if (profile?.name !== undefined) {
-        target.name = profile.name;
-      }
-      if (error.field !== undefined) {
-        target.field = error.field;
-      }
-      return {
-        source: 'core-validation',
-        file: error.file,
-        message: error.message,
-        target,
-      };
-    }
-
-    if (error.target.kind === 'config') {
-      const config = findConfigEntry(
-        snapshot.configs,
-        error.file,
-        error.target.index,
-      );
-      const target: GenerateDiagnostic['target'] = {
-        kind: 'config',
-      };
-      if (error.target.index !== undefined) {
-        target.index = error.target.index;
-      }
-      const name = config?.data.name ?? error.configName;
-      if (name !== undefined) {
-        target.name = name;
-      }
-      if (error.field !== undefined) {
-        target.field = error.field;
-      }
-      return {
-        source: 'core-validation',
-        file: error.file,
-        message: error.message,
-        target,
-      };
-    }
-
-    const target: GenerateDiagnostic['target'] = {
-      kind: 'file',
-    };
-    if (error.field !== undefined) {
-      target.field = error.field;
-    }
-
-    return {
-      source: 'core-validation',
-      file: error.file,
-      message: error.message,
-      target,
-    };
-  }
-
-  private createGenerateInput(
-    snapshot: Pick<WorkspaceDataSnapshot, 'profiles' | 'configs'>,
-  ): GenerateInput {
-    return {
-      profiles: snapshot.profiles,
-      configs: snapshot.configs,
-      variables: {
-        workspaceFolder: this.workspaceRoot.fsPath,
-      },
-      readArgsFile: (resolvedPath) => this.readArgsFile(resolvedPath),
-    };
-  }
-
-  private async readArgsFile(
-    resolvedPath: string,
-  ): Promise<ArgsFileLoadResult> {
-    try {
-      const uri = vscode.Uri.file(resolvedPath);
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      const value = parseJsonc<unknown>(decodeText(bytes), resolvedPath);
-      return { kind: 'success', data: value };
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return { kind: 'not-found' };
-      }
-
-      return {
-        kind: 'error',
-        message:
-          error instanceof Error ? error.message : 'Failed to read argsFile.',
-      };
-    }
+    return this.launchJson.withGenerateReadiness(snapshot);
   }
 
   async readProfilesWithIssues(): Promise<ProfileWorkspaceData> {
-    const result = await this.readProfileFiles();
-    return {
-      profiles: result.data,
-      issues: result.issues,
-    };
+    return this.reader.readProfilesWithIssues();
   }
 
   async readConfigsWithIssues(): Promise<ConfigWorkspaceData> {
-    const result = await this.readConfigFiles();
-    return {
-      configs: result.data,
-      issues: result.issues,
-    };
+    return this.reader.readConfigsWithIssues();
   }
 
   async listProfileNames(): Promise<string[]> {
-    const data = await this.readProfileFiles();
-    return data.data.flatMap((fileData) =>
-      fileData.profiles.map((profile) => profile.name),
-    );
+    return this.reader.listProfileNames();
   }
 
   async listFiles(kind: 'profile' | 'config'): Promise<string[]> {
-    const directory =
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
-    const entries = await this.readDirectory(directory);
-
-    return entries
-      .filter(
-        ([name, fileType]) =>
-          fileType === vscode.FileType.File && name.endsWith('.json'),
-      )
-      .map(([name]) => name)
-      .sort((left, right) => left.localeCompare(right));
+    return this.reader.listFiles(kind);
   }
 
   async ensureInitialized(): Promise<{
     ensuredDirectories: string[];
     ensuredFiles: string[];
   }> {
-    const targets = [
-      [COMPOSER_DIR, this.getComposerDirUri()],
-      [PROFILES_DIR, this.getProfilesDirUri()],
-      [CONFIGS_DIR, this.getConfigsDirUri()],
-    ] as const;
-
-    const ensuredDirectories: string[] = [];
-
-    for (const [label, uri] of targets) {
-      await vscode.workspace.fs.createDirectory(uri);
-      ensuredDirectories.push(label);
-    }
-
-    const ensuredFiles: string[] = [];
-    if (
-      await this.ensureDefaultDataFile(
-        'profile',
-        DEFAULT_PROFILE_FILE,
-        DEFAULT_PROFILE_CONTENT,
-      )
-    ) {
-      ensuredFiles.push(`${PROFILES_DIR}/${DEFAULT_PROFILE_FILE}`);
-    }
-
-    if (
-      await this.ensureDefaultDataFile(
-        'config',
-        DEFAULT_CONFIG_FILE,
-        DEFAULT_CONFIG_CONTENT,
-      )
-    ) {
-      ensuredFiles.push(`${CONFIGS_DIR}/${DEFAULT_CONFIG_FILE}`);
-    }
-
-    return { ensuredDirectories, ensuredFiles };
+    return this.mutations.ensureInitialized();
   }
 
   async createDataFile(
     kind: 'profile' | 'config',
     rawFileName: string,
   ): Promise<string> {
-    await this.ensureInitializedDirectory(kind);
-
-    const fileName = normalizeFileName(rawFileName);
-    const targetDir =
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
-    const uri = vscode.Uri.joinPath(targetDir, fileName);
-
-    if (await this.hasDataFile(kind, fileName)) {
-      throw new Error(`File already exists: ${fileName}`);
-    }
-
-    await vscode.workspace.fs.writeFile(
-      uri,
-      encodeText(
-        kind === 'profile'
-          ? '[]\n'
-          : stringifyJsonFile(createEmptyConfigFile()),
-      ),
-    );
-    return fileName;
+    return this.mutations.createDataFile(kind, rawFileName);
   }
 
   getDataFilePath(kind: 'profile' | 'config', file: string): string {
-    return this.getDataFileUri(kind, file).fsPath;
+    return this.layout.getDataFilePath(kind, file);
   }
 
   getDataFileRelativePath(kind: 'profile' | 'config', file: string): string {
-    return vscode.workspace.asRelativePath(
-      this.getDataFileUri(kind, file),
-      false,
-    );
+    return this.layout.getDataFileRelativePath(kind, file);
   }
 
   getEntryFilePath(target: EditorTarget): string {
@@ -410,13 +125,7 @@ export class WorkspaceStore {
     kind: 'profile' | 'config',
     file: string,
   ): Promise<string | null> {
-    const uri = this.getDataFileUri(kind, file);
-    const result = await this.readTextFile(uri);
-    if (result.status === 'missing') {
-      return null;
-    }
-
-    return createTextRevision(result.text);
+    return this.io.getDataFileRevision(kind, file);
   }
 
   async renameDataFile(
@@ -424,60 +133,18 @@ export class WorkspaceStore {
     file: string,
     rawFileName: string,
   ): Promise<string> {
-    await this.ensureInitializedDirectory(kind);
-
-    const currentFileName = normalizeFileName(file);
-    const nextFileName = normalizeFileName(rawFileName);
-    if (currentFileName === nextFileName) {
-      return currentFileName;
-    }
-
-    if (await this.hasDataFile(kind, nextFileName)) {
-      throw new Error(`File already exists: ${nextFileName}`);
-    }
-
-    const sourceUri = this.getDataFileUri(kind, currentFileName);
-    const destinationUri = this.getDataFileUri(kind, nextFileName);
-    const bytes = await vscode.workspace.fs.readFile(sourceUri);
-
-    await vscode.workspace.fs.writeFile(destinationUri, bytes);
-    await vscode.workspace.fs.delete(sourceUri);
-
-    return nextFileName;
+    return this.mutations.renameDataFile(kind, file, rawFileName);
   }
 
   async deleteDataFile(
     kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
-    const uri = this.getDataFileUri(kind, file);
-    const edit = new vscode.WorkspaceEdit();
-    edit.deleteFile(uri, {
-      ignoreIfNotExists: true,
-      recursive: false,
-    });
-
-    const applied = await vscode.workspace.applyEdit(edit);
-    if (!applied) {
-      throw new Error(`Failed to delete ${normalizeFileName(file)}.`);
-    }
+    return this.mutations.deleteDataFile(kind, file);
   }
 
   async addProfileEntry(file: string, name: string): Promise<EditorTarget> {
-    await this.ensureArrayDataFile('profile', file);
-    const text = await this.readRequiredDataFileText('profile', file);
-    const entries = this.parseProfileEntries(file, text);
-    const nextText = appendJsonArrayValue(text, [], {
-      name,
-      configuration: { type: '', request: 'launch' },
-    });
-    await this.writeDataFileText('profile', file, nextText);
-
-    return {
-      kind: 'profile',
-      file,
-      index: entries.length,
-    };
+    return this.mutations.addProfileEntry(file, name);
   }
 
   async addConfigEntry(
@@ -485,19 +152,7 @@ export class WorkspaceStore {
     name: string,
     profileName: string,
   ): Promise<EditorTarget> {
-    await this.ensureConfigDataFile(file);
-    const text = await this.readRequiredDataFileText('config', file);
-    const configFile = this.parseConfigFileContent(file, text);
-    const data: ConfigData = { name, profile: profileName };
-
-    const nextText = appendJsonArrayValue(text, ['configurations'], data);
-    await this.writeDataFileText('config', file, nextText);
-
-    return {
-      kind: 'config',
-      file,
-      index: configFile.configurations.length,
-    };
+    return this.mutations.addConfigEntry(file, name, profileName);
   }
 
   async patchProfileEntry(
@@ -506,7 +161,13 @@ export class WorkspaceStore {
     baseRevision: string | null,
     patches: JsonObjectPatchOperation[],
   ): Promise<EntryPatchResult> {
-    return this.patchArrayEntry('profile', file, index, baseRevision, patches);
+    return this.mutations.patchArrayEntry(
+      'profile',
+      file,
+      index,
+      baseRevision,
+      patches,
+    );
   }
 
   async patchConfigEntry(
@@ -515,32 +176,17 @@ export class WorkspaceStore {
     baseRevision: string | null,
     patches: JsonObjectPatchOperation[],
   ): Promise<EntryPatchResult> {
-    return this.patchArrayEntry('config', file, index, baseRevision, patches);
+    return this.mutations.patchArrayEntry(
+      'config',
+      file,
+      index,
+      baseRevision,
+      patches,
+    );
   }
 
   async toggleConfigExcluded(file: string, index: number): Promise<void> {
-    const text = await this.readRequiredDataFileText('config', file);
-    const fileData = this.parseConfigFileContent(file, text);
-    assertIndex(fileData.configurations, index, file);
-    const current = fileData.configurations[index]!;
-    const nextText = applyJsonDocumentPatches(
-      text,
-      current.excluded === true
-        ? [
-            {
-              type: 'delete',
-              path: ['configurations', index, 'excluded'],
-            },
-          ]
-        : [
-            {
-              type: 'set',
-              path: ['configurations', index, 'excluded'],
-              value: true,
-            },
-          ],
-    );
-    await this.writeDataFileText('config', file, nextText);
+    return this.mutations.toggleConfigExcluded(file, index);
   }
 
   async setConfigExcluded(
@@ -548,845 +194,52 @@ export class WorkspaceStore {
     index: number,
     excluded: boolean,
   ): Promise<void> {
-    const text = await this.readRequiredDataFileText('config', file);
-    const fileData = this.parseConfigFileContent(file, text);
-    assertIndex(fileData.configurations, index, file);
-    const current = fileData.configurations[index]!;
-    if ((current.excluded === true) === excluded) {
-      return;
-    }
-
-    const nextText = applyJsonDocumentPatches(
-      text,
-      excluded
-        ? [
-            {
-              type: 'set',
-              path: ['configurations', index, 'excluded'],
-              value: true,
-            },
-          ]
-        : [
-            {
-              type: 'delete',
-              path: ['configurations', index, 'excluded'],
-            },
-          ],
-    );
-    await this.writeDataFileText('config', file, nextText);
+    return this.mutations.setConfigExcluded(file, index, excluded);
   }
 
   async setConfigFileExcluded(file: string, excluded: boolean): Promise<void> {
-    const text = await this.readRequiredDataFileText('config', file);
-    const fileData = this.parseConfigFileContent(file, text);
-    const patches: JsonObjectPatchOperation[] = [];
-
-    fileData.configurations.forEach((config, index) => {
-      if (excluded) {
-        if (config.excluded !== true) {
-          patches.push({
-            type: 'set',
-            path: ['configurations', index, 'excluded'],
-            value: true,
-          });
-        }
-        return;
-      }
-
-      if (Object.hasOwn(config, 'excluded')) {
-        patches.push({
-          type: 'delete',
-          path: ['configurations', index, 'excluded'],
-        });
-      }
-    });
-
-    if (patches.length === 0) {
-      return;
-    }
-
-    const nextText = applyJsonDocumentPatches(text, patches);
-    await this.writeDataFileText('config', file, nextText);
+    return this.mutations.setConfigFileExcluded(file, excluded);
   }
 
   async deleteEntry(target: EditorTarget): Promise<void> {
-    if (target.kind === 'profile') {
-      const text = await this.readRequiredDataFileText('profile', target.file);
-      const profiles = this.parseProfileEntries(target.file, text);
-      assertIndex(profiles, target.index, target.file);
-      const profile = profiles[target.index]!;
-      const references = await this.findConfigReferences(profile.name);
-
-      if (references.length > 0) {
-        throw new Error(
-          `Cannot delete profile "${profile.name}" because it is referenced by: ${references.join(', ')}`,
-        );
-      }
-
-      const nextText = applyJsonDocumentPatches(text, [
-        {
-          type: 'delete',
-          path: [target.index],
-        },
-      ]);
-      await this.writeDataFileText('profile', target.file, nextText);
-      return;
-    }
-
-    const text = await this.readRequiredDataFileText('config', target.file);
-    const fileData = this.parseConfigFileContent(target.file, text);
-    assertIndex(fileData.configurations, target.index, target.file);
-    const nextText = applyJsonDocumentPatches(text, [
-      {
-        type: 'delete',
-        path: ['configurations', target.index],
-      },
-    ]);
-    await this.writeDataFileText('config', target.file, nextText);
+    return this.mutations.deleteEntry(target);
   }
 
   async renameEntry(target: EditorTarget, rawName: string): Promise<void> {
-    const nextName = normalizeEntryName(rawName);
-    await this.assertUniqueEntryName(nextName, target);
-
-    if (target.kind === 'profile') {
-      const text = await this.readRequiredDataFileText('profile', target.file);
-      const profiles = this.parseProfileEntries(target.file, text);
-      assertIndex(profiles, target.index, target.file);
-      const current = profiles[target.index]!;
-      if (current.name === nextName) {
-        return;
-      }
-
-      const nextText = applyJsonDocumentPatches(text, [
-        {
-          type: 'set',
-          path: [target.index, 'name'],
-          value: nextName,
-        },
-      ]);
-      await this.writeDataFileText('profile', target.file, nextText);
-      await this.updateProfileReferences(current.name, nextName);
-      return;
-    }
-
-    const text = await this.readRequiredDataFileText('config', target.file);
-    const fileData = this.parseConfigFileContent(target.file, text);
-    assertIndex(fileData.configurations, target.index, target.file);
-    const current = fileData.configurations[target.index]!;
-    if (current.name === nextName) {
-      return;
-    }
-
-    const nextText = applyJsonDocumentPatches(text, [
-      {
-        type: 'set',
-        path: ['configurations', target.index, 'name'],
-        value: nextName,
-      },
-    ]);
-    await this.writeDataFileText('config', target.file, nextText);
+    return this.mutations.renameEntry(target, rawName);
   }
 
   async openDataFileAsJson(
     kind: 'profile' | 'config',
     file: string,
   ): Promise<void> {
-    const uri = this.getDataFileUri(kind, file);
-    const document = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(document, {
-      preview: false,
-    });
+    return this.jsonEditorOpener.openDataFileAsJson(kind, file);
   }
 
   getDataFileUriForTreeItem(
     kind: 'profile' | 'config',
     file: string,
   ): vscode.Uri {
-    return this.getDataFileUri(kind, file);
+    return this.layout.getDataFileUri(kind, file);
   }
 
   async openEntryAsJson(target: EditorTarget): Promise<void> {
-    const uri = this.getDataFileUri(target.kind, target.file);
-    const document = await vscode.workspace.openTextDocument(uri);
-    const text = document.getText();
-    const offset =
-      findArrayEntryOffset(
-        text,
-        target.kind === 'profile'
-          ? [target.index]
-          : ['configurations', target.index],
-      ) ?? 0;
-    const position = document.positionAt(offset);
-    const editor = await vscode.window.showTextDocument(document, {
-      preview: false,
-    });
-    editor.revealRange(
-      new vscode.Range(position, position),
-      vscode.TextEditorRevealType.InCenter,
-    );
-    editor.selection = new vscode.Selection(position, position);
+    return this.jsonEditorOpener.openEntryAsJson(target);
   }
 
   async hasEntry(target: EditorTarget): Promise<boolean> {
-    if (target.kind === 'profile') {
-      const result = await this.readProfileFileResult(target.file);
-      if (result.status !== 'ok') {
-        return false;
-      }
-
-      return target.index >= 0 && target.index < result.data.profiles.length;
-    }
-
-    const result = await this.readConfigFileResult(target.file);
-    if (result.status !== 'ok') {
-      return false;
-    }
-
-    return (
-      target.index >= 0 && target.index < result.data.configurations.length
-    );
+    return this.reader.hasEntry(target);
   }
 
   async generateLaunchJson(): Promise<WorkspaceGenerateResult> {
-    const snapshot = await this.readAll();
-    const readiness = snapshot.generateReadiness;
-    if (readiness.diagnostics.length > 0) {
-      return {
-        success: false,
-        issueCount: readiness.diagnostics.length,
-      };
-    }
-
-    const result = await generate(this.createGenerateInput(snapshot));
-    if (!result.success) {
-      return {
-        success: false,
-        issueCount: result.errors.length,
-      };
-    }
-
-    return result;
+    return this.launchJson.generateLaunchJson();
   }
 
   async writeLaunchJson(result: GenerateSuccess): Promise<void> {
-    const content =
-      '// This file is auto-generated by Launch Composer.\n' +
-      '// Do not edit manually. Changes will be overwritten.\n' +
-      stringifyJsonFile(result.launchJson);
-
-    await vscode.workspace.fs.createDirectory(
-      vscode.Uri.joinPath(this.workspaceRoot, '.vscode'),
-    );
-    await vscode.workspace.fs.writeFile(
-      this.getLaunchJsonUri(),
-      encodeText(content),
-    );
+    return this.launchJson.writeLaunchJson(result);
   }
 
   async launchJsonExists(): Promise<boolean> {
-    return this.exists(this.getLaunchJsonUri());
+    return this.launchJson.launchJsonExists();
   }
-
-  private async readProfileFiles(): Promise<{
-    data: ProfileFileData[];
-    issues: ComposerDataIssue[];
-  }> {
-    const entries = await this.listFiles('profile');
-    return this.readExistingFiles(entries, (file) =>
-      this.readProfileFileResult(file),
-    );
-  }
-
-  private async readConfigFiles(): Promise<{
-    data: ConfigFileData[];
-    issues: ComposerDataIssue[];
-  }> {
-    const entries = await this.listFiles('config');
-    return this.readExistingFiles(entries, (file) =>
-      this.readConfigFileResult(file),
-    );
-  }
-
-  private async readProfileFileResult(
-    file: string,
-  ): Promise<
-    | { status: 'ok'; data: ProfileFileData }
-    | { status: 'missing' }
-    | { status: 'invalid'; issue: ComposerDataIssue }
-  > {
-    const result = await this.readTextFile(
-      this.getDataFileUri('profile', file),
-    );
-    if (result.status === 'missing') {
-      return { status: 'missing' };
-    }
-
-    const parsed = this.parseProfileDocument(file, result.text);
-    if (parsed.status === 'invalid') {
-      return parsed;
-    }
-
-    return {
-      status: 'ok',
-      data: { file, profiles: parsed.data },
-    };
-  }
-
-  private async readConfigFileResult(
-    file: string,
-  ): Promise<ConfigFileReadResult> {
-    const uri = this.getDataFileUri('config', file);
-    const result = await this.readTextFile(uri);
-    if (result.status === 'missing') {
-      return { status: 'missing' };
-    }
-
-    const parsed = this.parseConfigDocument(file, result.text);
-    if (parsed.status === 'invalid') {
-      return parsed;
-    }
-
-    return {
-      status: 'ok',
-      data: {
-        file,
-        configurations: parsed.data.configurations,
-      },
-    };
-  }
-
-  private parseProfileEntries(file: string, text: string): ProfileData[] {
-    return this.unwrapParsedDocument(this.parseProfileDocument(file, text));
-  }
-
-  private parseConfigFileContent(
-    file: string,
-    text: string,
-  ): Omit<ConfigFileData, 'file'> {
-    return this.unwrapParsedDocument(this.parseConfigDocument(file, text));
-  }
-
-  private parseProfileDocument(
-    file: string,
-    text: string,
-  ): DocumentParseResult<ProfileData[]> {
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      return {
-        status: 'invalid',
-        issue: this.createParseIssue('profile', file, text, parsed.issues),
-      };
-    }
-
-    if (!Array.isArray(parsed.value)) {
-      return {
-        status: 'invalid',
-        issue: {
-          kind: 'profile',
-          file,
-          code: 'invalid-shape',
-          message: `${file} must contain a JSON array.`,
-        },
-      };
-    }
-
-    return { status: 'ok', data: parsed.value as ProfileData[] };
-  }
-
-  private parseConfigDocument(
-    file: string,
-    text: string,
-  ): DocumentParseResult<Omit<ConfigFileData, 'file'>> {
-    const parsed = parseJsoncDocument<unknown>(text);
-    if (parsed.issues.length > 0) {
-      return {
-        status: 'invalid',
-        issue: this.createParseIssue('config', file, text, parsed.issues),
-      };
-    }
-
-    if (
-      !isRecord(parsed.value) ||
-      !Array.isArray(parsed.value.configurations)
-    ) {
-      return {
-        status: 'invalid',
-        issue: {
-          kind: 'config',
-          file,
-          code: 'invalid-shape',
-          message: `${file} must contain an object with a "configurations" array.`,
-        },
-      };
-    }
-
-    return {
-      status: 'ok',
-      data: { configurations: parsed.value.configurations as ConfigData[] },
-    };
-  }
-
-  private unwrapParsedDocument<T>(result: DocumentParseResult<T>): T {
-    if (result.status === 'invalid') {
-      throw new Error(result.issue.message);
-    }
-
-    return result.data;
-  }
-
-  private async readRequiredDataFileText(
-    kind: 'profile' | 'config',
-    file: string,
-  ): Promise<string> {
-    const uri = this.getDataFileUri(kind, file);
-    const result = await this.readTextFile(uri);
-    if (result.status === 'missing') {
-      throw new Error(`File not found: ${file}`);
-    }
-
-    return result.text;
-  }
-
-  private async writeDataFileText(
-    kind: 'profile' | 'config',
-    file: string,
-    text: string,
-  ): Promise<void> {
-    await this.ensureInitializedDirectory(kind);
-    const uri = this.getDataFileUri(kind, file);
-    await vscode.workspace.fs.writeFile(uri, encodeText(text));
-  }
-
-  private async patchArrayEntry(
-    kind: 'profile' | 'config',
-    file: string,
-    index: number,
-    baseRevision: string | null,
-    patches: JsonObjectPatchOperation[],
-  ): Promise<EntryPatchResult> {
-    if (patches.some((patch) => patch.path[0] === 'name')) {
-      throw new Error('Entry name changes must use the rename entry flow.');
-    }
-
-    if (patches.length === 0) {
-      const revision = await this.getDataFileRevision(kind, file);
-      return {
-        status: 'ok',
-        revision,
-      };
-    }
-
-    const uri = this.getDataFileUri(kind, file);
-    const result = await this.readTextFile(uri);
-    if (result.status === 'missing') {
-      throw new Error(`File not found: ${file}`);
-    }
-
-    const text = result.text;
-    const currentRevision = createTextRevision(text);
-    if (baseRevision !== currentRevision) {
-      return {
-        status: 'conflict',
-        revision: currentRevision,
-      };
-    }
-
-    const entries =
-      kind === 'profile'
-        ? this.parseProfileEntries(file, text)
-        : this.parseConfigFileContent(file, text).configurations;
-
-    assertIndex(entries, index, file);
-    const entry = entries[index];
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-      throw new Error(`Entry index ${index} in ${file} must be a JSON object.`);
-    }
-
-    const entryPath = kind === 'profile' ? [index] : ['configurations', index];
-    const nextText = applyJsonDocumentPatches(
-      text,
-      joinJsonPatchPath(entryPath, patches),
-    );
-    if (nextText === text) {
-      return {
-        status: 'ok',
-        revision: currentRevision,
-      };
-    }
-
-    await vscode.workspace.fs.writeFile(uri, encodeText(nextText));
-    return {
-      status: 'ok',
-      revision: createTextRevision(nextText),
-    };
-  }
-
-  private async findConfigReferences(profileName: string): Promise<string[]> {
-    const configFiles = await this.readConfigFiles();
-    const references: string[] = [];
-
-    for (const fileData of configFiles.data) {
-      fileData.configurations.forEach((config) => {
-        if (config.profile === profileName) {
-          references.push(`${fileData.file}:${config.name}`);
-        }
-      });
-    }
-
-    return references;
-  }
-
-  private async readDirectory(
-    uri: vscode.Uri,
-  ): Promise<[string, vscode.FileType][]> {
-    try {
-      return await vscode.workspace.fs.readDirectory(uri);
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return [];
-      }
-
-      throw error;
-    }
-  }
-
-  private async readTextFile(uri: vscode.Uri): Promise<TextFileReadResult> {
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      return { status: 'ok', text: decodeText(bytes) };
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return { status: 'missing' };
-      }
-
-      throw error;
-    }
-  }
-
-  private async readExistingFiles<T>(
-    files: string[],
-    readFile: (
-      file: string,
-    ) => Promise<
-      | { status: 'ok'; data: T }
-      | { status: 'missing' }
-      | { status: 'invalid'; issue: ComposerDataIssue }
-    >,
-  ): Promise<{ data: T[]; issues: ComposerDataIssue[] }> {
-    const results: T[] = [];
-    const issues: ComposerDataIssue[] = [];
-
-    for (const file of files) {
-      const result = await readFile(file);
-      if (result.status === 'ok') {
-        results.push(result.data);
-        continue;
-      }
-
-      if (result.status === 'invalid') {
-        issues.push(result.issue);
-      }
-    }
-
-    return { data: results, issues };
-  }
-
-  private async assertUniqueEntryName(
-    name: string,
-    target: EditorTarget,
-  ): Promise<void> {
-    const { profiles, configs } = await this.readAll();
-
-    for (const fileData of profiles) {
-      fileData.profiles.forEach((entry, index) => {
-        if (
-          target.kind === 'profile' &&
-          fileData.file === target.file &&
-          index === target.index
-        ) {
-          return;
-        }
-
-        if (entry.name === name) {
-          throw new Error(`Name "${name}" is already in use.`);
-        }
-      });
-    }
-
-    for (const fileData of configs) {
-      fileData.configurations.forEach((entry, index) => {
-        if (
-          target.kind === 'config' &&
-          fileData.file === target.file &&
-          index === target.index
-        ) {
-          return;
-        }
-
-        if (entry.name === name) {
-          throw new Error(`Name "${name}" is already in use.`);
-        }
-      });
-    }
-  }
-
-  private async updateProfileReferences(
-    currentName: string,
-    nextName: string,
-  ): Promise<void> {
-    if (currentName === nextName) {
-      return;
-    }
-
-    const configFiles = await this.readConfigFiles();
-
-    await Promise.all(
-      configFiles.data.map(async (fileData) => {
-        const patches = fileData.configurations.flatMap((config, index) =>
-          config.profile === currentName
-            ? ([
-                {
-                  type: 'set',
-                  path: ['configurations', index, 'profile'],
-                  value: nextName,
-                },
-              ] satisfies JsonObjectPatchOperation[])
-            : [],
-        );
-
-        if (patches.length === 0) {
-          return;
-        }
-
-        const text = await this.readRequiredDataFileText(
-          'config',
-          fileData.file,
-        );
-        const nextText = applyJsonDocumentPatches(text, patches);
-        await this.writeDataFileText('config', fileData.file, nextText);
-      }),
-    );
-  }
-
-  private async exists(uri: vscode.Uri): Promise<boolean> {
-    try {
-      await vscode.workspace.fs.stat(uri);
-      return true;
-    } catch (error) {
-      if (isMissingFileSystemError(error)) {
-        return false;
-      }
-
-      throw error;
-    }
-  }
-
-  private getComposerDirUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, COMPOSER_DIR);
-  }
-
-  private getProfilesDirUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, PROFILES_DIR);
-  }
-
-  private getConfigsDirUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, CONFIGS_DIR);
-  }
-
-  private getLaunchJsonUri(): vscode.Uri {
-    return vscode.Uri.joinPath(this.workspaceRoot, LAUNCH_FILE);
-  }
-
-  private async ensureArrayDataFile(
-    kind: 'profile' | 'config',
-    file: string,
-  ): Promise<void> {
-    await this.ensureInitializedDirectory(kind);
-
-    const fileName = normalizeFileName(file);
-    if (await this.hasDataFile(kind, fileName)) {
-      return;
-    }
-
-    const uri = this.getDataFileUri(kind, fileName);
-    await vscode.workspace.fs.writeFile(uri, encodeText('[]\n'));
-  }
-
-  private async ensureConfigDataFile(file: string): Promise<void> {
-    await this.ensureInitializedDirectory('config');
-
-    const fileName = normalizeFileName(file);
-    if (await this.hasDataFile('config', fileName)) {
-      return;
-    }
-
-    const uri = this.getDataFileUri('config', fileName);
-    await vscode.workspace.fs.writeFile(
-      uri,
-      encodeText(stringifyJsonFile(createEmptyConfigFile())),
-    );
-  }
-
-  private async ensureDefaultDataFile(
-    kind: 'profile' | 'config',
-    file: string,
-    content: string,
-  ): Promise<boolean> {
-    await this.ensureInitializedDirectory(kind);
-
-    const fileName = normalizeFileName(file);
-    if (await this.hasDataFile(kind, fileName)) {
-      return false;
-    }
-
-    const uri = this.getDataFileUri(kind, fileName);
-    await vscode.workspace.fs.writeFile(uri, encodeText(content));
-    return true;
-  }
-
-  private async hasDataFile(
-    kind: 'profile' | 'config',
-    file: string,
-  ): Promise<boolean> {
-    const fileName = normalizeFileName(file);
-    const directory =
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri();
-    const entries = await this.readDirectory(directory);
-
-    return entries.some(
-      ([entryName, fileType]) =>
-        entryName === fileName && fileType === vscode.FileType.File,
-    );
-  }
-
-  private getDataFileUri(kind: 'profile' | 'config', file: string): vscode.Uri {
-    const fileName = normalizeFileName(file);
-    return kind === 'profile'
-      ? vscode.Uri.joinPath(this.getProfilesDirUri(), fileName)
-      : vscode.Uri.joinPath(this.getConfigsDirUri(), fileName);
-  }
-
-  private async ensureInitializedDirectory(
-    kind: 'profile' | 'config',
-  ): Promise<void> {
-    await vscode.workspace.fs.createDirectory(this.getComposerDirUri());
-    await vscode.workspace.fs.createDirectory(
-      kind === 'profile' ? this.getProfilesDirUri() : this.getConfigsDirUri(),
-    );
-  }
-
-  private createParseIssue(
-    kind: 'profile' | 'config',
-    file: string,
-    text: string,
-    issues: JsonParseIssue[],
-  ): ComposerDataIssue {
-    if (text.trim() === '') {
-      return {
-        kind,
-        file,
-        code: 'empty',
-        message:
-          kind === 'profile'
-            ? `${file} is empty. Expected a JSON array such as [].`
-            : `${file} is empty. Expected an object with a "configurations" array.`,
-      };
-    }
-
-    return {
-      kind,
-      file,
-      code: 'invalid-json',
-      message: `Invalid JSON in ${file}. Open the file and fix the syntax.`,
-      details: issues
-        .map((issue) => `${issue.code} at ${issue.offset}`)
-        .join(', '),
-    };
-  }
-}
-
-function normalizeFileName(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed === '') {
-    throw new Error('File name is required.');
-  }
-
-  return trimmed.endsWith('.json') ? trimmed : `${trimmed}.json`;
-}
-
-function normalizeEntryName(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed === '') {
-    throw new Error('Name is required.');
-  }
-
-  return trimmed;
-}
-
-function assertIndex(entries: unknown[], index: number, file: string): void {
-  if (index < 0 || index >= entries.length) {
-    throw new Error(`Entry index ${index} is out of bounds for ${file}.`);
-  }
-}
-
-function findProfileEntry(
-  files: ProfileFileData[],
-  file: string,
-  index: number | undefined,
-): ProfileData | undefined {
-  if (index === undefined) {
-    return undefined;
-  }
-
-  return files.find((fileData) => fileData.file === file)?.profiles[index];
-}
-
-function findConfigEntry(
-  files: ConfigFileData[],
-  file: string,
-  index: number | undefined,
-): { index: number; data: ConfigData } | undefined {
-  if (index === undefined) {
-    return undefined;
-  }
-
-  const data = files.find((fileData) => fileData.file === file)?.configurations[
-    index
-  ];
-  return data === undefined ? undefined : { index, data };
-}
-
-function decodeText(bytes: Uint8Array): string {
-  return new TextDecoder().decode(bytes);
-}
-
-function encodeText(text: string): Uint8Array {
-  return new TextEncoder().encode(text);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function createEmptyConfigFile(): Omit<ConfigFileData, 'file'> {
-  return {
-    configurations: [],
-  };
-}
-
-function isMissingFileSystemError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const errorWithCode = error as Error & { code?: unknown; name?: unknown };
-  return (
-    (error instanceof vscode.FileSystemError &&
-      /ENOENT|FileNotFound/i.test(error.message)) ||
-    errorWithCode.code === 'ENOENT' ||
-    (typeof errorWithCode.name === 'string' &&
-      /FileNotFound/i.test(errorWithCode.name)) ||
-    /ENOENT|FileNotFound/i.test(error.message)
-  );
 }

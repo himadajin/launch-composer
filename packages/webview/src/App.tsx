@@ -1,184 +1,36 @@
-import {
-  startTransition,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useMemo } from 'react';
 
 import { ConfigEditor } from './components/ConfigEditor.js';
 import type { EntryChange } from './components/entryChanges.js';
+import { GenerateStatus } from './components/GenerateStatus.js';
 import { ProfileEditor } from './components/ProfileEditor.js';
-import type {
-  ConfigData,
-  EntryPatchOperation,
-  HostMessage,
-  InitialDataPayload,
-  ProfileData,
-} from './types.js';
-import {
-  getEditorDiagnostics,
-  mergeWorkspaceUpdatePayload,
-} from './components/generateReadiness.js';
+import type { ConfigData, ProfileData } from './types.js';
+import { getEditorDiagnostics } from './components/generateReadiness.js';
+import { useComposerPayload } from './hooks/useComposerPayload.js';
+import { useEntryUpdateQueue } from './hooks/useEntryUpdateQueue.js';
 import {
   createPlaceholderConfig,
   createPlaceholderProfile,
   updatePayload,
 } from './payloadUpdates.js';
 import { RpcClient } from './utils/rpc.js';
-import { vscode } from './utils/vscode.js';
 
 const rpc = new RpcClient();
 
 export function App() {
-  const [payload, setPayload] = useState<InitialDataPayload | null>(() => {
-    return vscode.getState<InitialDataPayload>() ?? null;
-  });
-  const updateQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const revisionRef = useRef<string | null>(payload?.editorRevision ?? null);
+  const { payload, setPayload, requestLatestPayload } = useComposerPayload(rpc);
   const editorKey =
     payload === null
       ? ''
       : `${payload.editor.kind}:${payload.editor.file}:${payload.editor.index}`;
 
-  const requestLatestPayload = useCallback(async () => {
-    const result = await rpc.sendRequest({ type: 'request-initial-data' });
-
-    startTransition(() => {
-      setPayload(result);
-    });
-  }, []);
-
-  const renameEntry = useCallback(
-    async (
-      kind: 'profile' | 'config',
-      file: string,
-      index: number,
-      name: string,
-    ) => {
-      await rpc.sendRequest({
-        type: 'rename-entry',
-        payload: {
-          kind,
-          file,
-          index,
-          name,
-        },
-      });
-
-      await requestLatestPayload();
-    },
-    [requestLatestPayload],
-  );
-
-  const enqueueUpdate = useCallback(
-    (
-      kind: 'profile' | 'config',
-      file: string,
-      index: number,
-      patches: EntryPatchOperation[],
-    ) => {
-      if (patches.length === 0) {
-        return;
-      }
-
-      updateQueueRef.current = updateQueueRef.current
-        .then(async () => {
-          const baseRevision = revisionRef.current;
-          const result = await rpc.sendRequest(
-            kind === 'profile'
-              ? {
-                  type: 'update-profile',
-                  payload: {
-                    file,
-                    index,
-                    baseRevision,
-                    patches,
-                  },
-                }
-              : {
-                  type: 'update-config',
-                  payload: {
-                    file,
-                    index,
-                    baseRevision,
-                    patches,
-                  },
-                },
-          );
-
-          if (result.success !== true) {
-            if (result.conflict === true) {
-              await requestLatestPayload();
-            }
-            return;
-          }
-
-          revisionRef.current = result.revision ?? baseRevision;
-          setPayload((currentPayload) => {
-            if (currentPayload === null) {
-              return currentPayload;
-            }
-
-            return {
-              ...currentPayload,
-              editorRevision: result.revision ?? currentPayload.editorRevision,
-              generateReadiness: result.generateReadiness,
-            };
-          });
-        })
-        .catch(() => undefined);
-    },
-    [requestLatestPayload],
-  );
-
-  useEffect(() => {
-    function onMessage(event: MessageEvent<HostMessage>) {
-      if (rpc.handle(event.data)) {
-        return;
-      }
-
-      const message = event.data;
-      if (message.type === 'initial-data') {
-        startTransition(() => {
-          setPayload(message.payload);
-        });
-        return;
-      }
-
-      if (message.type !== 'workspace-update') {
-        return;
-      }
-
-      startTransition(() => {
-        setPayload((currentPayload) =>
-          mergeWorkspaceUpdatePayload(currentPayload, message.payload),
-        );
-      });
-    }
-
-    window.addEventListener('message', onMessage as EventListener);
-    void requestLatestPayload().catch(() => undefined);
-
-    return () => {
-      window.removeEventListener('message', onMessage as EventListener);
-    };
-  }, [requestLatestPayload]);
-
-  useEffect(() => {
-    revisionRef.current = payload?.editorRevision ?? null;
-  }, [payload?.editorRevision, editorKey]);
-
-  useEffect(() => {
-    updateQueueRef.current = Promise.resolve();
-  }, [editorKey]);
-
-  useEffect(() => {
-    if (payload !== null) {
-      vscode.setState(payload);
-    }
-  }, [payload]);
+  const { enqueueUpdate, renameEntry } = useEntryUpdateQueue({
+    rpc,
+    editorRevision: payload?.editorRevision ?? null,
+    editorKey,
+    setPayload,
+    requestLatestPayload,
+  });
 
   const profileCatalog = useMemo(
     () => payload?.profiles.flatMap((fileData) => fileData.profiles) ?? [],
@@ -195,21 +47,19 @@ export function App() {
     );
   }
 
+  const editor = payload.editor;
   const current =
-    payload.editor.kind === 'profile'
-      ? payload.profiles.find(
-          (fileData) => fileData.file === payload.editor.file,
-        )?.profiles[payload.editor.index]
-      : payload.configs.find(
-          (fileData) => fileData.file === payload.editor.file,
-        )?.configurations[payload.editor.index];
+    editor.kind === 'profile'
+      ? payload.profiles.find((fileData) => fileData.file === editor.file)
+          ?.profiles[editor.index]
+      : payload.configs.find((fileData) => fileData.file === editor.file)
+          ?.configurations[editor.index];
   const currentIssue = payload.issues.find(
-    (issue) =>
-      issue.kind === payload.editor.kind && issue.file === payload.editor.file,
+    (issue) => issue.kind === editor.kind && issue.file === editor.file,
   );
   const currentDiagnostics =
     currentIssue === undefined
-      ? getEditorDiagnostics(payload.generateReadiness, payload.editor)
+      ? getEditorDiagnostics(payload.generateReadiness, editor)
       : [];
   if (current === undefined && currentIssue === undefined) {
     return (
@@ -223,16 +73,26 @@ export function App() {
     );
   }
 
-  const sourceFile = payload.editor.file;
-  const editorEyebrow =
-    payload.editor.kind === 'profile' ? 'Profile' : 'Config';
+  const sourceFile = editor.file;
+  const editorEyebrow = editor.kind === 'profile' ? 'Profile' : 'Config';
   const editorHeading = current === undefined ? sourceFile : current.name;
+
+  const handleChange = ({
+    data: nextData,
+    patches,
+  }: EntryChange<ProfileData | ConfigData>) => {
+    setPayload(updatePayload(payload, editor, nextData));
+    enqueueUpdate(editor.kind, editor.file, editor.index, patches);
+  };
+  const handleRename = async (name: string) => {
+    await renameEntry(editor.kind, editor.file, editor.index, name);
+  };
   const openFileJson = () => {
     rpc.post({
       type: 'open-file-json',
       payload: {
-        kind: payload.editor.kind,
-        file: payload.editor.file,
+        kind: editor.kind,
+        file: editor.file,
       },
     });
   };
@@ -250,120 +110,41 @@ export function App() {
           </div>
         </header>
         <GenerateStatus readiness={payload.generateReadiness} />
-        {payload.editor.kind === 'profile' ? (
+        {editor.kind === 'profile' ? (
           <ProfileEditor
             data={
               (current as ProfileData | undefined) ??
-              createPlaceholderProfile(payload.editor.file)
+              createPlaceholderProfile(editor.file)
             }
-            sourceFile={payload.editor.file}
+            sourceFile={editor.file}
             autoSaveDelay={payload.autoSaveDelay}
             diagnostics={currentDiagnostics}
-            {...(currentIssue === undefined
-              ? {}
-              : {
-                  readOnlyIssue: currentIssue,
-                })}
-            onChange={({
-              data: nextData,
-              patches,
-            }: EntryChange<ProfileData>) => {
-              setPayload(updatePayload(payload, payload.editor, nextData));
-              enqueueUpdate(
-                'profile',
-                payload.editor.file,
-                payload.editor.index,
-                patches,
-              );
-            }}
-            onRename={async (name) => {
-              await renameEntry(
-                'profile',
-                payload.editor.file,
-                payload.editor.index,
-                name,
-              );
-            }}
+            readOnlyIssue={currentIssue}
+            onChange={handleChange}
+            onRename={handleRename}
             onOpenJson={openFileJson}
           />
         ) : (
           <ConfigEditor
             data={
               (current as ConfigData | undefined) ??
-              createPlaceholderConfig(payload.editor.file)
+              createPlaceholderConfig(editor.file)
             }
-            sourceFile={payload.editor.file}
+            sourceFile={editor.file}
             profiles={profileCatalog}
             autoSaveDelay={payload.autoSaveDelay}
             diagnostics={currentDiagnostics}
-            {...(currentIssue === undefined
-              ? {}
-              : {
-                  readOnlyIssue: currentIssue,
-                })}
+            readOnlyIssue={currentIssue}
             onBrowseFile={async () => {
               const result = await rpc.sendRequest({ type: 'browse-file' });
               return result.path;
             }}
-            onChange={({
-              data: nextData,
-              patches,
-            }: EntryChange<ConfigData>) => {
-              setPayload(updatePayload(payload, payload.editor, nextData));
-              enqueueUpdate(
-                'config',
-                payload.editor.file,
-                payload.editor.index,
-                patches,
-              );
-            }}
-            onRename={async (name) => {
-              await renameEntry(
-                'config',
-                payload.editor.file,
-                payload.editor.index,
-                name,
-              );
-            }}
+            onChange={handleChange}
+            onRename={handleRename}
             onOpenJson={openFileJson}
           />
         )}
       </section>
     </main>
-  );
-}
-
-function GenerateStatus({
-  readiness,
-}: {
-  readiness: InitialDataPayload['generateReadiness'];
-}) {
-  const issueCount = readiness.diagnostics.length;
-  const isReady = issueCount === 0;
-
-  return (
-    <section
-      className={
-        isReady
-          ? 'composer-generate-status'
-          : 'composer-generate-status composer-generate-status-warning'
-      }
-      aria-live="polite"
-    >
-      <div>
-        <p className="composer-generate-status-label">Generate Status</p>
-        <p className="composer-generate-status-message">
-          {isReady
-            ? 'Ready to generate launch.json.'
-            : `${issueCount} issue${issueCount === 1 ? '' : 's'} block Generate.`}
-        </p>
-      </div>
-      {issueCount > 0 ? (
-        <p className="composer-generate-status-detail">
-          Fix the highlighted fields, entry issues, or JSON status in the editor
-          below.
-        </p>
-      ) : null}
-    </section>
   );
 }

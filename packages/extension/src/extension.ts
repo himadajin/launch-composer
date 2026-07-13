@@ -1,48 +1,35 @@
-import * as path from 'node:path';
-
 import * as vscode from 'vscode';
 
-import { COMMANDS, CONTRIBUTED_COMMAND_IDS } from './commands.js';
+import { CONTRIBUTED_COMMAND_IDS } from './commands.js';
+import {
+  createConfigCheckboxHandler,
+  createGenerateHandler,
+  registerCommand,
+  registerWorkspaceCommands,
+} from './commands/handlers.js';
 import {
   WorkspaceStore,
-  type ComposerDataIssue,
   type WorkspaceDataSnapshot,
-  type WorkspaceDataWithoutReadiness,
 } from './io/workspaceStore.js';
 import type { EditorTarget } from './messages.js';
+import {
+  showError,
+  showWorkspaceRequiredError,
+} from './notifications/errors.js';
+import { IssueReporter } from './notifications/issueReporter.js';
+import {
+  registerDataWatcher,
+  WatcherEchoFilter,
+} from './sync/watcherEchoFilter.js';
+import {
+  WorkspaceSyncController,
+  type SnapshotKind,
+} from './sync/workspaceSyncController.js';
 import {
   LaunchComposerTreeProvider,
   type TreeNode,
 } from './treeview/provider.js';
 import { EditorPanelController } from './webview/editorPanel.js';
-
-type ProfileSelectionItem =
-  { label: string; value: string; description?: string } | vscode.QuickPickItem;
-type SnapshotKind = 'profile' | 'config' | 'both';
-type DataFileKind = 'profile' | 'config';
-
-const DATA_FILE_COMMANDS = {
-  profile: {
-    fileNamePlaceHolder: 'Profile file name',
-    addFile: COMMANDS.addProfileFile,
-    openJson: COMMANDS.openProfileFileJson,
-    copyPath: COMMANDS.copyProfileFilePath,
-    copyRelativePath: COMMANDS.copyProfileFileRelativePath,
-    renameFile: COMMANDS.renameProfileFile,
-    deleteFile: COMMANDS.deleteProfileFile,
-    addEntry: COMMANDS.addProfileEntry,
-  },
-  config: {
-    fileNamePlaceHolder: 'Config file name',
-    addFile: COMMANDS.addConfigFile,
-    openJson: COMMANDS.openConfigFileJson,
-    copyPath: COMMANDS.copyConfigFilePath,
-    copyRelativePath: COMMANDS.copyConfigFileRelativePath,
-    renameFile: COMMANDS.renameConfigFile,
-    deleteFile: COMMANDS.deleteConfigFile,
-    addEntry: COMMANDS.addConfigEntry,
-  },
-} as const;
 
 export function activate(context: vscode.ExtensionContext): void {
   const workspaceRoot = getWorkspaceRoot();
@@ -75,42 +62,8 @@ export function activate(context: vscode.ExtensionContext): void {
     },
   );
 
-  const activeIssues = new Map<string, string>();
-  const pendingWatcherEvents = new Map<string, number>();
-  const snapshotCache: {
-    profiles?: WorkspaceDataSnapshot['profiles'];
-    configs?: WorkspaceDataSnapshot['configs'];
-    profileIssues?: ComposerDataIssue[];
-    configIssues?: ComposerDataIssue[];
-  } = {};
-  let syncQueue = Promise.resolve();
-
-  const queueWatcherEvent = (
-    kind: 'profile' | 'config',
-    file: string,
-  ): void => {
-    const key = `${kind}:${file}`;
-    pendingWatcherEvents.set(key, (pendingWatcherEvents.get(key) ?? 0) + 1);
-  };
-
-  const shouldIgnoreWatcherEvent = (
-    kind: 'profile' | 'config',
-    uri: vscode.Uri,
-  ): boolean => {
-    const key = `${kind}:${path.basename(uri.fsPath)}`;
-    const remaining = pendingWatcherEvents.get(key);
-    if (remaining === undefined) {
-      return false;
-    }
-
-    if (remaining <= 1) {
-      pendingWatcherEvents.delete(key);
-    } else {
-      pendingWatcherEvents.set(key, remaining - 1);
-    }
-
-    return true;
-  };
+  const issueReporter = new IssueReporter();
+  const echoFilter = new WatcherEchoFilter();
 
   const applySnapshot = (
     snapshot: WorkspaceDataSnapshot,
@@ -124,160 +77,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
-  const reportIssues = (issues: ComposerDataIssue[]): void => {
-    const nextIssues = new Map(
-      issues.map((issue) => [getIssueKey(issue), getIssueFingerprint(issue)]),
-    );
-
-    for (const issue of issues) {
-      const key = getIssueKey(issue);
-      const fingerprint = getIssueFingerprint(issue);
-      if (activeIssues.get(key) === fingerprint) {
-        continue;
-      }
-
-      activeIssues.set(key, fingerprint);
-      void vscode.window.showWarningMessage(issue.message);
-    }
-
-    for (const key of [...activeIssues.keys()]) {
-      if (!nextIssues.has(key)) {
-        activeIssues.delete(key);
-      }
-    }
-  };
-
-  const cacheSnapshot = (snapshot: WorkspaceDataSnapshot): void => {
-    snapshotCache.profiles = snapshot.profiles;
-    snapshotCache.configs = snapshot.configs;
-    snapshotCache.profileIssues = snapshot.issues.filter(
-      (issue) => issue.kind === 'profile',
-    );
-    snapshotCache.configIssues = snapshot.issues.filter(
-      (issue) => issue.kind === 'config',
-    );
-  };
-
-  const getCachedSnapshot = (): WorkspaceDataWithoutReadiness | undefined => {
-    if (
-      snapshotCache.profiles === undefined ||
-      snapshotCache.configs === undefined ||
-      snapshotCache.profileIssues === undefined ||
-      snapshotCache.configIssues === undefined
-    ) {
-      return undefined;
-    }
-
-    return {
-      profiles: snapshotCache.profiles,
-      configs: snapshotCache.configs,
-      issues: [...snapshotCache.profileIssues, ...snapshotCache.configIssues],
-    };
-  };
-
-  const readSnapshotForKind = async (
-    kind: SnapshotKind,
-  ): Promise<WorkspaceDataSnapshot> => {
-    const cachedSnapshot = getCachedSnapshot();
-    if (kind === 'both' || cachedSnapshot === undefined) {
-      const snapshot = await store.readAll();
-      cacheSnapshot(snapshot);
-      return snapshot;
-    }
-
-    if (kind === 'profile') {
-      const profileData = await store.readProfilesWithIssues();
-      snapshotCache.profiles = profileData.profiles;
-      snapshotCache.profileIssues = profileData.issues;
-    } else {
-      const configData = await store.readConfigsWithIssues();
-      snapshotCache.configs = configData.configs;
-      snapshotCache.configIssues = configData.issues;
-    }
-
-    return store.withGenerateReadiness(getCachedSnapshot() ?? cachedSnapshot);
-  };
-
-  const syncUiWithWorkspace = async (options?: {
-    notifyIssues?: boolean;
-    kind?: SnapshotKind;
-    syncEditor?: boolean;
-  }): Promise<void> => {
-    const nextSync = syncQueue.then(async () => {
-      const kind = options?.kind ?? 'both';
-      const snapshot = await readSnapshotForKind(kind);
-      if (options?.notifyIssues !== false) {
-        reportIssues(snapshot.issues);
-      }
-      applySnapshot(snapshot, kind);
-      if (options?.syncEditor !== false) {
-        await editorPanel.syncWithWorkspaceData(snapshot, { kind });
-      }
-    });
-
-    syncQueue = nextSync.catch(() => undefined);
-    await nextSync;
-  };
-
-  const refreshViews = (options?: {
-    kind?: SnapshotKind;
-    expectedWatchers?: ReadonlyArray<{
-      kind: 'profile' | 'config';
-      file: string;
-    }>;
-    syncEditor?: boolean;
-  }): void => {
-    options?.expectedWatchers?.forEach(({ kind, file }) =>
-      queueWatcherEvent(kind, file),
-    );
-    const syncOptions: {
-      notifyIssues: boolean;
-      kind?: SnapshotKind;
-      syncEditor?: boolean;
-    } = {
-      notifyIssues: false,
-    };
-    if (options?.kind !== undefined) {
-      syncOptions.kind = options.kind;
-    }
-    if (options?.syncEditor !== undefined) {
-      syncOptions.syncEditor = options.syncEditor;
-    }
-
-    void syncUiWithWorkspace(syncOptions).catch(showError);
-  };
-
-  const handleConfigCheckboxChange = async (
-    event: vscode.TreeCheckboxChangeEvent<TreeNode>,
-  ): Promise<void> => {
-    try {
-      const changedFiles = new Set<string>();
-
-      for (const [node, checkboxState] of event.items) {
-        const included = checkboxState === vscode.TreeItemCheckboxState.Checked;
-
-        if (node.type !== 'entry' || node.target.kind !== 'config') {
-          continue;
-        }
-
-        if (node.included !== included) {
-          await store.setConfigExcluded(
-            node.target.file,
-            node.target.index,
-            !included,
-          );
-          changedFiles.add(node.target.file);
-        }
-      }
-
-      if (changedFiles.size > 0) {
-        changedFiles.forEach((file) => queueWatcherEvent('config', file));
-        await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-      }
-    } catch (error) {
-      showError(error);
-    }
-  };
+  const syncController = new WorkspaceSyncController({
+    store,
+    echoFilter,
+    applySnapshot,
+    reportIssues: (issues) => issueReporter.report(issues),
+    onError: showError,
+  });
+  const sync = (
+    options?: Parameters<WorkspaceSyncController['sync']>[0],
+  ): Promise<void> => syncController.sync(options);
 
   const revealTarget = async (target: EditorTarget): Promise<void> => {
     await Promise.all([
@@ -286,231 +95,42 @@ export function activate(context: vscode.ExtensionContext): void {
     ]);
   };
 
-  const handleGenerate = async (): Promise<{ success: boolean }> => {
-    const generated = await store.generateLaunchJson();
-    if (!generated.success) {
-      await syncUiWithWorkspace({ notifyIssues: false, kind: 'both' });
-      showGenerateBlockedWarning(generated.issueCount);
-      return { success: false };
-    }
-
-    if (!(await confirmOverwrite(store))) {
-      return { success: false };
-    }
-
-    await store.writeLaunchJson(generated);
-    void vscode.window.showInformationMessage('launch.json was generated.');
-    return { success: true };
-  };
-
-  const handleInitialize = async (): Promise<void> => {
-    const result = await store.ensureInitialized();
-    await syncUiWithWorkspace();
-    const fileSuffix =
-      result.ensuredFiles.length === 0
-        ? ''
-        : ` Default files are ready (${result.ensuredFiles.join(', ')}).`;
-    void vscode.window.showInformationMessage(
-      `Launch Composer storage is ready (${result.ensuredDirectories.join(', ')}).${fileSuffix}`,
-    );
-  };
-
-  const handleAddProfile = async (): Promise<void> => {
-    const file = await selectOrCreateFile(store, 'profile');
-    if (file === undefined) {
-      return;
-    }
-
-    await addProfileEntry(store, file, editorPanel, syncUiWithWorkspace);
-  };
+  const handleGenerate = createGenerateHandler(store, sync);
 
   const editorPanel = new EditorPanelController({
     context,
     store,
-    onDidMutate: refreshViews,
+    onDidMutate: (mutation) => syncController.refresh(mutation),
     onDidReveal: revealTarget,
     onDidGenerate: handleGenerate,
   });
+  syncController.setEditorSync((snapshot, kind) =>
+    editorPanel.syncWithWorkspaceData(snapshot, { kind }),
+  );
 
-  const profileWatcher = vscode.workspace.createFileSystemWatcher(
+  const profileWatcher = registerDataWatcher(
     store.getRelativeProfilePattern(),
+    'profile',
+    echoFilter,
+    sync,
+    showError,
   );
-  profileWatcher.onDidCreate((uri) => {
-    if (shouldIgnoreWatcherEvent('profile', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: false, kind: 'profile' }).catch(
-      showError,
-    );
-  });
-  profileWatcher.onDidChange((uri) => {
-    if (shouldIgnoreWatcherEvent('profile', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: true, kind: 'profile' }).catch(
-      showError,
-    );
-  });
-  profileWatcher.onDidDelete((uri) => {
-    if (shouldIgnoreWatcherEvent('profile', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ kind: 'profile' }).catch(showError);
-  });
-
-  const configWatcher = vscode.workspace.createFileSystemWatcher(
+  const configWatcher = registerDataWatcher(
     store.getRelativeConfigPattern(),
+    'config',
+    echoFilter,
+    sync,
+    showError,
   );
-  configWatcher.onDidCreate((uri) => {
-    if (shouldIgnoreWatcherEvent('config', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: false, kind: 'config' }).catch(
-      showError,
-    );
-  });
-  configWatcher.onDidChange((uri) => {
-    if (shouldIgnoreWatcherEvent('config', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ notifyIssues: true, kind: 'config' }).catch(
-      showError,
-    );
-  });
-  configWatcher.onDidDelete((uri) => {
-    if (shouldIgnoreWatcherEvent('config', uri)) {
-      return;
-    }
-    void syncUiWithWorkspace({ kind: 'config' }).catch(showError);
-  });
 
+  const handleConfigCheckboxChange = createConfigCheckboxHandler({
+    store,
+    echoFilter,
+    sync,
+  });
   const checkboxSubscription = configView.onDidChangeCheckboxState((event) =>
     handleConfigCheckboxChange(event),
   );
-
-  const syncChangedConfigFile = async (file: string): Promise<void> => {
-    queueWatcherEvent('config', file);
-    await syncUiWithWorkspace({ notifyIssues: false, kind: 'config' });
-  };
-
-  const addDataEntry = async (
-    kind: DataFileKind,
-    file: string,
-  ): Promise<void> => {
-    if (kind === 'profile') {
-      await addProfileEntry(store, file, editorPanel, syncUiWithWorkspace);
-      return;
-    }
-
-    const profileName = await promptForProfileSelection(store);
-    if (profileName === undefined) {
-      return;
-    }
-
-    const name = await promptForNonEmptyInput(
-      'Config name',
-      'A value is required.',
-    );
-    if (name === undefined) {
-      return;
-    }
-
-    const target = await store.addConfigEntry(file, name, profileName);
-    await syncUiWithWorkspace();
-    await editorPanel.open(target);
-  };
-
-  const registerDataFileCommands = (
-    kind: DataFileKind,
-  ): vscode.Disposable[] => {
-    const commands = DATA_FILE_COMMANDS[kind];
-
-    return [
-      registerSafeCommand(commands.addFile, async () => {
-        const file = await promptForNonEmptyInput(
-          commands.fileNamePlaceHolder,
-          'A file name is required.',
-        );
-        if (file === undefined) {
-          return;
-        }
-
-        const created = await store.createDataFile(kind, file);
-        await syncUiWithWorkspace();
-        void vscode.window.showInformationMessage(`Created ${created}.`);
-      }),
-      registerSafeCommand(commands.openJson, async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, kind);
-        if (fileNode === undefined) {
-          return;
-        }
-
-        await store.openDataFileAsJson(kind, fileNode.file);
-      }),
-      registerSafeCommand(commands.copyPath, async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, kind);
-        if (fileNode === undefined) {
-          return;
-        }
-
-        await vscode.env.clipboard.writeText(
-          store.getDataFilePath(kind, fileNode.file),
-        );
-      }),
-      registerSafeCommand(
-        commands.copyRelativePath,
-        async (node?: TreeNode) => {
-          const fileNode = getFileNode(node, kind);
-          if (fileNode === undefined) {
-            return;
-          }
-
-          await vscode.env.clipboard.writeText(
-            store.getDataFileRelativePath(kind, fileNode.file),
-          );
-        },
-      ),
-      registerSafeCommand(commands.renameFile, async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, kind);
-        if (fileNode === undefined) {
-          return;
-        }
-
-        const nextFile = await promptForNonEmptyInput(
-          commands.fileNamePlaceHolder,
-          'A file name is required.',
-          fileNode.file,
-        );
-        if (nextFile === undefined) {
-          return;
-        }
-
-        await store.renameDataFile(kind, fileNode.file, nextFile);
-        await syncUiWithWorkspace();
-      }),
-      registerSafeCommand(commands.deleteFile, async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, kind);
-        if (fileNode === undefined) {
-          return;
-        }
-
-        if (!(await confirmDelete(`Delete ${fileNode.file}?`))) {
-          return;
-        }
-
-        await store.deleteDataFile(kind, fileNode.file);
-        await syncUiWithWorkspace();
-      }),
-      registerSafeCommand(commands.addEntry, async (node?: TreeNode) => {
-        const fileNode = getFileNode(node, kind);
-        if (fileNode === undefined) {
-          return;
-        }
-
-        await addDataEntry(kind, fileNode.file);
-      }),
-    ];
-  };
 
   context.subscriptions.push(
     profileView,
@@ -518,365 +138,19 @@ export function activate(context: vscode.ExtensionContext): void {
     profileWatcher,
     configWatcher,
     checkboxSubscription,
-    registerSafeCommand(COMMANDS.generate, handleGenerate),
-    registerSafeCommand(COMMANDS.init, handleInitialize),
-    registerSafeCommand(COMMANDS.addProfile, handleAddProfile),
-    ...registerDataFileCommands('profile'),
-    ...registerDataFileCommands('config'),
-    registerSafeCommand(COMMANDS.includeAllConfigs, (node?: TreeNode) =>
-      setConfigFileIncluded(node, true, store, syncChangedConfigFile),
-    ),
-    registerSafeCommand(COMMANDS.excludeAllConfigs, (node?: TreeNode) =>
-      setConfigFileIncluded(node, false, store, syncChangedConfigFile),
-    ),
-    registerSafeCommand(COMMANDS.editItem, async (node?: TreeNode) => {
-      const entryNode = getEntryNode(node);
-      if (entryNode === undefined) {
-        return;
-      }
-
-      await editorPanel.open(entryNode.target);
-    }),
-    registerSafeCommand(COMMANDS.openActiveEditorJson, () =>
-      editorPanel.openCurrentAsJson(),
-    ),
-    registerSafeCommand(COMMANDS.openItemJson, async (node?: TreeNode) => {
-      const entryNode = getEntryNode(node);
-      if (entryNode === undefined) {
-        return;
-      }
-
-      await store.openEntryAsJson(entryNode.target);
-    }),
-    registerSafeCommand(COMMANDS.copyItemFilePath, async (node?: TreeNode) => {
-      const entryNode = getEntryNode(node);
-      if (entryNode === undefined) {
-        return;
-      }
-
-      await vscode.env.clipboard.writeText(
-        store.getEntryFilePath(entryNode.target),
-      );
-    }),
-    registerSafeCommand(
-      COMMANDS.copyItemFileRelativePath,
-      async (node?: TreeNode) => {
-        const entryNode = getEntryNode(node);
-        if (entryNode === undefined) {
-          return;
-        }
-
-        await vscode.env.clipboard.writeText(
-          store.getEntryFileRelativePath(entryNode.target),
-        );
-      },
-    ),
-    registerSafeCommand(COMMANDS.renameItem, async (node?: TreeNode) => {
-      const entryNode = getEntryNode(node);
-      if (entryNode === undefined) {
-        return;
-      }
-
-      const nextName = await promptForNonEmptyInput(
-        entryNode.target.kind === 'profile' ? 'Profile name' : 'Config name',
-        'A value is required.',
-        entryNode.label,
-      );
-      if (nextName === undefined) {
-        return;
-      }
-
-      await store.renameEntry(entryNode.target, nextName);
-      await syncUiWithWorkspace();
-    }),
-    registerSafeCommand(COMMANDS.deleteItem, async (node?: TreeNode) => {
-      const entryNode = getEntryNode(node);
-      if (entryNode === undefined) {
-        return;
-      }
-
-      if (!(await confirmDelete(`Delete ${entryNode.label}?`))) {
-        return;
-      }
-
-      await store.deleteEntry(entryNode.target);
-      await syncUiWithWorkspace();
-    }),
-    registerSafeCommand(COMMANDS.includeConfig, (node?: TreeNode) =>
-      setConfigIncluded(node, true, store, syncChangedConfigFile),
-    ),
-    registerSafeCommand(COMMANDS.excludeConfig, (node?: TreeNode) =>
-      setConfigIncluded(node, false, store, syncChangedConfigFile),
-    ),
-    registerSafeCommand(COMMANDS.toggleIncluded, async (node?: TreeNode) => {
-      if (node?.type === 'entry' && node.target.kind === 'config') {
-        await store.toggleConfigExcluded(node.target.file, node.target.index);
-        await syncChangedConfigFile(node.target.file);
-      }
+    ...registerWorkspaceCommands({
+      store,
+      editorPanel,
+      echoFilter,
+      sync,
+      handleGenerate,
     }),
   );
-}
-
-function registerCommand<T extends unknown[]>(
-  command: string,
-  callback: (...args: T) => unknown,
-) {
-  return vscode.commands.registerCommand(command, (...args) =>
-    callback(...(args as T)),
-  );
-}
-
-function registerSafeCommand<T extends unknown[]>(
-  command: string,
-  callback: (...args: T) => unknown,
-) {
-  return registerCommand(command, async (...args: T) => {
-    try {
-      await callback(...args);
-    } catch (error) {
-      showError(error);
-    }
-  });
 }
 
 function getWorkspaceRoot(): vscode.WorkspaceFolder | undefined {
   const folders = vscode.workspace.workspaceFolders ?? [];
   return folders.length === 1 ? folders[0] : undefined;
-}
-
-async function addProfileEntry(
-  store: WorkspaceStore,
-  file: string,
-  editorPanel: EditorPanelController,
-  refreshViews: () => Promise<void>,
-): Promise<void> {
-  const name = await promptForNonEmptyInput(
-    'Profile name',
-    'A value is required.',
-  );
-  if (name === undefined) {
-    return;
-  }
-
-  const target = await store.addProfileEntry(file, name);
-  await refreshViews();
-  await editorPanel.open(target);
-}
-
-async function selectOrCreateFile(
-  store: WorkspaceStore,
-  kind: 'profile' | 'config',
-): Promise<string | undefined> {
-  const files = await store.listFiles(kind);
-  const createLabel = '$(add) Create new file';
-
-  const selection = await vscode.window.showQuickPick(
-    [
-      ...files.map((file) => ({ label: file, value: file })),
-      { label: createLabel, value: '__create__' },
-    ],
-    {
-      placeHolder:
-        kind === 'profile' ? 'Choose a profile file' : 'Choose a config file',
-    },
-  );
-
-  if (selection === undefined) {
-    return undefined;
-  }
-
-  if (selection.value !== '__create__') {
-    return selection.value;
-  }
-
-  const fileName = await promptForNonEmptyInput(
-    kind === 'profile' ? 'Profile file name' : 'Config file name',
-    'A file name is required.',
-  );
-  if (fileName === undefined) {
-    return undefined;
-  }
-
-  return store.createDataFile(kind, fileName);
-}
-
-async function promptForProfileSelection(
-  store: WorkspaceStore,
-): Promise<string | undefined> {
-  const profileNames = await store.listProfileNames();
-  if (profileNames.length === 0) {
-    const action = 'Create Profile';
-    const selection = await vscode.window.showInformationMessage(
-      'Create a profile before adding a config.',
-      action,
-    );
-
-    if (selection === action) {
-      await vscode.commands.executeCommand(COMMANDS.addProfile);
-    }
-
-    return undefined;
-  }
-
-  const items: ProfileSelectionItem[] = profileNames.map((name) => ({
-    label: name,
-    value: name,
-  }));
-
-  const selection = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Select a profile',
-    prompt: 'Choose a profile to use for the new config.',
-  });
-
-  if (selection === undefined) {
-    return undefined;
-  }
-
-  return 'value' in selection ? selection.value : undefined;
-}
-
-async function promptForNonEmptyInput(
-  placeHolder: string,
-  requiredMessage: string,
-  value?: string,
-): Promise<string | undefined> {
-  const options: vscode.InputBoxOptions = {
-    placeHolder,
-    validateInput(value) {
-      return value.trim() === '' ? requiredMessage : undefined;
-    },
-  };
-  if (value !== undefined) {
-    options.value = value;
-  }
-
-  return vscode.window.showInputBox(options);
-}
-
-async function confirmDelete(message: string): Promise<boolean> {
-  const result = await vscode.window.showWarningMessage(
-    message,
-    { modal: true },
-    'Delete',
-  );
-  return result === 'Delete';
-}
-
-async function confirmOverwrite(store: WorkspaceStore): Promise<boolean> {
-  const configuration = vscode.workspace.getConfiguration('launch-composer');
-  const shouldConfirm = configuration.get<boolean>('confirmOverwrite', true);
-  if (!shouldConfirm) {
-    return true;
-  }
-
-  if (!(await store.launchJsonExists())) {
-    return true;
-  }
-
-  const result = await vscode.window.showWarningMessage(
-    'launch.json will be overwritten. Continue?',
-    { modal: true },
-    'Yes',
-    "Yes, Don't Ask Again",
-  );
-
-  if (result === "Yes, Don't Ask Again") {
-    await configuration.update(
-      'confirmOverwrite',
-      false,
-      vscode.ConfigurationTarget.Workspace,
-    );
-    return true;
-  }
-
-  return result === 'Yes';
-}
-
-function showGenerateBlockedWarning(issueCount: number): void {
-  void vscode.window.showWarningMessage(
-    `Generate is blocked by ${issueCount} issue${
-      issueCount === 1 ? '' : 's'
-    }. Open Launch Composer to review highlighted fields and JSON status.`,
-  );
-}
-
-function showError(error: unknown): void {
-  const message =
-    error instanceof Error ? error.message : 'An unknown error occurred.';
-  void vscode.window.showErrorMessage(message);
-}
-
-function showWorkspaceRequiredError(): void {
-  void vscode.window.showErrorMessage(
-    'Launch Composer requires exactly one workspace folder.',
-  );
-}
-
-function getIssueKey(issue: ComposerDataIssue): string {
-  return `${issue.kind}:${issue.file}`;
-}
-
-function getIssueFingerprint(issue: ComposerDataIssue): string {
-  return `${issue.code}:${issue.message}`;
-}
-
-function getFileNode(
-  node: TreeNode | undefined,
-  kind: 'profile' | 'config',
-): Extract<TreeNode, { type: 'file'; kind: 'profile' | 'config' }> | undefined {
-  if (node === undefined || node.type !== 'file' || node.kind !== kind) {
-    return undefined;
-  }
-
-  return node;
-}
-
-function getEntryNode(
-  node: TreeNode | undefined,
-): Extract<TreeNode, { type: 'entry' }> | undefined {
-  if (node === undefined || node.type !== 'entry') {
-    return undefined;
-  }
-
-  return node;
-}
-
-async function setConfigIncluded(
-  node: TreeNode | undefined,
-  included: boolean,
-  store: WorkspaceStore,
-  onDidChange: (file: string) => Promise<void>,
-): Promise<void> {
-  const entryNode = getEntryNode(node);
-  if (entryNode === undefined || entryNode.target.kind !== 'config') {
-    return;
-  }
-
-  if (entryNode.included === included) {
-    return;
-  }
-
-  await store.setConfigExcluded(
-    entryNode.target.file,
-    entryNode.target.index,
-    !included,
-  );
-  await onDidChange(entryNode.target.file);
-}
-
-async function setConfigFileIncluded(
-  node: TreeNode | undefined,
-  included: boolean,
-  store: WorkspaceStore,
-  onDidChange: (file: string) => Promise<void>,
-): Promise<void> {
-  const fileNode = getFileNode(node, 'config');
-  if (fileNode === undefined || fileNode.issue !== undefined) {
-    return;
-  }
-
-  await store.setConfigFileExcluded(fileNode.file, !included);
-  await onDidChange(fileNode.file);
 }
 
 export function deactivate(): void {}

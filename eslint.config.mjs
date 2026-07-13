@@ -4,14 +4,18 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
+  // Global ignores must live in an object with no other keys; adding any
+  // other key scopes the ignores to that config object only.
   {
     ignores: [
       'local/**',
       'node_modules/**',
       'packages/*/dist/**',
-      'packages/extension/.test-dist/**',
+      'packages/*/.test-dist/**',
       'coverage/**',
     ],
+  },
+  {
     linterOptions: {
       reportUnusedDisableDirectives: 'error',
     },

@@ -15,19 +15,13 @@ import type {
   WorkspaceDataSnapshot,
   WorkspaceStore,
 } from '../io/workspaceStore.js';
+import type { RefreshRequest } from '../sync/workspaceSyncController.js';
 import { rewriteWebviewHtml } from './webviewHtml.js';
 
 interface EditorPanelOptions {
   context: vscode.ExtensionContext;
   store: WorkspaceStore;
-  onDidMutate: (mutation: {
-    kind: 'profile' | 'config' | 'both';
-    expectedWatchers?: ReadonlyArray<{
-      kind: 'profile' | 'config';
-      file: string;
-    }>;
-    syncEditor?: boolean;
-  }) => void;
+  onDidMutate: (mutation: RefreshRequest) => void;
   onDidReveal: (target: EditorTarget) => Promise<void>;
   onDidGenerate: () => Promise<{ success: boolean }>;
 }
@@ -213,34 +207,80 @@ export class EditorPanelController {
     }
   }
 
-  private async deleteEntry(
+  /**
+   * Shared mutation skeleton: run the mutation, post its result, then
+   * run any post-response step. On failure a failure response is
+   * posted; `rethrowOnFailure` preserves each handler's historical
+   * error policy (rename/patch also surface a toast via the outer
+   * message handler, delete does not — unifying this is tracked as a
+   * behavior change, plan item E-1).
+   */
+  private async runMutation<
+    T extends 'delete-result' | 'rename-result' | 'update-result',
+  >(
     requestId: string,
-    target: EditorTarget,
+    resultType: T,
+    policy: { fallbackErrorMessage: string; rethrowOnFailure: boolean },
+    mutation: () => Promise<{
+      payload: Extract<HostMessage, { type: T }>['payload'];
+      afterRespond?: () => Promise<void>;
+    }>,
   ): Promise<void> {
     try {
-      await this.options.store.deleteEntry(target);
-      this.options.onDidMutate({
-        kind: target.kind,
-        expectedWatchers: [{ kind: target.kind, file: target.file }],
-        syncEditor: false,
-      });
-      await this.syncWithWorkspace();
+      const outcome = await mutation();
       await this.respond(requestId, {
-        type: 'delete-result',
+        type: resultType,
         requestId,
-        payload: { success: true },
-      });
+        payload: outcome.payload,
+      } as HostMessage);
+      await outcome.afterRespond?.();
     } catch (error) {
       await this.respond(requestId, {
-        type: 'delete-result',
+        type: resultType,
         requestId,
         payload: {
           success: false,
           error:
-            error instanceof Error ? error.message : 'Failed to delete entry.',
+            error instanceof Error
+              ? error.message
+              : policy.fallbackErrorMessage,
         },
-      });
+      } as HostMessage);
+      if (policy.rethrowOnFailure) {
+        throw error;
+      }
     }
+  }
+
+  private async refreshAfterMutation(
+    kind: 'profile' | 'config' | 'both',
+    target: EditorTarget,
+  ): Promise<void> {
+    this.options.onDidMutate({
+      kind,
+      expectedWatchers: [{ kind: target.kind, file: target.file }],
+      syncEditor: false,
+    });
+    await this.syncWithWorkspace();
+  }
+
+  private async deleteEntry(
+    requestId: string,
+    target: EditorTarget,
+  ): Promise<void> {
+    await this.runMutation(
+      requestId,
+      'delete-result',
+      {
+        fallbackErrorMessage: 'Failed to delete entry.',
+        rethrowOnFailure: false,
+      },
+      async () => {
+        await this.options.store.deleteEntry(target);
+        await this.refreshAfterMutation(target.kind, target);
+        return { payload: { success: true } };
+      },
+    );
   }
 
   private async renameEntry(
@@ -248,31 +288,22 @@ export class EditorPanelController {
     target: EditorTarget,
     name: string,
   ): Promise<void> {
-    try {
-      await this.options.store.renameEntry(target, name);
-      this.options.onDidMutate({
-        kind: target.kind === 'profile' ? 'both' : 'config',
-        expectedWatchers: [{ kind: target.kind, file: target.file }],
-        syncEditor: false,
-      });
-      await this.syncWithWorkspace();
-      await this.respond(requestId, {
-        type: 'rename-result',
-        requestId,
-        payload: { success: true },
-      });
-    } catch (error) {
-      await this.respond(requestId, {
-        type: 'rename-result',
-        requestId,
-        payload: {
-          success: false,
-          error:
-            error instanceof Error ? error.message : 'Failed to rename entry.',
-        },
-      });
-      throw error;
-    }
+    await this.runMutation(
+      requestId,
+      'rename-result',
+      {
+        fallbackErrorMessage: 'Failed to rename entry.',
+        rethrowOnFailure: true,
+      },
+      async () => {
+        await this.options.store.renameEntry(target, name);
+        await this.refreshAfterMutation(
+          target.kind === 'profile' ? 'both' : 'config',
+          target,
+        );
+        return { payload: { success: true } };
+      },
+    );
   }
 
   private async applyEntryPatch(
@@ -285,63 +316,55 @@ export class EditorPanelController {
       patches: EntryPatchOperation[];
     },
   ): Promise<void> {
-    try {
-      const result =
-        kind === 'profile'
-          ? await this.options.store.patchProfileEntry(
-              payload.file,
-              payload.index,
-              payload.baseRevision,
-              payload.patches,
-            )
-          : await this.options.store.patchConfigEntry(
-              payload.file,
-              payload.index,
-              payload.baseRevision,
-              payload.patches,
-            );
+    await this.runMutation(
+      requestId,
+      'update-result',
+      {
+        fallbackErrorMessage: 'Failed to update entry.',
+        rethrowOnFailure: true,
+      },
+      async () => {
+        const result =
+          kind === 'profile'
+            ? await this.options.store.patchProfileEntry(
+                payload.file,
+                payload.index,
+                payload.baseRevision,
+                payload.patches,
+              )
+            : await this.options.store.patchConfigEntry(
+                payload.file,
+                payload.index,
+                payload.baseRevision,
+                payload.patches,
+              );
 
-      if (result.status === 'conflict') {
-        await this.respond(requestId, {
-          type: 'update-result',
-          requestId,
-          payload: {
-            success: false,
-            conflict: true,
-            revision: result.revision,
-          },
+        if (result.status === 'conflict') {
+          return {
+            payload: {
+              success: false,
+              conflict: true,
+              revision: result.revision,
+            },
+            afterRespond: () => this.syncWithWorkspace(),
+          };
+        }
+
+        this.options.onDidMutate({
+          kind,
+          expectedWatchers: [{ kind, file: payload.file }],
+          syncEditor: false,
         });
-        await this.syncWithWorkspace();
-        return;
-      }
-
-      this.options.onDidMutate({
-        kind,
-        expectedWatchers: [{ kind, file: payload.file }],
-        syncEditor: false,
-      });
-      const snapshot = await this.options.store.readAll();
-      await this.respond(requestId, {
-        type: 'update-result',
-        requestId,
-        payload: {
-          success: true,
-          revision: result.revision,
-          generateReadiness: snapshot.generateReadiness,
-        },
-      });
-    } catch (error) {
-      await this.respond(requestId, {
-        type: 'update-result',
-        requestId,
-        payload: {
-          success: false,
-          error:
-            error instanceof Error ? error.message : 'Failed to update entry.',
-        },
-      });
-      throw error;
-    }
+        const snapshot = await this.options.store.readAll();
+        return {
+          payload: {
+            success: true,
+            revision: result.revision,
+            generateReadiness: snapshot.generateReadiness,
+          },
+        };
+      },
+    );
   }
 
   private async postInitialData(
@@ -370,10 +393,12 @@ export class EditorPanelController {
     });
   }
 
-  private shouldPostWorkspaceUpdate(
-    kind: 'profile' | 'config' | 'both',
-  ): boolean {
-    if (kind === 'both' || this.currentTarget === undefined) {
+  /**
+   * A profile change also affects an open config editor (configs embed
+   * profile data); a config change never affects a profile editor.
+   */
+  private targetMatchesKind(kind: 'profile' | 'config'): boolean {
+    if (this.currentTarget === undefined) {
       return false;
     }
 
@@ -383,16 +408,19 @@ export class EditorPanelController {
     );
   }
 
+  private shouldPostWorkspaceUpdate(
+    kind: 'profile' | 'config' | 'both',
+  ): boolean {
+    return kind !== 'both' && this.targetMatchesKind(kind);
+  }
+
   private shouldSyncCurrentEditor(
     kind: 'profile' | 'config' | 'both',
   ): boolean {
-    if (kind === 'both' || this.currentTarget === undefined) {
-      return true;
-    }
-
     return (
-      this.currentTarget.kind === kind ||
-      (kind === 'profile' && this.currentTarget.kind === 'config')
+      kind === 'both' ||
+      this.currentTarget === undefined ||
+      this.targetMatchesKind(kind)
     );
   }
 

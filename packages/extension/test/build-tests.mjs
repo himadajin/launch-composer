@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 import { build } from 'esbuild';
 
+import { nodeMainFields, nodeTarget } from '../../../buildConfig.mjs';
+
 const packageDir = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(packageDir, '..');
 const outDir = resolve(rootDir, '.test-dist');
@@ -25,7 +27,8 @@ await build({
   outdir: outDir,
   platform: 'node',
   sourcemap: 'inline',
-  target: 'node20',
+  target: nodeTarget,
+  mainFields: nodeMainFields,
   alias: {
     vscode: resolve(rootDir, 'test/stubs/vscode.ts'),
   },

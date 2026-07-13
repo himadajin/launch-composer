@@ -18,5 +18,3 @@ references.
   for JSON files and Host/Webview messages.
 - [Pending decisions](./internal/pending.md): internal product-design questions
   to revisit.
-- [Refactoring plan (2026-07)](./internal/plans/2026-07-refactoring.md):
-  phased refactoring plan from the July 2026 codebase investigation.
