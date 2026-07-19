@@ -1,6 +1,6 @@
 # 修正計画: TreeView reveal の修正
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 進行中。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 完了(commit `f6ded80`)。
 
 ## 問題
 
@@ -36,3 +36,10 @@
 ## 検証
 
 検証ゲートに加え、実機でエディタを開いた際にツリー項目が選択・展開されることを確認する。
+
+## 完了記録
+
+- `reveal` が対象 file node の子を構築してから entry node を解決する方式を採用し、entry → file → root の親チェーンを実装した。
+- テストスタブにも `getParent` による到達性検査を追加し、`select: true` / `expand: true` / `focus: false` を回帰テストで固定した。
+- Extension Development Host で profile エディタを開き、対応する TreeView 行が選択され、エディタ側にフォーカスが残ることを実機確認した。
+- 必須検証ゲートはすべて成功した。

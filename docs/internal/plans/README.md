@@ -30,10 +30,10 @@
 | 番号 | 計画                                                                               | 優先度 | 状態                   | 概要                                                                                                     |
 | ---- | ---------------------------------------------------------------------------------- | ------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
 | 001  | [webview エディタ state のエントリ間分離](./001-webview-editor-state-isolation.md) | 高     | 完了(commit `ff28fa8`) | エントリ切替時に編集中テキストが別エントリに書き込まれる、rename 失敗時に表示が復元されない、ほか        |
-| 002  | [core 検証の入力ガード](./002-core-validation-input-guards.md)                     | 高     | 進行中                 | 手編集 JSON の `null` エントリ等で検証が未処理例外でクラッシュする                                       |
-| 003  | [TreeView reveal の修正](./003-treeview-reveal.md)                                 | 高     | 進行中                 | エディタを開いた際のツリー項目選択(`reveal`)が常に no-op、`getParent` も未実装                           |
-| 004  | [Watcher エコーフィルタの期待リーク](./004-watcher-echo-filter-leak.md)            | 高     | 進行中                 | 書き込みが発生しなかった操作でも「次のイベントを無視する」期待が登録され、本物の外部編集が飲み込まれる   |
-| 005  | [kind 横断の generate 診断更新](./005-sync-cross-kind-diagnostics.md)              | 高     | 進行中                 | profile 側の変更で config ツリーの参照切れ警告が更新されない                                             |
+| 002  | [core 検証の入力ガード](./002-core-validation-input-guards.md)                     | 高     | 完了(commit `f6ded80`) | 手編集 JSON の `null` エントリ等で検証が未処理例外でクラッシュする                                       |
+| 003  | [TreeView reveal の修正](./003-treeview-reveal.md)                                 | 高     | 完了(commit `f6ded80`) | エディタを開いた際のツリー項目選択(`reveal`)が常に no-op、`getParent` も未実装                           |
+| 004  | [Watcher エコーフィルタの期待リーク](./004-watcher-echo-filter-leak.md)            | 高     | 完了(commit `f6ded80`) | 書き込みが発生しなかった操作でも「次のイベントを無視する」期待が登録され、本物の外部編集が飲み込まれる   |
+| 005  | [kind 横断の generate 診断更新](./005-sync-cross-kind-diagnostics.md)              | 高     | 完了(commit `f6ded80`) | profile 側の変更で config ツリーの参照切れ警告が更新されない                                             |
 | 006  | [Host/Webview のエラー応答契約](./006-host-webview-error-contract.md)              | 中     | 未着手                 | host 側エラー時に RPC 応答が返らず webview が 30 秒固まる、保存失敗の無言化と未保存 state の永続化、ほか |
 | 007  | [webview 保存キューの revision 整合](./007-webview-update-queue-revision.md)       | 中     | 未着手                 | エントリ切替・conflict 時に古い revision が使われ、不要な conflict の連鎖と表示巻き戻りが起きる          |
 | 008  | [webview の CSP 追加](./008-webview-csp.md)                                        | 中     | 未着手                 | webview HTML に Content-Security-Policy がない                                                           |

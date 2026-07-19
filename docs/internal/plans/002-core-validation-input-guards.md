@@ -1,6 +1,6 @@
 # 修正計画: core 検証の入力ガード
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 進行中。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 完了(commit `f6ded80`)。
 
 ## 問題
 
@@ -45,3 +45,10 @@ Phase 0 で決めた層にガードを実装する。`flattenProfiles` / `flatte
 ## 検証
 
 検証ゲートに加え、`profiles/x.json` に `[null]` を書いた状態で拡張が正常動作(エラー表示のうえ generate ブロック)することを実機確認する。
+
+## 完了記録
+
+- Phase 0 では core と extension の両層で防御する方針を採用した。core は公開 API として形状違反を `ValidationError` に変換し、extension は壊れたファイルを invalid file として UI に渡す。
+- P1 / P2 と、集約検証の仕様に含まれる P3 を修正した。P4〜P6 は本修正の外に残し、`docs/internal/pending.md` に移した。
+- core の `null` / 非オブジェクト / 非配列入力と extension の invalid-file/readiness 経路を回帰テストで確認した。手動の Extension Development Host 確認は未実施だが、同じ読み取り・診断経路を extension テストで検証した。
+- 必須検証ゲートはすべて成功した。
