@@ -112,6 +112,7 @@ export function App() {
         <GenerateStatus readiness={payload.generateReadiness} />
         {editor.kind === 'profile' ? (
           <ProfileEditor
+            key={editorKey}
             data={
               (current as ProfileData | undefined) ??
               createPlaceholderProfile(editor.file)
@@ -126,6 +127,7 @@ export function App() {
           />
         ) : (
           <ConfigEditor
+            key={editorKey}
             data={
               (current as ConfigData | undefined) ??
               createPlaceholderConfig(editor.file)

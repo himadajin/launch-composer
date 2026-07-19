@@ -77,25 +77,25 @@ export function ConfigEditor({
   readOnlyIssue,
 }: ConfigEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
+  const currentProfile = profiles.find(
+    (profile) => profile.name === data.profile,
+  );
+  const argsFileDisabled = currentProfile?.args !== undefined;
 
   const cwdField = useEditableField(
     stringOrEmpty(data.configuration?.cwd),
     autoSaveDelay,
     (value) => onChange(updateConfigCwd(data, value)),
-    { readOnly },
+    { disabled: readOnly },
   );
   const argsFileField = useEditableField(
     stringOrEmpty(data.argsFile),
     autoSaveDelay,
     (value) => onChange(updateConfigArgsFile(data, value)),
-    { readOnly },
+    { disabled: readOnly || argsFileDisabled },
   );
 
-  const currentProfile = profiles.find(
-    (profile) => profile.name === data.profile,
-  );
   const profileSelect = resolveConfigProfileSelectState(profiles, data.profile);
-  const argsFileDisabled = currentProfile?.args !== undefined;
   const nameHelperMessages = getFieldDiagnosticMessages(diagnostics, 'name');
   const profileHelperMessages = mergeHelperMessages(
     getFieldDiagnosticMessages(diagnostics, 'profile'),

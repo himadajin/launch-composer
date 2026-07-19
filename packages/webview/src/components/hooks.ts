@@ -36,26 +36,35 @@ export function useEditableField(
   externalValue: string,
   autoSaveDelay: number,
   commit: (value: string) => void,
-  options?: { readOnly?: boolean },
+  options?: { disabled?: boolean },
 ): { value: string; onChange: (value: string) => void } {
   const [value, setValue] = useState(externalValue);
   const changedByUserRef = useRef(false);
-  const readOnly = options?.readOnly === true;
+  const disabled = options?.disabled === true;
 
   useEffect(() => {
-    changedByUserRef.current = false;
-    setValue(externalValue);
-  }, [externalValue]);
-
-  useDebouncedCommit(value, autoSaveDelay, (nextValue) => {
-    if (readOnly || !changedByUserRef.current) {
+    if (!disabled && changedByUserRef.current) {
       return;
     }
 
+    changedByUserRef.current = false;
+    setValue(externalValue);
+  }, [disabled, externalValue]);
+
+  useDebouncedCommit(value, autoSaveDelay, (nextValue) => {
+    if (disabled || !changedByUserRef.current) {
+      return;
+    }
+
+    changedByUserRef.current = false;
     commit(nextValue);
   });
 
   const onChange = (nextValue: string) => {
+    if (disabled) {
+      return;
+    }
+
     changedByUserRef.current = true;
     setValue(nextValue);
   };

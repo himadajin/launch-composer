@@ -1,6 +1,6 @@
 # 修正計画: webview エディタ state のエントリ間分離
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 未着手。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 完了(commit `ff28fa8`)。
 
 ## 問題
 
@@ -34,6 +34,14 @@ webview のエディタコンポーネントは、表示対象エントリが切
    - フォーカス中・debounce 待ち中に外部更新が届いた場合の挙動(P3)。候補: 「フォーカス中は外部同期を保留し、blur/commit 時に競合解決する」「外部更新を優先し入力を破棄する(現挙動の明文化)」など。
    - rename 失敗時の入力欄の復元(P2)。
 3. `key` 付与(P1)が `useEntryUpdateQueue` のエントリ切替処理([計画 007](./007-webview-update-queue-revision.md))と干渉しないか確認する。
+
+### 調査結果
+
+- 2026-07-19、commit `d5cb2e7` で P1〜P4 が残っていること、および調査時点以降に関連実装が変更されていないことを確認した。
+- editor identity は `kind:file:index` とする。identity の変更時は editor component を remount し、ローカル入力と未発火の debounce を破棄する。
+- debounce 待ち中に外部更新が届いた場合はローカル入力を維持し、最新 snapshot の data と revision に対して保存する。field が disabled または read-only になった場合は、ローカル入力と pending commit を破棄して外部値へ同期する。
+- rename の成功・失敗・正規化にかかわらず最新 snapshot を再取得し、request 完了時にも入力表示を外部名へ明示的に戻す。
+- editor component の remount と保存キューの `editorKey` は同じ identity を使用するため、未発火 debounce の破棄とは干渉しない。すでに queue へ投入された update と in-flight response の扱いは計画 007 の範囲とする。
 
 ## Phase 1: 修正
 
