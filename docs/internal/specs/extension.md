@@ -75,10 +75,10 @@ issue の分類:
 - 状態: ルート形状が仕様と違う
   - code: `invalid-shape`
   - 期待する形:
-    - profile: 配列
-    - config: `configurations` 配列を持つオブジェクト
+    - profile: 非 null のオブジェクトだけを要素に持つ配列
+    - config: 非 null のオブジェクトだけを要素に持つ `configurations` 配列を持つオブジェクト
 
-config entry の `excluded` が boolean でないなど、ルート形状として読めるが意味的に不正な値は issue ではなく core validation error として扱う。
+entry 自体が `null`、配列、プリミティブの場合は file-level の `invalid-shape` issue として扱い、その file は core 入力へ渡さない。entry の `excluded` が boolean でないなど、オブジェクトとして読めるが意味的に不正な値は issue ではなく core validation error として扱う。
 
 ## Error Presentation Policy
 
@@ -299,7 +299,7 @@ watcher event の扱い:
     - Webview を更新する
     - 残っている issue を再評価する
 
-拡張機能自身が書き込んだ直後に発生する watcher event は、期待済み event として 1 回分無視する。
+拡張機能自身が実際に書き込んだ data file ごとに watcher event を 1 回だけ期待済みとして登録し、その event を無視する。空 patch、同名 rename、すでに目的状態の include/exclude など、file write が発生しなかった操作では期待を登録しない。
 
 issue notification:
 
@@ -310,7 +310,9 @@ issue notification:
 
 現在 Webview で開いている entry のファイルが invalid になった場合、panel は閉じず、invalid file の初期データを送って read-only 表示へ切り替える。対象 entry がなくなった場合は panel を閉じる。
 
-profile の更新は、open config editor にも workspace update を送る。config editor は profile selector の候補を更新する必要があるためである。profile editor が開いているときの config-only update は editor へ送らない。
+profile/config どちらの watcher event でも、workspace 全体から再計算した Generate readiness を使って両方の TreeView を更新する。片側の data 変更でも、参照切れ、名前重複、argsFile 競合など反対側に配置される diagnostic が変化しうるためである。
+
+profile の更新は、open config editor にも workspace update を送る。config editor は profile selector の候補を更新する必要があるためである。config の更新も open profile editor に workspace update を送り、workspace 全体の Generate readiness を最新化する。反対側 kind の部分 snapshot は editor data 自体を置き換えず、全体 readiness と該当 kind の workspace data だけを更新する。
 
 ## コマンド
 

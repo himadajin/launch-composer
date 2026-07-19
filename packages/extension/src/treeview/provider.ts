@@ -26,6 +26,7 @@ type FileNode = {
 
 type EntryNode = {
   type: 'entry';
+  parent: FileNode;
   target: EditorTarget;
   label: string;
   included?: boolean;
@@ -83,6 +84,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
         element.kind === 'profile'
           ? {
               type: 'entry',
+              parent: element,
               target: {
                 kind: 'profile',
                 file: element.file,
@@ -97,6 +99,7 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
             }
           : {
               type: 'entry',
+              parent: element,
               target: {
                 kind: 'config',
                 file: element.file,
@@ -114,6 +117,10 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       this.entryNodes.set(getEntryKey(node.target), node);
       return node;
     });
+  }
+
+  getParent(element: TreeNode): TreeNode | undefined {
+    return element.type === 'entry' ? element.parent : undefined;
   }
 
   getTreeItem(element: TreeNode): vscode.TreeItem {
@@ -201,7 +208,16 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       return;
     }
 
-    await this.loadRootNodes();
+    const rootNodes = await this.loadRootNodes();
+    const fileNode = rootNodes.find(
+      (node): node is FileNode =>
+        node.type === 'file' && node.file === target.file,
+    );
+    if (fileNode === undefined) {
+      return;
+    }
+
+    await this.getChildren(fileNode);
     const node = this.entryNodes.get(getEntryKey(target));
     if (node === undefined) {
       return;

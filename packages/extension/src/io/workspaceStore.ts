@@ -13,6 +13,7 @@ import { DataFileIo } from './dataFileIo.js';
 import { WorkspaceLayout } from './workspaceLayout.js';
 import {
   WorkspaceMutations,
+  type MutationResult,
   type EntryPatchResult,
 } from './workspaceMutations.js';
 import {
@@ -27,7 +28,11 @@ export type {
   WorkspaceDataSnapshot,
   WorkspaceGenerateResult,
 } from '../generate/launchJsonService.js';
-export type { EntryPatchResult } from './workspaceMutations.js';
+export type {
+  DataFileWrite,
+  EntryPatchResult,
+  MutationResult,
+} from './workspaceMutations.js';
 export type {
   ConfigWorkspaceData,
   ProfileWorkspaceData,
@@ -185,7 +190,10 @@ export class WorkspaceStore {
     );
   }
 
-  async toggleConfigExcluded(file: string, index: number): Promise<void> {
+  async toggleConfigExcluded(
+    file: string,
+    index: number,
+  ): Promise<MutationResult> {
     return this.mutations.toggleConfigExcluded(file, index);
   }
 
@@ -193,19 +201,25 @@ export class WorkspaceStore {
     file: string,
     index: number,
     excluded: boolean,
-  ): Promise<void> {
+  ): Promise<MutationResult> {
     return this.mutations.setConfigExcluded(file, index, excluded);
   }
 
-  async setConfigFileExcluded(file: string, excluded: boolean): Promise<void> {
+  async setConfigFileExcluded(
+    file: string,
+    excluded: boolean,
+  ): Promise<MutationResult> {
     return this.mutations.setConfigFileExcluded(file, excluded);
   }
 
-  async deleteEntry(target: EditorTarget): Promise<void> {
+  async deleteEntry(target: EditorTarget): Promise<MutationResult> {
     return this.mutations.deleteEntry(target);
   }
 
-  async renameEntry(target: EditorTarget, rawName: string): Promise<void> {
+  async renameEntry(
+    target: EditorTarget,
+    rawName: string,
+  ): Promise<MutationResult> {
     return this.mutations.renameEntry(target, rawName);
   }
 

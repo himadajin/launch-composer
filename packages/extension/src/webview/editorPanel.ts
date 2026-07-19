@@ -15,6 +15,7 @@ import type {
   WorkspaceDataSnapshot,
   WorkspaceStore,
 } from '../io/workspaceStore.js';
+import type { MutationResult } from '../io/workspaceMutations.js';
 import type { RefreshRequest } from '../sync/workspaceSyncController.js';
 import { rewriteWebviewHtml } from './webviewHtml.js';
 
@@ -107,19 +108,19 @@ export class EditorPanelController {
     const syncKind = options?.kind ?? 'both';
     const snapshot = data ?? (await this.options.store.readAll());
     this.panel.title = getTitle(this.currentTarget, snapshot);
-    if (!this.shouldSyncCurrentEditor(syncKind)) {
-      return;
-    }
+    const shouldCheckCurrentTarget =
+      syncKind === 'both' || syncKind === this.currentTarget.kind;
+    if (shouldCheckCurrentTarget) {
+      if (hasInvalidFile(snapshot, this.currentTarget)) {
+        await this.postInitialData('local', snapshot);
+        return;
+      }
 
-    if (hasInvalidFile(snapshot, this.currentTarget)) {
-      await this.postInitialData('local', snapshot);
-      return;
-    }
-
-    if (!(await this.options.store.hasEntry(this.currentTarget))) {
-      this.currentTarget = undefined;
-      this.panel.dispose();
-      return;
+      if (!(await this.options.store.hasEntry(this.currentTarget))) {
+        this.currentTarget = undefined;
+        this.panel.dispose();
+        return;
+      }
     }
 
     if (syncKind !== 'both' && this.shouldPostWorkspaceUpdate(syncKind)) {
@@ -254,13 +255,16 @@ export class EditorPanelController {
 
   private async refreshAfterMutation(
     kind: 'profile' | 'config' | 'both',
-    target: EditorTarget,
+    result: MutationResult,
   ): Promise<void> {
-    this.options.onDidMutate({
+    const mutation: RefreshRequest = {
       kind,
-      expectedWatchers: [{ kind: target.kind, file: target.file }],
       syncEditor: false,
-    });
+    };
+    if (result.writtenFiles.length > 0) {
+      mutation.expectedWatchers = result.writtenFiles;
+    }
+    this.options.onDidMutate(mutation);
     await this.syncWithWorkspace();
   }
 
@@ -276,8 +280,8 @@ export class EditorPanelController {
         rethrowOnFailure: false,
       },
       async () => {
-        await this.options.store.deleteEntry(target);
-        await this.refreshAfterMutation(target.kind, target);
+        const result = await this.options.store.deleteEntry(target);
+        await this.refreshAfterMutation(target.kind, result);
         return { payload: { success: true } };
       },
     );
@@ -296,10 +300,10 @@ export class EditorPanelController {
         rethrowOnFailure: true,
       },
       async () => {
-        await this.options.store.renameEntry(target, name);
+        const result = await this.options.store.renameEntry(target, name);
         await this.refreshAfterMutation(
           target.kind === 'profile' ? 'both' : 'config',
-          target,
+          result,
         );
         return { payload: { success: true } };
       },
@@ -350,11 +354,13 @@ export class EditorPanelController {
           };
         }
 
-        this.options.onDidMutate({
-          kind,
-          expectedWatchers: [{ kind, file: payload.file }],
-          syncEditor: false,
-        });
+        if (result.writtenFiles.length > 0) {
+          this.options.onDidMutate({
+            kind,
+            expectedWatchers: result.writtenFiles,
+            syncEditor: false,
+          });
+        }
         const snapshot = await this.options.store.readAll();
         return {
           payload: {
@@ -393,35 +399,12 @@ export class EditorPanelController {
     });
   }
 
-  /**
-   * A profile change also affects an open config editor (configs embed
-   * profile data); a config change never affects a profile editor.
-   */
-  private targetMatchesKind(kind: 'profile' | 'config'): boolean {
-    if (this.currentTarget === undefined) {
-      return false;
-    }
-
-    return (
-      this.currentTarget.kind === kind ||
-      (kind === 'profile' && this.currentTarget.kind === 'config')
-    );
-  }
-
   private shouldPostWorkspaceUpdate(
     kind: 'profile' | 'config' | 'both',
   ): boolean {
-    return kind !== 'both' && this.targetMatchesKind(kind);
-  }
-
-  private shouldSyncCurrentEditor(
-    kind: 'profile' | 'config' | 'both',
-  ): boolean {
-    return (
-      kind === 'both' ||
-      this.currentTarget === undefined ||
-      this.targetMatchesKind(kind)
-    );
+    // Workspace readiness is global, so either partial snapshot must reach
+    // the open editor even when its target belongs to the other kind.
+    return kind !== 'both';
   }
 
   private async postWorkspaceUpdate(

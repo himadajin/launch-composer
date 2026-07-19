@@ -343,7 +343,16 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
         name: string;
       }
     | undefined;
-  let mutateCount = 0;
+  let mutation:
+    | {
+        kind: 'profile' | 'config' | 'both';
+        expectedWatchers?: ReadonlyArray<{
+          kind: 'profile' | 'config';
+          file: string;
+        }>;
+        syncEditor?: boolean;
+      }
+    | undefined;
   const store = {
     async readAll() {
       return withReadiness({
@@ -366,6 +375,12 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
     async renameEntry(target, name) {
       profileName = name;
       renamed = { target, name };
+      return {
+        writtenFiles: [
+          { kind: 'profile' as const, file: target.file },
+          { kind: 'config' as const, file: 'config.json' },
+        ],
+      };
     },
   } as Pick<
     WorkspaceStore,
@@ -376,8 +391,8 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
     context:
       testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
     store,
-    onDidMutate() {
-      mutateCount += 1;
+    onDidMutate(nextMutation) {
+      mutation = nextMutation;
     },
     async onDidReveal() {},
     async onDidGenerate() {
@@ -414,7 +429,14 @@ test('rename-entry message calls renameEntry and posts refreshed data', async ()
     },
     name: 'cpp-renamed',
   });
-  assert.equal(mutateCount, 1);
+  assert.deepEqual(mutation, {
+    kind: 'both',
+    expectedWatchers: [
+      { kind: 'profile', file: 'profile.json' },
+      { kind: 'config', file: 'config.json' },
+    ],
+    syncEditor: false,
+  });
 
   const panel = testVscode.__testing.getLastCreatedWebviewPanel();
   assert.ok(panel);
@@ -551,6 +573,7 @@ test('update-config message refreshes only config views through onDidMutate', as
       return {
         status: 'ok' as const,
         revision: 'rev:7',
+        writtenFiles: [{ kind: 'config' as const, file: 'config.json' }],
       };
     },
   } as Pick<
@@ -615,6 +638,73 @@ test('update-config message refreshes only config views through onDidMutate', as
       generateReadiness: READY_TO_GENERATE,
     },
   });
+});
+
+test('update-config message does not register an expectation for a no-op patch', async () => {
+  let mutateCount = 0;
+  const store = {
+    async readAll() {
+      return withReadiness({
+        profiles: [],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch', profile: 'cpp' }],
+          },
+        ],
+        issues: [],
+      });
+    },
+    async getDataFileRevision() {
+      return 'rev:8';
+    },
+    async patchConfigEntry() {
+      return {
+        status: 'ok' as const,
+        revision: 'rev:8',
+        writtenFiles: [],
+      };
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'patchConfigEntry'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {
+      mutateCount += 1;
+    },
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  await (
+    controller as unknown as {
+      handleMessage(message: unknown): Promise<void>;
+    }
+  ).handleMessage({
+    type: 'update-config',
+    requestId: 'update-noop',
+    payload: {
+      file: 'config.json',
+      index: 0,
+      baseRevision: 'rev:8',
+      patches: [],
+    },
+  });
+
+  assert.equal(mutateCount, 0);
 });
 
 test('syncWithWorkspaceData refreshes the panel title when the current config name changes', async () => {
@@ -864,7 +954,8 @@ test('syncWithWorkspaceData sends profile workspace updates to an open config ed
   });
 });
 
-test('syncWithWorkspaceData skips config-only editor updates when a profile editor is open', async () => {
+test('an opposite-kind workspace update does not close an editor whose cached target is stale', async () => {
+  let hasEntryCalls = 0;
   const store = {
     async readAll() {
       return withReadiness({
@@ -889,7 +980,8 @@ test('syncWithWorkspaceData skips config-only editor updates when a profile edit
       return 'rev:skip-config';
     },
     async hasEntry() {
-      return true;
+      hasEntryCalls += 1;
+      return false;
     },
   } as Pick<
     WorkspaceStore,
@@ -936,5 +1028,22 @@ test('syncWithWorkspaceData skips config-only editor updates when a profile edit
     { kind: 'config' },
   );
 
-  assert.equal(panel.postedMessages.length, messageCount);
+  assert.equal(panel.postedMessages.length, messageCount + 1);
+  assert.equal(panel.disposed, false);
+  assert.equal(hasEntryCalls, 0);
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'workspace-update',
+    requestId: 'local',
+    payload: {
+      kind: 'config',
+      configs: [
+        {
+          file: 'config.json',
+          configurations: [{ name: 'Launch', excluded: true, profile: 'cpp' }],
+        },
+      ],
+      issues: [],
+      generateReadiness: READY_TO_GENERATE,
+    },
+  });
 });

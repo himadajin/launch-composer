@@ -44,7 +44,7 @@ JSON file data と Generate 入出力の shape は `packages/core/src/types.ts` 
   - 用途: core Generate failure と Extension Host の diagnostic 生成に使う
   - canonical source: `ValidationError` in `packages/core/src/types.ts`
   - behavior spec: [../specs/core.md](../specs/core.md), [../specs/communication.md](../specs/communication.md)
-  - 注意: `target` は必須。invalid file issue は core validation error ではなく、Extension Host が直接 generate diagnostic に変換する
+  - 注意: `target` は必須。entry-level target は `profile` / `config`、file-level target は `profileFile` / `configFile`。invalid file issue は core validation error ではなく、Extension Host が直接 generate diagnostic に変換する。Extension Host は file-level core target を `GenerateDiagnostic.target.kind: file` に写像する
 
 ## Ownership
 

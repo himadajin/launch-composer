@@ -4,7 +4,67 @@ import test from 'node:test';
 import * as vscode from 'vscode';
 
 import { WorkspaceStore } from '../src/io/workspaceStore.js';
-import { LaunchComposerTreeProvider } from '../src/treeview/provider.js';
+import {
+  LaunchComposerTreeProvider,
+  type TreeNode,
+} from '../src/treeview/provider.js';
+
+test('tree provider reveals an editor target with a complete parent chain', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/tree-provider-reveal'),
+  );
+  const provider = new LaunchComposerTreeProvider('profile', store);
+  provider.refresh({
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [{ name: 'node' }],
+      },
+    ],
+    configs: [],
+    issues: [],
+    generateReadiness: { diagnostics: [] },
+  });
+
+  const view = vscode.window.createTreeView<TreeNode>('tree-provider-reveal', {
+    treeDataProvider: provider,
+  });
+  await provider.reveal(view, {
+    kind: 'profile',
+    file: 'profile.json',
+    index: 0,
+  });
+
+  const revealCalls = (
+    view as unknown as {
+      getRevealCalls(): Array<{
+        element: TreeNode;
+        options: unknown;
+      }>;
+    }
+  ).getRevealCalls();
+  assert.equal(revealCalls.length, 1);
+
+  const [revealCall] = revealCalls;
+  assert.ok(revealCall);
+  assert.equal(revealCall.element.type, 'entry');
+  assert.deepEqual(revealCall.element.target, {
+    kind: 'profile',
+    file: 'profile.json',
+    index: 0,
+  });
+  assert.deepEqual(revealCall.options, {
+    select: true,
+    focus: false,
+    expand: true,
+  });
+
+  const parent = provider.getParent(revealCall.element);
+  assert.ok(parent);
+  assert.equal(parent.type, 'file');
+  assert.equal(parent.file, 'profile.json');
+  assert.equal(provider.getParent(parent), undefined);
+});
 
 test('tree provider keeps invalid files visible as warning nodes', async () => {
   const store = new WorkspaceStore(vscode.Uri.file('/workspace/tree-project'));

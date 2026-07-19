@@ -234,9 +234,10 @@ const createdTreeViews = new Map<
     onDidChangeCheckboxState(listener: (event: unknown) => void): {
       dispose(): void;
     };
-    reveal(): Promise<void>;
+    reveal(element: unknown, options?: unknown): Promise<void>;
     dispose(): void;
     fireCheckboxChange(event: unknown): Promise<void>;
+    getRevealCalls(): Array<{ element: unknown; options: unknown }>;
   }
 >();
 const fileDecorationProviders: unknown[] = [];
@@ -521,8 +522,16 @@ export const window = {
     return undefined;
   },
 
-  createTreeView(id: string) {
+  createTreeView(
+    id: string,
+    options?: {
+      treeDataProvider?: {
+        getParent?(element: unknown): unknown;
+      };
+    },
+  ) {
     const checkboxListeners = new Set<(event: unknown) => unknown>();
+    const revealCalls: Array<{ element: unknown; options: unknown }> = [];
     const treeView = {
       onDidChangeCheckboxState(listener: (event: unknown) => void) {
         checkboxListeners.add(listener);
@@ -532,12 +541,35 @@ export const window = {
           },
         };
       },
-      async reveal() {},
+      async reveal(element: unknown, revealOptions?: unknown) {
+        const getParent = options?.treeDataProvider?.getParent;
+        if (getParent === undefined) {
+          throw new Error(
+            'TreeDataProvider.getParent must be implemented to reveal tree items.',
+          );
+        }
+
+        const ancestors = new Set<unknown>();
+        let current: unknown = element;
+        while (current !== undefined && current !== null) {
+          if (ancestors.has(current)) {
+            throw new Error('TreeDataProvider.getParent returned a cycle.');
+          }
+
+          ancestors.add(current);
+          current = await getParent.call(options?.treeDataProvider, current);
+        }
+
+        revealCalls.push({ element, options: revealOptions });
+      },
       dispose() {},
       async fireCheckboxChange(event: unknown) {
         await Promise.all(
           [...checkboxListeners].map((listener) => listener(event)),
         );
+      },
+      getRevealCalls() {
+        return [...revealCalls];
       },
     };
 

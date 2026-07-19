@@ -28,7 +28,7 @@ Editor panel を開いたとき、Host は `initial-data` を送る。
 - editor target file の revision
 - `launch-composer.autoSaveDelay`
 
-workspace file が変化した場合、Host は必要に応じて `workspace-update` を送る。profile update は open config editor にも送る。config editor は profile select 候補を更新する必要があるためである。
+workspace file が変化した場合、Host は open editor に `workspace-update` を送る。profile update は config editor の profile select 候補も更新する。config update を含む反対側 kind の変更も workspace 全体の Generate readiness を変えうるため、現在の editor kind と一致しない場合も update を送る。
 
 Generate readiness は workspace 全体の生成可能性である。Host は Generate と同じ判定源を使って readiness を計算する。
 
