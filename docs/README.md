@@ -18,3 +18,5 @@ references.
   for JSON files and Host/Webview messages.
 - [Pending decisions](./internal/pending.md): internal product-design questions
   to revisit.
+- [Fix plans](./internal/plans/README.md): numbered fix plans for known issues,
+  with the ledger that owns plan numbering and lifecycle rules.

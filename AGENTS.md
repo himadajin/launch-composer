@@ -9,6 +9,7 @@ This file is a durable working contract for coding agents in this repository. Ke
 - Product behavior, package responsibilities, and spec routing are defined in `docs/internal/specs/README.md`.
 - Data contract routing is defined in `docs/internal/contracts/README.md`.
 - Pending product-design questions are tracked in `docs/internal/pending.md`; they are not canonical behavior until promoted into the specs.
+- Fix plans live in `docs/internal/plans/`; `docs/internal/plans/README.md` is the ledger that owns plan numbering and lifecycle. When creating, working on, or completing a plan, follow its rules and update the ledger in the same change.
 - npm script definitions are in `package.json`; the required agent verification gate is listed in this file.
 - This file is the canonical source for agent workflow, coding guardrails, verification expectations, external reference policy, testing policy, and commit policy.
 
