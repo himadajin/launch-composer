@@ -18,3 +18,5 @@ references.
   for JSON files and Host/Webview messages.
 - [Pending decisions](./internal/pending.md): internal product-design questions
   to revisit.
+- [Fix plans](./internal/plans/README.md): planned fixes for issues found in the
+  2026-07 codebase investigation.
