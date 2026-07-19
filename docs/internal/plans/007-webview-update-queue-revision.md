@@ -1,6 +1,6 @@
 # 修正計画: webview 保存キューの revision 整合
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 未着手。
 
 ## 問題
 
@@ -26,7 +26,7 @@ webview の保存キュー(`useEntryUpdateQueue`)と payload state 管理(`useCo
 1. P1〜P3 を再現する。P2 は「同一ファイル内のエントリ切替」と「別ファイルへの切替」を分けて確認する。
 2. `ui.md` の「Webview 保存キュー」章(直列化・conflict → refetch・revision 更新)を精読し、エントリ切替時のキューの扱い(旧チェーンの完了待ち? 破棄? 応答の無視?)を仕様として決める(現状は無規定)。
 3. revision の管理を React state(render 後に反映)から切り離す設計(例: ref を唯一の正とし、refetch 完了時に同期的に更新する)を検討する。P3 の「refetch 完了」をどう待つか(RPC 応答の payload から直接 revision を得る等)を決める。
-4. [エディタ state 分離計画](./2026-07-webview-editor-state-isolation.md)(`key` 付与による remount)と [エラー応答契約計画](./2026-07-host-webview-error-contract.md) の変更との干渉を確認する。
+4. [計画 001](./001-webview-editor-state-isolation.md)(`key` 付与による remount)と [計画 006](./006-host-webview-error-contract.md) の変更との干渉を確認する。
 
 ## Phase 1: 修正
 

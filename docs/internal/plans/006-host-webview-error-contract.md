@@ -1,6 +1,6 @@
 # 修正計画: Host/Webview のエラー応答契約
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 未着手。
 
 ## 問題
 
@@ -44,7 +44,7 @@ request/response 型の Host/Webview 通信で、**エラー時の応答契約�
 ## Phase 2: テスト
 
 - host ハンドラ例外時に失敗 response が post されることのテスト(editorPanel テストの流儀)。
-- `useEntryUpdateQueue` の失敗・reject 経路のテスト(現在テストが皆無。[保存キュー計画](./2026-07-webview-update-queue-revision.md) とテスト基盤を共有する)。
+- `useEntryUpdateQueue` の失敗・reject 経路のテスト(現在テストが皆無。[計画 007](./007-webview-update-queue-revision.md) とテスト基盤を共有する)。
 
 ## 検証
 

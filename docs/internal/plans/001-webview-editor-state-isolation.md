@@ -1,6 +1,6 @@
 # 修正計画: webview エディタ state のエントリ間分離
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 未着手。
 
 ## 問題
 
@@ -33,7 +33,7 @@ webview のエディタコンポーネントは、表示対象エントリが切
 2. `ui.md` を精読し、次の未規定事項の仕様を決めて文書化する(Spec-First):
    - フォーカス中・debounce 待ち中に外部更新が届いた場合の挙動(P3)。候補: 「フォーカス中は外部同期を保留し、blur/commit 時に競合解決する」「外部更新を優先し入力を破棄する(現挙動の明文化)」など。
    - rename 失敗時の入力欄の復元(P2)。
-3. `key` 付与(P1)が `useEntryUpdateQueue` のエントリ切替処理([保存キュー計画](./2026-07-webview-update-queue-revision.md))と干渉しないか確認する。
+3. `key` 付与(P1)が `useEntryUpdateQueue` のエントリ切替処理([計画 007](./007-webview-update-queue-revision.md))と干渉しないか確認する。
 
 ## Phase 1: 修正
 
