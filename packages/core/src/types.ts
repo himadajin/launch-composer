@@ -37,7 +37,7 @@ export interface ArgsFileData {
 }
 
 export interface ValidationErrorTarget {
-  kind: 'profile' | 'config' | 'configFile';
+  kind: 'profile' | 'config' | 'profileFile' | 'configFile';
   index?: number;
 }
 

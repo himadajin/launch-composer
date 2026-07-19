@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  generate,
   validateGenerateInput,
   type ArgsFileLoadResult,
   type ConfigData,
+  type ConfigFileData,
   type GenerateInput,
   type ProfileData,
 } from '../src/index.js';
@@ -122,6 +124,198 @@ test('validateGenerateInput reports config field shape errors', async () => {
         field: 'configuration',
         message: 'Config configuration must be an object.',
         target: { kind: 'config', index: 0 },
+      },
+    ],
+  );
+});
+
+test('validateGenerateInput and generate reject null config configuration without throwing', async () => {
+  const input: GenerateInput = {
+    profiles: [
+      {
+        file: 'profiles.json',
+        profiles: [validProfile('node')],
+      },
+    ],
+    configs: [
+      {
+        file: 'configs.json',
+        configurations: [
+          {
+            name: 'Null configuration',
+            profile: 'node',
+            configuration: null,
+          } as unknown as ConfigData,
+        ],
+      },
+    ],
+  };
+
+  const errors = await validateGenerateInput(input);
+  const result = await generate(input);
+
+  const expectedError = {
+    file: 'configs.json',
+    configName: 'Null configuration',
+    field: 'configuration',
+    message: 'Config configuration must be an object.',
+    target: { kind: 'config' as const, index: 0 },
+  };
+  assert.deepEqual(errors, [expectedError]);
+  assert.deepEqual(result, {
+    success: false,
+    errors: [expectedError],
+  });
+});
+
+test('validateGenerateInput reports forbidden overrides with empty or missing profiles', async () => {
+  const errors = await validateGenerateInput({
+    profiles: [],
+    configs: [
+      {
+        file: 'configs.json',
+        configurations: [
+          {
+            name: 'Empty profile',
+            profile: '',
+            configuration: {
+              program: '/tmp/empty',
+              type: 'node',
+              request: 'launch',
+            },
+          },
+          {
+            name: 'Missing profile',
+            configuration: {
+              program: '/tmp/missing',
+              type: 'node',
+              request: 'launch',
+            },
+          } as unknown as ConfigData,
+        ],
+      },
+    ],
+  });
+
+  for (const configName of ['Empty profile', 'Missing profile']) {
+    assert.deepEqual(
+      errors
+        .filter((error) => error.configName === configName)
+        .map((error) => error.field),
+      [
+        'profile',
+        'configuration.program',
+        'configuration.type',
+        'configuration.request',
+      ],
+    );
+  }
+});
+
+test('validateGenerateInput reports non-object entries without throwing', async () => {
+  const errors = await validateGenerateInput({
+    profiles: [
+      {
+        file: 'profiles.json',
+        profiles: [null, 'not a profile'] as unknown as ProfileData[],
+      },
+    ],
+    configs: [
+      {
+        file: 'configs.json',
+        configurations: [null, ['not a config']] as unknown as ConfigData[],
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    errors.map((error) => ({
+      file: error.file,
+      message: error.message,
+      target: error.target,
+    })),
+    [
+      {
+        file: 'profiles.json',
+        message: 'Profile entry must be an object.',
+        target: { kind: 'profile', index: 0 },
+      },
+      {
+        file: 'profiles.json',
+        message: 'Profile entry must be an object.',
+        target: { kind: 'profile', index: 1 },
+      },
+      {
+        file: 'configs.json',
+        message: 'Config entry must be an object.',
+        target: { kind: 'config', index: 0 },
+      },
+      {
+        file: 'configs.json',
+        message: 'Config entry must be an object.',
+        target: { kind: 'config', index: 1 },
+      },
+    ],
+  );
+});
+
+test('generate returns non-object entry validation errors instead of throwing', async () => {
+  const result = await generate({
+    profiles: [
+      {
+        file: 'profiles.json',
+        profiles: [null] as unknown as ProfileData[],
+      },
+    ],
+    configs: [],
+  });
+
+  assert.deepEqual(result, {
+    success: false,
+    errors: [
+      {
+        file: 'profiles.json',
+        message: 'Profile entry must be an object.',
+        target: { kind: 'profile', index: 0 },
+      },
+    ],
+  });
+});
+
+test('validateGenerateInput reports non-array profile and config collections', async () => {
+  const errors = await validateGenerateInput({
+    profiles: [
+      {
+        file: 'profiles.json',
+      } as unknown as { file: string; profiles: ProfileData[] },
+    ],
+    configs: [
+      {
+        file: 'configs.json',
+        configurations: {},
+      } as unknown as ConfigFileData,
+    ],
+  });
+
+  assert.deepEqual(
+    errors.map((error) => ({
+      file: error.file,
+      field: error.field,
+      message: error.message,
+      target: error.target,
+    })),
+    [
+      {
+        file: 'profiles.json',
+        field: 'profiles',
+        message: 'Profile file profiles must be an array.',
+        target: { kind: 'profileFile' },
+      },
+      {
+        file: 'configs.json',
+        field: 'configurations',
+        message: 'Config file configurations must be an array.',
+        target: { kind: 'configFile' },
       },
     ],
   );

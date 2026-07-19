@@ -43,14 +43,25 @@ const DEFAULT_CONFIG_CONTENT =
   '  "configurations": []\n' +
   '}\n';
 
+export interface DataFileWrite {
+  kind: DataFileKind;
+  file: string;
+}
+
+export interface MutationResult {
+  writtenFiles: DataFileWrite[];
+}
+
 export type EntryPatchResult =
   | {
       status: 'ok';
       revision: string | null;
+      writtenFiles: DataFileWrite[];
     }
   | {
       status: 'conflict';
       revision: string | null;
+      writtenFiles: DataFileWrite[];
     };
 
 export class WorkspaceMutations {
@@ -215,6 +226,7 @@ export class WorkspaceMutations {
       return {
         status: 'ok',
         revision,
+        writtenFiles: [],
       };
     }
 
@@ -230,6 +242,7 @@ export class WorkspaceMutations {
       return {
         status: 'conflict',
         revision: currentRevision,
+        writtenFiles: [],
       };
     }
 
@@ -253,6 +266,7 @@ export class WorkspaceMutations {
       return {
         status: 'ok',
         revision: currentRevision,
+        writtenFiles: [],
       };
     }
 
@@ -260,10 +274,14 @@ export class WorkspaceMutations {
     return {
       status: 'ok',
       revision: createTextRevision(nextText),
+      writtenFiles: [{ kind, file }],
     };
   }
 
-  async toggleConfigExcluded(file: string, index: number): Promise<void> {
+  async toggleConfigExcluded(
+    file: string,
+    index: number,
+  ): Promise<MutationResult> {
     const text = await this.io.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
     assertIndex(fileData.configurations, index, file);
@@ -286,19 +304,20 @@ export class WorkspaceMutations {
           ],
     );
     await this.io.writeDataFileText('config', file, nextText);
+    return { writtenFiles: [{ kind: 'config', file }] };
   }
 
   async setConfigExcluded(
     file: string,
     index: number,
     excluded: boolean,
-  ): Promise<void> {
+  ): Promise<MutationResult> {
     const text = await this.io.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
     assertIndex(fileData.configurations, index, file);
     const current = fileData.configurations[index]!;
     if ((current.excluded === true) === excluded) {
-      return;
+      return { writtenFiles: [] };
     }
 
     const nextText = applyJsonDocumentPatches(
@@ -319,9 +338,13 @@ export class WorkspaceMutations {
           ],
     );
     await this.io.writeDataFileText('config', file, nextText);
+    return { writtenFiles: [{ kind: 'config', file }] };
   }
 
-  async setConfigFileExcluded(file: string, excluded: boolean): Promise<void> {
+  async setConfigFileExcluded(
+    file: string,
+    excluded: boolean,
+  ): Promise<MutationResult> {
     const text = await this.io.readRequiredDataFileText('config', file);
     const fileData = this.parseConfigFileContent(file, text);
     const patches: JsonObjectPatchOperation[] = [];
@@ -347,14 +370,15 @@ export class WorkspaceMutations {
     });
 
     if (patches.length === 0) {
-      return;
+      return { writtenFiles: [] };
     }
 
     const nextText = applyJsonDocumentPatches(text, patches);
     await this.io.writeDataFileText('config', file, nextText);
+    return { writtenFiles: [{ kind: 'config', file }] };
   }
 
-  async deleteEntry(target: EditorTarget): Promise<void> {
+  async deleteEntry(target: EditorTarget): Promise<MutationResult> {
     if (target.kind === 'profile') {
       const text = await this.io.readRequiredDataFileText(
         'profile',
@@ -378,7 +402,7 @@ export class WorkspaceMutations {
         },
       ]);
       await this.io.writeDataFileText('profile', target.file, nextText);
-      return;
+      return { writtenFiles: [{ kind: 'profile', file: target.file }] };
     }
 
     const text = await this.io.readRequiredDataFileText('config', target.file);
@@ -391,9 +415,13 @@ export class WorkspaceMutations {
       },
     ]);
     await this.io.writeDataFileText('config', target.file, nextText);
+    return { writtenFiles: [{ kind: 'config', file: target.file }] };
   }
 
-  async renameEntry(target: EditorTarget, rawName: string): Promise<void> {
+  async renameEntry(
+    target: EditorTarget,
+    rawName: string,
+  ): Promise<MutationResult> {
     const nextName = normalizeEntryName(rawName);
     await this.assertUniqueEntryName(nextName, target);
 
@@ -406,7 +434,7 @@ export class WorkspaceMutations {
       assertIndex(profiles, target.index, target.file);
       const current = profiles[target.index]!;
       if (current.name === nextName) {
-        return;
+        return { writtenFiles: [] };
       }
 
       const nextText = applyJsonDocumentPatches(text, [
@@ -417,8 +445,16 @@ export class WorkspaceMutations {
         },
       ]);
       await this.io.writeDataFileText('profile', target.file, nextText);
-      await this.updateProfileReferences(current.name, nextName);
-      return;
+      const updatedConfigs = await this.updateProfileReferences(
+        current.name,
+        nextName,
+      );
+      return {
+        writtenFiles: [
+          { kind: 'profile', file: target.file },
+          ...updatedConfigs,
+        ],
+      };
     }
 
     const text = await this.io.readRequiredDataFileText('config', target.file);
@@ -426,7 +462,7 @@ export class WorkspaceMutations {
     assertIndex(fileData.configurations, target.index, target.file);
     const current = fileData.configurations[target.index]!;
     if (current.name === nextName) {
-      return;
+      return { writtenFiles: [] };
     }
 
     const nextText = applyJsonDocumentPatches(text, [
@@ -437,6 +473,7 @@ export class WorkspaceMutations {
       },
     ]);
     await this.io.writeDataFileText('config', target.file, nextText);
+    return { writtenFiles: [{ kind: 'config', file: target.file }] };
   }
 
   private parseProfileEntries(file: string, text: string): ProfileData[] {
@@ -507,14 +544,14 @@ export class WorkspaceMutations {
   private async updateProfileReferences(
     currentName: string,
     nextName: string,
-  ): Promise<void> {
+  ): Promise<DataFileWrite[]> {
     if (currentName === nextName) {
-      return;
+      return [];
     }
 
     const configFiles = await this.reader.readConfigsWithIssues();
 
-    await Promise.all(
+    const updatedFiles = await Promise.all(
       configFiles.configs.map(async (fileData) => {
         const patches = fileData.configurations.flatMap((config, index) =>
           config.profile === currentName
@@ -529,7 +566,7 @@ export class WorkspaceMutations {
         );
 
         if (patches.length === 0) {
-          return;
+          return undefined;
         }
 
         const text = await this.io.readRequiredDataFileText(
@@ -538,7 +575,12 @@ export class WorkspaceMutations {
         );
         const nextText = applyJsonDocumentPatches(text, patches);
         await this.io.writeDataFileText('config', fileData.file, nextText);
+        return { kind: 'config' as const, file: fileData.file };
       }),
+    );
+
+    return updatedFiles.filter(
+      (file): file is { kind: 'config'; file: string } => file !== undefined,
     );
   }
 

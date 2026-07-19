@@ -180,7 +180,7 @@ Webview 内 header:
 
 editor identity は `kind:file:index` である。同じ kind の別 entry を含め、identity が変わった場合はフォームを新しい editor として初期化し、前の entry のローカル入力と未発火の debounce 保存を破棄する。
 
-TreeView entry を開いたとき、対応する TreeView item を `TreeView.reveal()` で選択状態にする。panel を閉じた後の選択解除は実装対象外である。
+TreeView entry を開いたとき、対応する TreeView item を `TreeView.reveal()` で選択状態にし、祖先を展開する。editor から TreeView へ focus は移さない。panel を閉じた後の選択解除は実装対象外である。
 
 ### JSON を開く導線
 

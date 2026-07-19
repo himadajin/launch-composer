@@ -1,6 +1,6 @@
 # 修正計画: Watcher エコーフィルタの期待リーク
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 未着手。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 完了(commit `f6ded80`)。
 
 ## 問題
 
@@ -36,3 +36,10 @@ Phase 0 で決めた方針を実装する。mutation の戻り値変更を伴う
 ## 検証
 
 検証ゲートに加え、実機で「no-op 操作 → 外部編集 → ツリー/webview が更新される」ことを確認する。
+
+## 完了記録
+
+- mutation の戻り値に実際に書き込んだファイルを含め、そのファイルだけ watcher expectation を登録する根本対処を採用した。TTL と watcher scope の変更は行っていない。
+- Include/Exclude All、空・同一 patch、同名 rename の no-op と、実書き込み後に 1 イベントだけ抑制する経路を watcher レベルの回帰テストで確認した。同一ファイルへの複数 mutation は expectation を 1 件に集約する。
+- 手動の外部編集確認は未実施だが、実際の echo filter と mutation 戻り値を接続した extension テストで所定のイベント列を検証した。
+- 必須検証ゲートはすべて成功した。

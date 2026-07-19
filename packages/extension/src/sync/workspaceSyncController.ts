@@ -5,7 +5,10 @@ import type {
   WorkspaceStore,
 } from '../io/workspaceStore.js';
 import type { DataFileKind } from '../io/workspaceLayout.js';
-import type { WatcherEchoFilter } from './watcherEchoFilter.js';
+import {
+  expectDataFileWrites,
+  type WatcherEchoFilter,
+} from './watcherEchoFilter.js';
 
 export type SnapshotKind = DataFileKind | 'both';
 
@@ -84,7 +87,11 @@ export class WorkspaceSyncController {
       if (options?.notifyIssues !== false) {
         this.deps.reportIssues(snapshot.issues);
       }
-      this.deps.applySnapshot(snapshot, kind);
+      // A partial file change can alter diagnostics placed on either tree
+      // (for example, a renamed profile can invalidate a config reference).
+      // The editor still receives the original kind below so its partial
+      // payload and revision semantics remain unchanged.
+      this.deps.applySnapshot(snapshot, 'both');
       if (options?.syncEditor !== false) {
         await this.editorSync?.(snapshot, kind);
       }
@@ -95,9 +102,7 @@ export class WorkspaceSyncController {
   }
 
   refresh(request?: Partial<RefreshRequest>): void {
-    request?.expectedWatchers?.forEach(({ kind, file }) =>
-      this.deps.echoFilter.expect(kind, file),
-    );
+    expectDataFileWrites(this.deps.echoFilter, request?.expectedWatchers ?? []);
     const syncOptions: SyncOptions = {
       notifyIssues: false,
     };

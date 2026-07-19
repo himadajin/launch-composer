@@ -1,6 +1,6 @@
 # 修正計画: kind 横断の generate 診断更新
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 未着手。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 完了(commit `f6ded80`)。
 
 ## 問題
 
@@ -30,3 +30,10 @@ Phase 0 で決めた方針を実装する。webview(editorPanel)への workspace
 ## 検証
 
 検証ゲートに加え、Phase 0 の再現手順が解消していることを実機確認する。
+
+## 完了記録
+
+- kind 限定の読み取りは維持しつつ、再構成した全体 snapshot を常に両 provider へ適用する方針を採用した。webview にも反対 kind の更新を配り、全体の generate readiness を最新化する。
+- profile の部分更新で config の参照切れ診断が再計算され、両ツリーへ反映されることと、反対 kind の更新が開いているエディタを誤って閉じないことを回帰テストで確認した。
+- 手動の profile rename 確認は未実施だが、controller/provider/editor の接続を含む extension テストで同じ snapshot 更新経路を検証した。
+- 必須検証ゲートはすべて成功した。

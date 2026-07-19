@@ -122,6 +122,55 @@ test('readAll keeps valid files and reports invalid files as issues', async () =
   });
 });
 
+test('readAll reports non-object entries as invalid files', async () => {
+  const workspace = workspaceUri('invalid-entry-shape-project');
+  const store = new WorkspaceStore(workspace);
+
+  await writeProfileFile(workspace, 'profile.json', '[null]\n');
+  await writeConfigFile(
+    workspace,
+    'config.json',
+    '{\n  "configurations": ["not a config"]\n}\n',
+  );
+
+  const data = await store.readAll();
+
+  assert.deepEqual(data.profiles, []);
+  assert.deepEqual(data.configs, []);
+  assert.deepEqual(data.issues, [
+    {
+      kind: 'profile',
+      file: 'profile.json',
+      code: 'invalid-shape',
+      message: 'profile.json must contain a JSON array of objects.',
+    },
+    {
+      kind: 'config',
+      file: 'config.json',
+      code: 'invalid-shape',
+      message:
+        'config.json must contain an object with a "configurations" array of objects.',
+    },
+  ]);
+  assert.deepEqual(data.generateReadiness, {
+    diagnostics: [
+      {
+        source: 'invalid-file',
+        file: 'profile.json',
+        message: 'profile.json must contain a JSON array of objects.',
+        target: { kind: 'file' },
+      },
+      {
+        source: 'invalid-file',
+        file: 'config.json',
+        message:
+          'config.json must contain an object with a "configurations" array of objects.',
+        target: { kind: 'file' },
+      },
+    ],
+  });
+});
+
 test('readAll returns ready generateReadiness for valid data', async () => {
   const workspace = workspaceUri('readiness-valid-project');
   const store = new WorkspaceStore(workspace);
@@ -579,7 +628,7 @@ test('setConfigFileExcluded excludes and includes all configs while preserving c
   assert.doesNotMatch(text, /"excluded"/);
 });
 
-test('setConfigFileExcluded no-ops when config file has no entries to change', async () => {
+test('setConfigFileExcluded reports no writes when config file has no entries to change', async () => {
   const workspace = workspaceUri('bulk-noop-project');
   const store = new WorkspaceStore(workspace);
 
@@ -589,11 +638,60 @@ test('setConfigFileExcluded no-ops when config file has no entries to change', a
     '{\n  "configurations": []\n}\n',
   );
 
-  await store.setConfigFileExcluded('config.json', true);
-  await store.setConfigFileExcluded('config.json', false);
+  const excludeResult = await store.setConfigFileExcluded('config.json', true);
+  const includeResult = await store.setConfigFileExcluded('config.json', false);
+
+  assert.deepEqual(excludeResult, { writtenFiles: [] });
+  assert.deepEqual(includeResult, { writtenFiles: [] });
 
   const text = await readText(configFileUri(workspace));
   assert.equal(text, '{\n  "configurations": []\n}\n');
+});
+
+test('patchProfileEntry reports no writes for an empty patch', async () => {
+  const workspace = workspaceUri('empty-patch-project');
+  const store = new WorkspaceStore(workspace);
+
+  await writeProfileFile(
+    workspace,
+    'profile.json',
+    '[\n  {\n    "name": "cpp"\n  }\n]\n',
+  );
+
+  const revision = await store.getDataFileRevision('profile', 'profile.json');
+  const result = await store.patchProfileEntry('profile.json', 0, revision, []);
+
+  assert.deepEqual(result, {
+    status: 'ok',
+    revision,
+    writtenFiles: [],
+  });
+});
+
+test('patchProfileEntry reports no writes when a patch preserves the current text', async () => {
+  const workspace = workspaceUri('same-text-patch-project');
+  const store = new WorkspaceStore(workspace);
+
+  await writeProfileFile(
+    workspace,
+    'profile.json',
+    '[\n  {\n    "name": "cpp",\n    "configuration": {\n      "type": "cppdbg"\n    }\n  }\n]\n',
+  );
+
+  const revision = await store.getDataFileRevision('profile', 'profile.json');
+  const result = await store.patchProfileEntry('profile.json', 0, revision, [
+    {
+      type: 'set',
+      path: ['configuration', 'type'],
+      value: 'cppdbg',
+    },
+  ]);
+
+  assert.deepEqual(result, {
+    status: 'ok',
+    revision,
+    writtenFiles: [],
+  });
 });
 
 test('createDataFile supports unicode file names without stat-ing the target path', async () => {
@@ -693,7 +791,7 @@ test('renameEntry updates profile references in configs', async () => {
     ),
   );
 
-  await store.renameEntry(
+  const renameResult = await store.renameEntry(
     {
       kind: 'profile',
       file: 'profile.json',
@@ -701,6 +799,13 @@ test('renameEntry updates profile references in configs', async () => {
     },
     'cpp-renamed',
   );
+
+  assert.deepEqual(renameResult, {
+    writtenFiles: [
+      { kind: 'profile', file: 'profile.json' },
+      { kind: 'config', file: 'config.json' },
+    ],
+  });
 
   const [profileBytes, configBytes] = await Promise.all([
     vscode.workspace.fs.readFile(
@@ -723,6 +828,24 @@ test('renameEntry updates profile references in configs', async () => {
     new TextDecoder().decode(configBytes),
     '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "excluded": true,\n      "profile": "cpp-renamed"\n    }\n  ]\n}\n',
   );
+});
+
+test('renameEntry reports no writes when the name is unchanged', async () => {
+  const workspace = workspaceUri('same-name-rename-project');
+  const store = new WorkspaceStore(workspace);
+
+  await writeProfileFile(
+    workspace,
+    'profile.json',
+    '[\n  {\n    "name": "cpp"\n  }\n]\n',
+  );
+
+  const result = await store.renameEntry(
+    { kind: 'profile', file: 'profile.json', index: 0 },
+    'cpp',
+  );
+
+  assert.deepEqual(result, { writtenFiles: [] });
 });
 
 test('renameEntry preserves profile and config comments while updating profile', async () => {

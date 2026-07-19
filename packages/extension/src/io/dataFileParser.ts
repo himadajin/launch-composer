@@ -23,19 +23,19 @@ export function parseProfileDocument(
     };
   }
 
-  if (!Array.isArray(parsed.value)) {
+  if (!Array.isArray(parsed.value) || !parsed.value.every(isRecord)) {
     return {
       status: 'invalid',
       issue: {
         kind: 'profile',
         file,
         code: 'invalid-shape',
-        message: `${file} must contain a JSON array.`,
+        message: `${file} must contain a JSON array of objects.`,
       },
     };
   }
 
-  return { status: 'ok', data: parsed.value as ProfileData[] };
+  return { status: 'ok', data: parsed.value as unknown as ProfileData[] };
 }
 
 export function parseConfigDocument(
@@ -50,21 +50,27 @@ export function parseConfigDocument(
     };
   }
 
-  if (!isRecord(parsed.value) || !Array.isArray(parsed.value.configurations)) {
+  if (
+    !isRecord(parsed.value) ||
+    !Array.isArray(parsed.value.configurations) ||
+    !parsed.value.configurations.every(isRecord)
+  ) {
     return {
       status: 'invalid',
       issue: {
         kind: 'config',
         file,
         code: 'invalid-shape',
-        message: `${file} must contain an object with a "configurations" array.`,
+        message: `${file} must contain an object with a "configurations" array of objects.`,
       },
     };
   }
 
   return {
     status: 'ok',
-    data: { configurations: parsed.value.configurations as ConfigData[] },
+    data: {
+      configurations: parsed.value.configurations as unknown as ConfigData[],
+    },
   };
 }
 

@@ -157,6 +157,9 @@ core は Generate 前に入力全体を検証し、エラーをまとめて返�
 
 ### profile
 
+- 条件: entry が非 null のオブジェクトでない
+  - エラー: はい
+  - target: `profile#index`
 - 条件: `name` が非空文字列でない
   - エラー: はい
   - target: `profile#index`
@@ -175,6 +178,14 @@ core は Generate 前に入力全体を検証し、エラーをまとめて返�
 
 `configuration` が省略されている profile は、`request` と `type` の検証に失敗する。
 
+### profile file
+
+- 条件: `profiles` が配列でない
+  - エラー: はい
+  - target: `profileFile`
+
+extension のファイル読み込みでは、profile file の root 配列に非オブジェクト要素がある場合は `ComposerDataIssue` として扱われる。core に直接渡された `ProfileFileData` では、非オブジェクト要素を entry-level validation error にする。
+
 ### config file
 
 - 条件: `configurations` が配列でない
@@ -185,6 +196,9 @@ extension のファイル読み込みでは、config ファイルのルート形
 
 ### config entry
 
+- 条件: entry が非 null のオブジェクトでない
+  - エラー: はい
+  - target: `config#index`
 - 条件: `name` が非空文字列でない
   - エラー: はい
   - target: `config#index`

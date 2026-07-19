@@ -6,8 +6,8 @@ import type { DataFileKind } from '../io/workspaceLayout.js';
 
 /**
  * Suppresses file-watcher echoes for changes the extension itself wrote.
- * Callers register an expected event before writing; the next watcher
- * event for that file is swallowed.
+ * Callers register confirmed writes; the next watcher event for each
+ * written file is swallowed.
  */
 export class WatcherEchoFilter {
   private readonly pendingEvents = new Map<string, number>();
@@ -31,6 +31,24 @@ export class WatcherEchoFilter {
     }
 
     return true;
+  }
+}
+
+/** Registers at most one expected watcher event for each written data file. */
+export function expectDataFileWrites(
+  echoFilter: WatcherEchoFilter,
+  writes: ReadonlyArray<{ kind: DataFileKind; file: string }>,
+): void {
+  const expected = new Set<string>();
+
+  for (const { kind, file } of writes) {
+    const key = `${kind}:${file}`;
+    if (expected.has(key)) {
+      continue;
+    }
+
+    expected.add(key);
+    echoFilter.expect(kind, file);
   }
 }
 

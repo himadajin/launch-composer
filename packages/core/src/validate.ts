@@ -1,8 +1,10 @@
 import type {
   ArgsFileData,
+  ConfigData,
   ConfigRef,
   ConfigFileData,
   GenerateInput,
+  ProfileData,
   ProfileRef,
   ValidationError,
   ValidationErrorTarget,
@@ -109,6 +111,7 @@ export async function collectValidationState(
   const profileMap = new Map<string, ProfileRef>();
   const argsFileCache = new Map<string, ArgsFileData>();
 
+  validateProfileFiles(input.profiles, errors);
   validateProfileEntries(profileRefs, errors);
   validateConfigFiles(input.configs, errors);
   validateConfigEntries(configRefs, errors);
@@ -139,24 +142,64 @@ export async function collectValidationState(
 
 function flattenProfiles(files: GenerateInput['profiles']): ProfileRef[] {
   return files.flatMap((fileData) =>
-    fileData.profiles.map((data, index) => ({
-      file: fileData.file,
-      index,
-      data,
-    })),
+    (Array.isArray(fileData.profiles) ? fileData.profiles : []).flatMap(
+      (data, index) =>
+        isRecord(data)
+          ? [
+              {
+                file: fileData.file,
+                index,
+                data: data as ProfileData,
+              },
+            ]
+          : [],
+    ),
   );
 }
 
 function flattenConfigs(files: GenerateInput['configs']): ConfigRef[] {
   return files.flatMap((fileData) =>
-    (Array.isArray(fileData.configurations) ? fileData.configurations : []).map(
-      (data, index) => ({
-        file: fileData.file,
-        index,
-        data,
-      }),
+    (Array.isArray(fileData.configurations)
+      ? fileData.configurations
+      : []
+    ).flatMap((data, index) =>
+      isRecord(data)
+        ? [
+            {
+              file: fileData.file,
+              index,
+              data: data as ConfigData,
+            },
+          ]
+        : [],
     ),
   );
+}
+
+function validateProfileFiles(
+  profileFiles: GenerateInput['profiles'],
+  errors: ValidationError[],
+): void {
+  for (const profileFile of profileFiles) {
+    if (!Array.isArray(profileFile.profiles)) {
+      errors.push(
+        createValidationError({
+          file: profileFile.file,
+          field: 'profiles',
+          message: 'Profile file profiles must be an array.',
+          target: { kind: 'profileFile' },
+        }),
+      );
+      continue;
+    }
+
+    validateEntryShapes(
+      profileFile.file,
+      profileFile.profiles,
+      'profile',
+      errors,
+    );
+  }
 }
 
 function validateConfigFiles(
@@ -173,7 +216,36 @@ function validateConfigFiles(
           target: { kind: 'configFile' },
         }),
       );
+      continue;
     }
+
+    validateEntryShapes(
+      configFile.file,
+      configFile.configurations,
+      'config',
+      errors,
+    );
+  }
+}
+
+function validateEntryShapes(
+  file: string,
+  entries: unknown[],
+  kind: 'profile' | 'config',
+  errors: ValidationError[],
+): void {
+  for (const [index, entry] of entries.entries()) {
+    if (isRecord(entry)) {
+      continue;
+    }
+
+    errors.push(
+      createValidationError({
+        file,
+        message: `${kind === 'profile' ? 'Profile' : 'Config'} entry must be an object.`,
+        target: { kind, index },
+      }),
+    );
   }
 }
 
@@ -311,12 +383,11 @@ function validateConfigSemantics(
   profileMap: Map<string, ProfileRef>,
   errors: ValidationError[],
 ): void {
-  if (!isNonEmptyString(configRef.data.profile)) {
-    return;
-  }
-
-  const profileRef = profileMap.get(configRef.data.profile);
-  if (profileRef === undefined) {
+  const hasProfileName = isNonEmptyString(configRef.data.profile);
+  const profileRef = hasProfileName
+    ? profileMap.get(configRef.data.profile)
+    : undefined;
+  if (hasProfileName && profileRef === undefined) {
     errors.push(
       createValidationError({
         file: configRef.file,
@@ -329,18 +400,24 @@ function validateConfigSemantics(
   }
 
   const configEntry = configRef.data.configuration;
-  for (const key of BLOCKED_OVERRIDE_KEYS) {
-    if (configEntry !== undefined && Object.hasOwn(configEntry, key)) {
-      errors.push(
-        createValidationError({
-          file: configRef.file,
-          configName: safeConfigName(configRef.data.name),
-          field: `configuration.${key}`,
-          message: `Config with a profile cannot override "${key}".`,
-          target: configTarget(configRef),
-        }),
-      );
+  if (isRecord(configEntry)) {
+    for (const key of BLOCKED_OVERRIDE_KEYS) {
+      if (Object.hasOwn(configEntry, key)) {
+        errors.push(
+          createValidationError({
+            file: configRef.file,
+            configName: safeConfigName(configRef.data.name),
+            field: `configuration.${key}`,
+            message: `Config with a profile cannot override "${key}".`,
+            target: configTarget(configRef),
+          }),
+        );
+      }
     }
+  }
+
+  if (!hasProfileName) {
+    return;
   }
 
   if (

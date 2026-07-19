@@ -2,12 +2,16 @@ import * as vscode from 'vscode';
 
 import { COMMANDS } from '../commands.js';
 import type { WorkspaceStore } from '../io/workspaceStore.js';
+import type { MutationResult } from '../io/workspaceMutations.js';
 import type { DataFileKind } from '../io/workspaceLayout.js';
 import {
   showError,
   showGenerateBlockedWarning,
 } from '../notifications/errors.js';
-import type { WatcherEchoFilter } from '../sync/watcherEchoFilter.js';
+import {
+  expectDataFileWrites,
+  type WatcherEchoFilter,
+} from '../sync/watcherEchoFilter.js';
 import type { SyncOptions } from '../sync/workspaceSyncController.js';
 import type { TreeNode } from '../treeview/provider.js';
 import type { EditorPanelController } from '../webview/editorPanel.js';
@@ -96,6 +100,7 @@ export function createConfigCheckboxHandler(
   return async (event) => {
     try {
       const changedFiles = new Set<string>();
+      const writtenFiles: MutationResult['writtenFiles'] = [];
 
       for (const [node, checkboxState] of event.items) {
         const included = checkboxState === vscode.TreeItemCheckboxState.Checked;
@@ -105,17 +110,18 @@ export function createConfigCheckboxHandler(
         }
 
         if (node.included !== included) {
-          await deps.store.setConfigExcluded(
+          const result = await deps.store.setConfigExcluded(
             node.target.file,
             node.target.index,
             !included,
           );
           changedFiles.add(node.target.file);
+          writtenFiles.push(...result.writtenFiles);
         }
       }
 
       if (changedFiles.size > 0) {
-        changedFiles.forEach((file) => deps.echoFilter.expect('config', file));
+        expectDataFileWrites(deps.echoFilter, writtenFiles);
         await deps.sync({ notifyIssues: false, kind: 'config' });
       }
     } catch (error) {
@@ -129,8 +135,10 @@ export function registerWorkspaceCommands(
 ): vscode.Disposable[] {
   const { store, editorPanel, echoFilter, sync, handleGenerate } = deps;
 
-  const syncChangedConfigFile = async (file: string): Promise<void> => {
-    echoFilter.expect('config', file);
+  const syncChangedConfigFile = async (
+    result: MutationResult,
+  ): Promise<void> => {
+    expectDataFileWrites(echoFilter, result.writtenFiles);
     await sync({ notifyIssues: false, kind: 'config' });
   };
 
@@ -367,8 +375,11 @@ export function registerWorkspaceCommands(
     ),
     registerSafeCommand(COMMANDS.toggleIncluded, async (node?: TreeNode) => {
       if (node?.type === 'entry' && node.target.kind === 'config') {
-        await store.toggleConfigExcluded(node.target.file, node.target.index);
-        await syncChangedConfigFile(node.target.file);
+        const result = await store.toggleConfigExcluded(
+          node.target.file,
+          node.target.index,
+        );
+        await syncChangedConfigFile(result);
       }
     }),
   ];
@@ -547,7 +558,7 @@ async function setConfigIncluded(
   node: TreeNode | undefined,
   included: boolean,
   store: WorkspaceStore,
-  onDidChange: (file: string) => Promise<void>,
+  onDidChange: (result: MutationResult) => Promise<void>,
 ): Promise<void> {
   const entryNode = getEntryNode(node);
   if (entryNode === undefined || entryNode.target.kind !== 'config') {
@@ -558,25 +569,25 @@ async function setConfigIncluded(
     return;
   }
 
-  await store.setConfigExcluded(
+  const result = await store.setConfigExcluded(
     entryNode.target.file,
     entryNode.target.index,
     !included,
   );
-  await onDidChange(entryNode.target.file);
+  await onDidChange(result);
 }
 
 async function setConfigFileIncluded(
   node: TreeNode | undefined,
   included: boolean,
   store: WorkspaceStore,
-  onDidChange: (file: string) => Promise<void>,
+  onDidChange: (result: MutationResult) => Promise<void>,
 ): Promise<void> {
   const fileNode = getFileNode(node, 'config');
   if (fileNode === undefined || fileNode.issue !== undefined) {
     return;
   }
 
-  await store.setConfigFileExcluded(fileNode.file, !included);
-  await onDidChange(fileNode.file);
+  const result = await store.setConfigFileExcluded(fileNode.file, !included);
+  await onDidChange(result);
 }
