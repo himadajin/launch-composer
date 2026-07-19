@@ -1,6 +1,6 @@
 # 修正計画: webview エディタ state のエントリ間分離
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 進行中。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 完了(commit `ff28fa8`)。
 
 ## 問題
 
