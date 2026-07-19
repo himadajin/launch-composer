@@ -29,7 +29,6 @@ Thumbs.db
 
 # Local tooling metadata
 .codex
-CLAUDE.md
 
 # Developer-local workspace
 local/
