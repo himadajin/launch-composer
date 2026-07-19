@@ -1,5 +1,5 @@
 import { FormGroup, TextInput } from '@himadajin/vscode-components';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 /**
  * Entry name field. Unlike the other text fields, the name commits on
@@ -22,6 +22,8 @@ export function NameField({
   onRename: (name: string) => Promise<void>;
 }) {
   const [name, setName] = useState(externalName);
+  const externalNameRef = useRef(externalName);
+  externalNameRef.current = externalName;
 
   useEffect(() => {
     setName(externalName);
@@ -32,7 +34,11 @@ export function NameField({
       return;
     }
 
-    await onRename(name);
+    try {
+      await onRename(name);
+    } finally {
+      setName(externalNameRef.current);
+    }
   };
 
   return (

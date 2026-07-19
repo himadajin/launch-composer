@@ -75,19 +75,19 @@ export function ProfileEditor({
     stringOrEmpty(data.configuration?.type),
     autoSaveDelay,
     (value) => onChange(updateProfileType(data, value)),
-    { readOnly },
+    { disabled: readOnly },
   );
   const programField = useEditableField(
     stringOrEmpty(data.configuration?.program),
     autoSaveDelay,
     (value) => onChange(updateProfileProgram(data, value)),
-    { readOnly },
+    { disabled: readOnly },
   );
   const cwdField = useEditableField(
     stringOrEmpty(data.configuration?.cwd),
     autoSaveDelay,
     (value) => onChange(updateProfileCwd(data, value)),
-    { readOnly },
+    { disabled: readOnly },
   );
 
   const typeHelperMessage =

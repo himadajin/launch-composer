@@ -68,7 +68,7 @@ describe('useEditableField', () => {
     expect(commit).toHaveBeenCalledWith('ab');
   });
 
-  it('syncs from external data and does not commit the synced value', () => {
+  it('preserves pending user input across an external update', () => {
     const commit = vi.fn();
     const { result, rerender } = renderHook(
       ({ external }) => useEditableField(external, DELAY, commit),
@@ -80,26 +80,75 @@ describe('useEditableField', () => {
     });
     rerender({ external: 'two' });
 
-    expect(result.current.value).toBe('two');
+    expect(result.current.value).toBe('typed');
 
     act(() => {
-      vi.advanceTimersByTime(DELAY * 2);
+      vi.advanceTimersByTime(DELAY);
     });
 
-    expect(commit).not.toHaveBeenCalled();
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith('typed');
   });
 
-  it('does not commit while readOnly', () => {
+  it('does not accept or commit changes while disabled', () => {
     const commit = vi.fn();
     const { result } = renderHook(() =>
-      useEditableField('initial', DELAY, commit, { readOnly: true }),
+      useEditableField('initial', DELAY, commit, { disabled: true }),
     );
 
     act(() => {
       result.current.onChange('typed');
     });
+    expect(result.current.value).toBe('initial');
+
     act(() => {
       vi.advanceTimersByTime(DELAY);
+    });
+
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('discards pending input when the field becomes disabled', () => {
+    const commit = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ disabled, external }) =>
+        useEditableField(external, DELAY, commit, { disabled }),
+      { initialProps: { disabled: false, external: 'initial' } },
+    );
+
+    act(() => {
+      result.current.onChange('typed');
+    });
+    rerender({ disabled: true, external: 'server' });
+
+    expect(result.current.value).toBe('server');
+
+    act(() => {
+      vi.advanceTimersByTime(DELAY * 2);
+    });
+    rerender({ disabled: false, external: 'server' });
+
+    act(() => {
+      vi.advanceTimersByTime(DELAY * 2);
+    });
+
+    expect(result.current.value).toBe('server');
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending commit when the field unmounts', () => {
+    const commit = vi.fn();
+    const { result, unmount } = renderHook(() =>
+      useEditableField('initial', DELAY, commit),
+    );
+
+    act(() => {
+      result.current.onChange('typed');
+    });
+    unmount();
+
+    act(() => {
+      vi.advanceTimersByTime(DELAY * 2);
     });
 
     expect(commit).not.toHaveBeenCalled();

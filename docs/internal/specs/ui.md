@@ -178,6 +178,8 @@ Webview 内 header:
 2. 現在の entry name。entry が読めない場合は source file 名
 3. source file 名
 
+editor identity は `kind:file:index` である。同じ kind の別 entry を含め、identity が変わった場合はフォームを新しい editor として初期化し、前の entry のローカル入力と未発火の debounce 保存を破棄する。
+
 TreeView entry を開いたとき、対応する TreeView item を `TreeView.reveal()` で選択状態にする。panel を閉じた後の選択解除は実装対象外である。
 
 ### JSON を開く導線
@@ -203,6 +205,14 @@ Webview の editor title action `Open JSON` は `launch-composer.openActiveEdito
 すべての編集 control は disabled または read-only にする。`ListEditor` は read-only text 表示に置き換える。file が正常化すると workspace update により通常編集へ戻る。
 
 対象 entry が削除されて存在しなくなった場合は panel を閉じる。Webview 側で current entry がなく、invalid issue もない場合は `The selected item no longer exists. Reopen it from the sidebar.` を表示する。
+
+### TextInput の外部同期
+
+debounce 保存を行う TextInput は、ユーザー入力が pending でない場合に外部 snapshot の値へ同期する。ユーザー入力が debounce 待ちの場合、workspace update が届いてもローカル入力を維持し、最新 snapshot の entry data と revision に対して保存する。
+
+field が disabled または read-only になった場合は、pending のローカル入力と未発火の debounce 保存を破棄し、外部 snapshot の値へ同期する。再び編集可能になっても、破棄した入力を保存しない。
+
+Name field は rename request の成功・失敗後に最新 snapshot を再取得する。重複名による拒否や trim による正規化で外部名が変化しない場合も、request 完了時に入力欄を外部名へ戻す。
 
 ### Generate Status
 
