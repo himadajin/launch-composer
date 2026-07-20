@@ -42,7 +42,7 @@
 | 011  | [core merge の参照共有と仕様乖離](./011-core-merge-aliasing.md)                    | 中     | 未着手                 | 生成結果が入力配列・ネストオブジェクトと参照を共有する                                                          |
 | 012  | [Command Palette 露出の仕様乖離](./012-command-palette-exposure.md)                | 低     | 未着手                 | `openActiveEditorJson` が仕様に反して Palette に露出している                                                    |
 | 013  | [workspace folder 数の実行時変化への追従](./013-workspace-folder-tracking.md)      | 低     | 未着手                 | folder 数を activate 時にしか評価していない                                                                     |
-| 014  | [CONFIGS/PROFILES の単一ビュー統合](./014-single-pane-treeview.md)                 | —      | 進行中                 | 2 ペイン分離による参照関係の不可視・スペース分割・アクション重複を、単一ビューの 3 階層ツリーに統合して解消する |
+| 014  | [CONFIGS/PROFILES の単一ビュー統合](./014-single-pane-treeview.md)                 | —      | 完了(commit `cd2f76e`) | 2 ペイン分離による参照関係の不可視・スペース分割・アクション重複を、単一ビューの 3 階層ツリーに統合して解消する |
 
 ## 計画間の関係
 

@@ -1,6 +1,6 @@
 # 改修計画: CONFIGS/PROFILES の単一ビュー統合
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-20、commit `ffd2b61`(branch `feat-single-pane`)。状態: 進行中。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-20、commit `ffd2b61`(branch `feat-single-pane`)。状態: 完了(仕様 commit `47728a9`、実装 commit `be47dd7` / `d3160e1` / `cd2f76e`)。
 
 001〜013 と異なり、本計画はバグ修正ではなく UX 改修である。調査は Extension Development Host 上での実機操作(profile 2 件・config 15 件のサンプルワークスペース)に基づく。
 
@@ -82,6 +82,7 @@ LAUNCH COMPOSER                          [+ ▷]   ← view title: Add(QuickPick
 
 ### 進捗記録
 
+- 2026-07-20: Phase 3 後半完了(commit `cd2f76e`)、本計画完了。`launch-composer.goToProfile`(config entry の context menu、group `1_navigate@1`)と config editor の `Go to Profile` button を追加。解決規則(ファイル名昇順 → 配列順の最初の完全一致、invalid file 除外)と未設定/missing の information message を `extension.md` に、`open-profile` / `open-profile-result`(常時 response、006 方針先取り)を `communication.md` と `packages/core/src/contracts.ts` に定義。実機確認: webview button からのジャンプで、折りたたんだ Profiles セクションを跨ぐ reveal の自動展開(前回持ち越し)を確認。tree context menu の表示位置は click 操作の制約で実機未確認(manifest テストの when/group 検査で担保)。
 - 2026-07-20: Phase 3 前半完了。`ui.md` に description 仕様(config entry: `profile 名 → excluded → N issues` の併記順、profile entry: `N configs → N issues`、0 件も `0 configs` を常時表示、missing 参照は装飾なしで diagnostic に委譲、profile が非 string / 空白のみなら非表示)を明文化し、provider に実装。被参照数は snapshot からの一括集計で追加 read なし。本計画の冒頭スケッチも採用した併記順に更新した。
 - 2026-07-20: Phase 2 完了。単一ビュー統合を実装(manifest / commands.ts / provider.ts / extension.ts / handlers.ts、テスト 3 ファイル改修・新規 8 テスト)。検証ゲート全パス(148 テスト)。レビュー時の採用判断: QuickPick placeholder `Choose what to add`、file 作成フローの `createDataFile(kind)` 共通化(仕様の「同じ file 作成フロー」を関数共有で保証)。実機確認済み: 3 階層表示・タイトル QuickPick(4 項目・キャンセル無変更)・kind 横断の単一選択・checkbox 書き込み・セクション折りたたみの refresh 跨ぎ保持・welcome 2 態と Initialize リンク・セクション inline「+」。未検証: 折りたたまれた祖先を跨ぐ reveal の自動展開(Add フローの名前入力を要するため。provider の親チェーンはテストで検証済み。Phase 3 の実機確認で再チェックする)。
 
@@ -119,5 +120,7 @@ Spec-First Change Routing に従い、実装前に仕様を確定させる。
 3. テスト: 参照切れ時の description・被参照数・ナビゲーションの成功/失敗パス。
 
 ## 検証
+
+注意: 検証ゲートの `npm run test` は webview の Vite bundle(`packages/extension/dist/webview`)を再ビルドしない。webview 変更を実機確認する前に root の `npm run build` を実行すること(Phase 3 後半の実機確認で判明)。
 
 各 Phase の変更後に必須検証ゲート(`npm run format` / `npm run lint` / `npm run typecheck` / `npm run test`)を通す。Phase 2・3 の完了時には Extension Development Host での実機確認を行い、背景の問題 1〜6 が解消していることを本計画の再現手順(多数 config + profile rename)で確認する。実機確認には次を含める: エディタを開いた際の 3 階層 reveal(VS Code の reveal 展開は最大 3 レベルであり section → file → entry はその上限。テスト stub では実挙動を検証できない)、welcome の 2 態(全空 / 片側空)、checkbox 操作、セクション折りたたみ状態の refresh 跨ぎ保持。
