@@ -1,6 +1,6 @@
 # 改修計画: CONFIGS/PROFILES の単一ビュー統合
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-20、commit `ffd2b61`(branch `feat-single-pane`)。状態: 未着手。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-20、commit `ffd2b61`(branch `feat-single-pane`)。状態: 進行中。
 
 001〜013 と異なり、本計画はバグ修正ではなく UX 改修である。調査は Extension Development Host 上での実機操作(profile 2 件・config 15 件のサンプルワークスペース)に基づく。
 
@@ -41,7 +41,10 @@ LAUNCH COMPOSER                          [+ ▷]   ← view title: Add(QuickPick
 - **セクションの並び順は `Configs` を上**とする。現行の manifest 定義順を踏襲し、チェックボックス切り替えなど日常操作の頻度が高い config 側を上に置く。
 - **config 行の参照 profile 名は常時表示**とする。`excluded`・`N issues` とはカンマ併記。
 - **Phase 3(関係可視化)は Phase 2 完了後に本計画内で続けて実施**する(統合のみで区切らない)。
-- 新 view ID・セクション context value・QuickPick 文言の命名は Phase 0 で確定する。暫定案: view ID `launchComposer.explorer`、context `configsSection` / `profilesSection`、QuickPick 項目「Add Config / Add Profile / New Config File / New Profile File」。既存 `launchComposer.configs` / `launchComposer.profiles` は廃止する。
+- **命名(Phase 0 で確定)**: view ID は `launchComposer.explorer`、表示名は `Launch Composer`。セクション contextValue は既存の単数形 kind プレフィックス規約(`profileFile` / `configEntryEnabled` 等)に合わせ **`configSection` / `profileSection`**、TreeItem.id は `section:config` / `section:profile`(固定 id で折りたたみ状態を保持)。view title の振り分けコマンドは **`launch-composer.add`**(title `Add...`、icon `$(add)`、Command Palette からは `"when": "false"` で隠す)。QuickPick 項目は既存コマンド title の語彙を再利用し「**Add Config / Add Profile / Add Config File / Add Profile File**」(「New ...」は既存 manifest・welcome 文言と不整合になるため不採用)。既存 `launchComposer.configs` / `launchComposer.profiles` は廃止する(ユーザーのサイドバー配置カスタムの記憶は破棄されるが実害なし)。
+- **空状態(Phase 0 で確定)**: `viewsWelcome` は root の `getChildren` が `[]` のときだけ表示されるため、「profile / config の file と issue がすべて 0 件」のとき root で `[]` を返して単一 welcome(`launch-composer.init` リンク)を出す。**片側 kind だけ空の場合はセクションを空のまま表示**し、プレースホルダ子要素は追加しない(file 作成導線はセクション行のインライン「+」)。
+- **QuickPick からの Add Config フロー(Phase 0 で確定)**: profile 側の既存フロー(`selectOrCreateFile` → entry 追加)と同型に、config 版も「file 選択 or 新規作成 → profile 選択 → 名前入力」とする(既存 `addDataEntry('config', file)` の前段に file 選択を足すだけ)。Phase 1 で `extension.md` に仕様として明文化する。
+- **計画 012 との関係**: 014 に吸収せず独立のまま 014 を先行させる。新コマンド `add` は Palette hidden で登録し、012 側は行番号ずれ程度の rebase で済む。
 
 ## 進め方(体制・レビュー・コミット)
 
@@ -80,29 +83,31 @@ LAUNCH COMPOSER                          [+ ▷]   ← view title: Add(QuickPick
 ### 進捗記録
 
 - 2026-07-20: 計画作成。決定事項 3 点(セクション順・profile 名常時表示・Phase 3 継続実施)を確定。
+- 2026-07-20: Phase 1 完了。`ui.md`(UI 構成 / 空状態 2 態 / section node 新設 / view title の Add QuickPick / inline actions / checkbox / reveal)と `extension.md`(単一 TreeView / Add QuickPick フロー / コマンド一覧)を改訂。起草時の判断: welcome 文言は `No profile or config files found. [Initialize Launch Composer](command:launch-composer.init)`、section node は context menu を提供せず inline「+」のみ、invalid file だけが存在する場合は welcome を出さない、Add Config の profile 0 件チェックは file 選択後(既存実装順)。
+- 2026-07-20: Phase 0 完了(実装者による調査をレビュー・裏取りの上で採用)。命名・空状態・Add Config フロー・012 との進め方を確定し、影響範囲とテスト改修対象を Phase 1・2 に注記。実装者の主要な発見: `manifest.test.ts` が commands 配列順と `COMMANDS` 定義順の deepEqual を要求、テスト stub の `reveal` は `getParent` 実装が必須、`workspaceSyncController` は変更不要、既存 id 体系は kind 修飾済みで統合しても衝突なし。
 
-## Phase 0: 設計確定
+## Phase 0: 設計確定(実施済み 2026-07-20)
 
-1. 命名(view ID / セクション context / QuickPick 文言)を確定し、本計画に追記する。
-2. 影響範囲の確認: `package.json` manifest(views / menus / viewsWelcome / commandPalette)、`treeview/provider.ts`、`extension.ts` の TreeView 初期化、`commands/handlers.ts`、`sync/workspaceSyncController.ts` の provider refresh 経路。
-3. 進行中・未着手の関連計画([006](./006-host-webview-error-contract.md)・[007](./007-webview-update-queue-revision.md)・[010](./010-extension-mutation-integrity.md)・[012](./012-command-palette-exposure.md)・[013](./013-workspace-folder-tracking.md))との干渉を確認する。
+1. 命名(view ID / セクション context / QuickPick 文言)を確定し、本計画に追記する。→ 決定事項に反映済み。
+2. 影響範囲の確認: `package.json` manifest(views / menus / viewsWelcome / commandPalette)、`treeview/provider.ts`、`extension.ts` の TreeView 初期化、`commands/handlers.ts`、`sync/workspaceSyncController.ts` の provider refresh 経路。→ 実施済み。`workspaceSyncController.ts` は変更不要([005](./005-sync-cross-kind-diagnostics.md) 以降 sync は常に全体 snapshot を both 適用しており、単一 provider への refresh に自然に縮退する)。既存 TreeItem.id / entryNodes キーはすべて kind 修飾済みで、統合による id 衝突はない。詳細は Phase 1・2 の注記に反映済み。
+3. 関連計画との干渉確認。→ 実施済み。台帳の「計画間の関係」および決定事項(012)に反映。006 とは Phase 3 の新 message 追加で接点があるため、仕様化時に 006 の「全 request に必ず response」方針を先取りする。
 
 ## Phase 1: 仕様改訂(構造統合)
 
 Spec-First Change Routing に従い、実装前に仕様を確定させる。
 
-1. `docs/internal/specs/ui.md`: 「UI 構成」「TreeView」(空状態・セクションノード・view title actions・item context menu・checkbox 操作)を単一ビュー 3 階層構造へ改訂する。file node / entry node の挙動仕様は原則維持し、所属ビューへの言及をセクションへ置き換える。
-2. `docs/internal/specs/extension.md`: TreeView 登録・コマンド一覧(addFile 系の起点、タイトル QuickPick)・sync の記述を更新する。
+1. `docs/internal/specs/ui.md`: 「UI 構成」「TreeView」(空状態・セクションノード・view title actions・item context menu・checkbox 操作)を単一ビュー 3 階層構造へ改訂する。file node / entry node の挙動仕様は原則維持し、所属ビューへの言及をセクションへ置き換える。空状態は「全空 → 単一 welcome(`launch-composer.init` リンク)」「片側空 → 空セクションのまま(プレースホルダなし)」の 2 態を明記する。セクション行のインラインアクション(Add Config File / Add Profile File)も定義する。
+2. `docs/internal/specs/extension.md`: TreeView 登録・コマンド一覧・sync の記述を更新する。具体差分: `launch-composer.add`(QuickPick 振り分け、Palette hidden)の追加、`addProfileFile` / `addConfigFile` の起点変更(view title → セクション inline)、QuickPick からの Add Config フロー(file 選択 or 新規作成 → profile 選択 → 名前入力)の明文化。
 3. `docs/internal/specs/README.md` のパッケージ責務記述に影響があれば追従する。
 4. TreeView 単一化により `reveal` が kind 横断で一意になることを仕様として明記する(`TreeView.reveal` の挙動は [003](./003-treeview-reveal.md) の成果を引き継ぐ)。
 
 ## Phase 2: 実装(構造統合)
 
 1. `package.json` manifest: views を 1 件に、`view/title` / `view/item/context` / `viewsWelcome` / `commandPalette` を新 view ID・セクション context に合わせて書き換える。
-2. `treeview/provider.ts`: kind 別 2 インスタンス構成を単一 provider に変更。`TreeNode` に `SectionNode` を追加し、`getChildren` / `getParent` / `reveal` を section → file → entry の 3 階層に対応させる。
+2. `treeview/provider.ts`: kind 別 2 インスタンス構成を単一 provider に変更。`TreeNode` に `SectionNode` を追加し、`getChildren` / `getParent` / `reveal` を section → file → entry の 3 階層に対応させる。実装上の制約: (a) `TreeView.reveal` は `getParent` の返す親と `getChildren` の返す要素の同一性に依存するため、SectionNode は refresh を跨いで同一インスタンスをフィールドに保持し、固定 id `section:<kind>` を付ける。(b) snapshot 未設定時の `store.readAll()` フォールバックがセクションごとに走らないよう、root 呼び出し時に一括 read して保持する。(c) `FileNode` の shape 変更はテストヘルパのリテラル構築(`configFileNode()` 等)を壊すため、parent 参照を持たせる場合は optional にする。
 3. `extension.ts` / `sync/workspaceSyncController.ts`: TreeView 生成と refresh を 1 系統に統合する([005](./005-sync-cross-kind-diagnostics.md) で導入した「全体 snapshot を両 kind に適用する」経路はそのまま単一 provider への適用になる)。
 4. `commands/handlers.ts`: view title「+」の QuickPick 振り分けコマンドを追加する。既存の addFile / addEntry / file・entry 操作コマンドは流用する。
-5. テスト: provider の 3 階層構造・セクション context・reveal・welcome 条件を extension テストの流儀で追加/更新する。
+5. テスト: provider の 3 階層構造・セクション context・reveal・welcome 条件(root 空判定)・QuickPick 振り分けを extension テストの流儀で追加/更新する。既存テストの改修対象: `treeProvider.test.ts`(コンストラクタと階層前提の全面改修)、`manifest.test.ts`(views / when 句 / commands 配列 / inline menu の期待値。`views.explorer === undefined` の assertion は新 view ID と紛らわしいため書き換える)、`extensionCommands.test.ts`(`getCreatedTreeView` の view ID)。注意: `manifest.test.ts` は `contributes.commands` の配列順と `COMMANDS` 定義順の deepEqual を検査するため、新コマンドの挿入位置を両方で揃える。
 
 ## Phase 3: 関係可視化(仕様改訂 + 実装)
 
@@ -112,4 +117,4 @@ Spec-First Change Routing に従い、実装前に仕様を確定させる。
 
 ## 検証
 
-各 Phase の変更後に必須検証ゲート(`npm run format` / `npm run lint` / `npm run typecheck` / `npm run test`)を通す。Phase 2・3 の完了時には Extension Development Host での実機確認を行い、背景の問題 1〜6 が解消していることを本計画の再現手順(多数 config + profile rename)で確認する。
+各 Phase の変更後に必須検証ゲート(`npm run format` / `npm run lint` / `npm run typecheck` / `npm run test`)を通す。Phase 2・3 の完了時には Extension Development Host での実機確認を行い、背景の問題 1〜6 が解消していることを本計画の再現手順(多数 config + profile rename)で確認する。実機確認には次を含める: エディタを開いた際の 3 階層 reveal(VS Code の reveal 展開は最大 3 レベルであり section → file → entry はその上限。テスト stub では実挙動を検証できない)、welcome の 2 態(全空 / 片側空)、checkbox 操作、セクション折りたたみ状態の refresh 跨ぎ保持。

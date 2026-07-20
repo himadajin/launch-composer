@@ -9,7 +9,7 @@ Extension Host は VS Code と Launch Composer のデータモデルを接続す
 - `.vscode/launch-composer/` 以下の JSONC ファイルを読む
 - JSONC ファイルへ部分更新を書く
 - `@launch-composer/core` を呼び出して `launch.json` を生成する
-- TreeView と Webview Panel を管理する
+- 単一の TreeView(`launchComposer.explorer`)と Webview Panel を管理する
 - VS Code コマンド、設定、FileSystemWatcher を登録する
 
 core はファイル I/O を持たない。argsFile の読み取りも Extension Host が行い、core には `readArgsFile` callback として渡す。
@@ -310,7 +310,7 @@ issue notification:
 
 現在 Webview で開いている entry のファイルが invalid になった場合、panel は閉じず、invalid file の初期データを送って read-only 表示へ切り替える。対象 entry がなくなった場合は panel を閉じる。
 
-profile/config どちらの watcher event でも、workspace 全体から再計算した Generate readiness を使って両方の TreeView を更新する。片側の data 変更でも、参照切れ、名前重複、argsFile 競合など反対側に配置される diagnostic が変化しうるためである。
+profile/config どちらの watcher event でも、workspace 全体から再計算した Generate readiness を使って TreeView 全体(両 section)を更新する。片側 kind の data 変更でも、参照切れ、名前重複、argsFile 競合など反対側 kind の node に配置される diagnostic が変化しうるためである。
 
 profile の更新は、open config editor にも workspace update を送る。config editor は profile selector の候補を更新する必要があるためである。config の更新も open profile editor に workspace update を送り、workspace 全体の Generate readiness を最新化する。反対側 kind の部分 snapshot は editor data 自体を置き換えず、全体 readiness と該当 kind の workspace data だけを更新する。
 
@@ -332,12 +332,38 @@ profile の更新は、open config editor にも workspace update を送る。co
 
 すべての contributed command は `workspaceFolderCount == 1` の enablement を持つ。これは VS Code UI 上の enablement であり、Extension Host は workspace folder が 1 件でない場合も同じ command ID を runtime guard 用に登録する。
 
+### view title の Add QuickPick
+
+`launch-composer.add` は TreeView の view title「+」から実行する振り分けコマンドである。QuickPick に次の 4 項目を表示し、選択された項目の操作へ振り分ける。QuickPick を選択せず閉じた場合は何も変更しない。
+
+- `Add Config`
+- `Add Profile`
+- `Add Config File`
+- `Add Profile File`
+
+`Add Profile File` / `Add Config File` は `launch-composer.addProfileFile` / `launch-composer.addConfigFile` と同じ file 作成フローである。
+
+`Add Profile` は `launch-composer.addProfile` と同じフローである。
+
+1. profile file を QuickPick で選択する。`Create new file` を選んだ場合はファイル名を入力して profile file を作成する。
+2. profile 名を入力して entry を追加する。
+
+`Add Config` は profile 側と同型のフローとする。
+
+1. config file を QuickPick で選択する。`Create new file` を選んだ場合はファイル名を入力して config file を作成する。
+2. profile を選択する。利用可能な profile が 0 件の場合は「entry 追加」の規定に従い `Create a profile before adding a config.` を表示する。
+3. config 名を入力して entry を追加する。
+
+いずれのフローも、途中の入力・選択がキャンセルされた場合は何も変更しない。
+
 ### TreeView / Webview 用 command
 
+- command ID: `launch-composer.add`
+  - 主な用途: view title「+」の Add QuickPick(振り分け)
 - command ID: `launch-composer.addProfileFile`
-  - 主な用途: profile file 作成
+  - 主な用途: profile file 作成(`Profiles` section の inline action と Add QuickPick から実行)
 - command ID: `launch-composer.addConfigFile`
-  - 主な用途: config file 作成
+  - 主な用途: config file 作成(`Configs` section の inline action と Add QuickPick から実行)
 - command ID: `launch-composer.addProfileEntry`
   - 主な用途: profile entry 追加
 - command ID: `launch-composer.addConfigEntry`

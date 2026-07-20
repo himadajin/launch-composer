@@ -4,16 +4,13 @@
 
 ## UI 構成
 
-Launch Composer は Activity Bar に `Launch Composer` view container を追加し、その中に 2 つの TreeView を表示する。
+Launch Composer は Activity Bar に `Launch Composer` view container を追加し、その中に単一の TreeView を表示する。
 
-- view ID: `launchComposer.configs`
-  - 表示名: `CONFIGS`
-  - 役割: config file / entry
-- view ID: `launchComposer.profiles`
-  - 表示名: `PROFILES`
-  - 役割: profile file / entry
+- view ID: `launchComposer.explorer`
+  - 表示名: `Launch Composer`
+  - 役割: config / profile の file と entry を 1 本のツリーで表示する
 
-manifest 上の view 定義順は `CONFIGS`、`PROFILES` である。
+TreeView は section node → file node → entry node の 3 階層である。root 直下に 2 つの section node を置き、並び順は `Configs`、`Profiles` である。
 
 編集フォームは Webview Panel として editor area に開く。TreeView は VS Code TreeView API、編集フォームは React 19 + `@himadajin/vscode-components` で実装する。
 
@@ -21,14 +18,29 @@ manifest 上の view 定義順は `CONFIGS`、`PROFILES` である。
 
 ### 空状態
 
-対象 directory が未作成、または `.json` file がない場合、VS Code の `viewsWelcome` を表示する。
+空状態は 2 態を区別する。
 
-- view: PROFILES
-  - welcome content: `No profile files found. [Create Profile File]`
-- view: CONFIGS
-  - welcome content: `No config files found. [Create Config File]`
+profile と config の両方で、対象 directory が未作成または `.json` file(invalid file を含む)が 1 件もない場合、TreeView の root を空にして VS Code の `viewsWelcome` を表示する。
 
-リンクは対応する file 作成 command を実行する。
+- view: `launchComposer.explorer`
+  - welcome content: `No profile or config files found. [Initialize Launch Composer](command:launch-composer.init)`
+
+リンクは `launch-composer.init` を実行する。
+
+片方の kind にだけ file がない場合は welcome を表示せず、両方の section node を表示する。file のない section は子要素なしの空のままにし、プレースホルダ項目は追加しない。file 作成の導線は section node の inline action である。
+
+### section node
+
+section node は root 直下の仮想ノードであり、workspace 上の file には対応しない。
+
+- 並び順: `Configs`、`Profiles`
+- label: `Configs` / `Profiles`
+- context: `configSection` / `profileSection`
+- TreeItem の `id`: `section:config` / `section:profile` の固定値(refresh を跨いで折りたたみ状態を保持する)
+- collapsible: expanded
+- children: 対応する kind の file node
+- checkbox は表示しない
+- 既定 action はない(クリックは折りたたみ切り替えのみ)
 
 ### file node
 
@@ -105,14 +117,23 @@ entry に generate diagnostic がある場合:
 
 ### view title actions
 
-- view: PROFILES
-  - action: `launch-composer.addProfileFile` (`$(add)`)
-- view: CONFIGS
-  - action: `launch-composer.addConfigFile` (`$(add)`)
-- view: CONFIGS
-  - action: `launch-composer.generate` (`$(play)`)
+- action: `launch-composer.add` (`$(add)`)
+- action: `launch-composer.generate` (`$(play)`)
+
+`launch-composer.add` は QuickPick を開き、選択された項目の操作へ振り分ける。
+
+- `Add Config`: config entry 追加
+- `Add Profile`: profile entry 追加
+- `Add Config File`: config file 作成
+- `Add Profile File`: profile file 作成
+
+QuickPick を選択せず閉じた場合は何もしない。振り分け先の各フローは [extension.md](./extension.md) を参照する。
 
 ### item context menu
+
+section node:
+
+- context menu は提供しない
 
 profile file:
 
@@ -146,6 +167,7 @@ config entry では状態に応じて Include / Exclude を最上段に表示す
 
 inline actions:
 
+- section node: 対応する kind の file 作成(`Configs`: `launch-composer.addConfigFile`、`Profiles`: `launch-composer.addProfileFile`。いずれも `$(add)`)
 - file node: Add Entry
 - entry node: Open JSON (`$(go-to-file)`)
 
@@ -153,7 +175,7 @@ inline actions:
 
 ### checkbox 操作
 
-CONFIGS TreeView は `manageCheckboxStateManually: true` で作成する。
+TreeView は `manageCheckboxStateManually: true` で作成する。checkbox を表示するのは config entry だけである。
 
 checkbox 操作は即座に JSONC file へ書き込む。
 
@@ -180,7 +202,7 @@ Webview 内 header:
 
 editor identity は `kind:file:index` である。同じ kind の別 entry を含め、identity が変わった場合はフォームを新しい editor として初期化し、前の entry のローカル入力と未発火の debounce 保存を破棄する。
 
-TreeView entry を開いたとき、対応する TreeView item を `TreeView.reveal()` で選択状態にし、祖先を展開する。editor から TreeView へ focus は移さない。panel を閉じた後の選択解除は実装対象外である。
+TreeView entry を開いたとき、対応する TreeView item を `TreeView.reveal()` で選択状態にし、祖先(section node と file node)を展開する。TreeView は単一のため、選択は profile / config を横断して常に高々 1 項目である。editor から TreeView へ focus は移さない。panel を閉じた後の選択解除は実装対象外である。
 
 ### JSON を開く導線
 
