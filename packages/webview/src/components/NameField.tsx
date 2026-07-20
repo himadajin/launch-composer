@@ -42,12 +42,7 @@ export function NameField({
   };
 
   return (
-    <FormGroup
-      category="Launch Composer"
-      label={label}
-      description={description}
-      helper={helper}
-    >
+    <FormGroup label={label} description={description} helper={helper}>
       <TextInput
         disabled={readOnly}
         value={name}
