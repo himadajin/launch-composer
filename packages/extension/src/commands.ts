@@ -26,6 +26,7 @@ export const COMMANDS = {
   copyItemFileRelativePath: 'launch-composer.copyItemFileRelativePath',
   renameItem: 'launch-composer.renameItem',
   deleteItem: 'launch-composer.deleteItem',
+  goToProfile: 'launch-composer.goToProfile',
   includeConfig: 'launch-composer.includeConfig',
   excludeConfig: 'launch-composer.excludeConfig',
   toggleIncluded: 'launch-composer.toggleIncluded',

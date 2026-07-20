@@ -205,6 +205,11 @@
         "enablement": "workspaceFolderCount == 1"
       },
       {
+        "command": "launch-composer.goToProfile",
+        "title": "Go to Profile",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
         "command": "launch-composer.includeConfig",
         "title": "Include",
         "enablement": "workspaceFolderCount == 1"
@@ -315,6 +320,11 @@
           "command": "launch-composer.excludeConfig",
           "when": "viewItem == configEntryEnabled",
           "group": "0_state@1"
+        },
+        {
+          "command": "launch-composer.goToProfile",
+          "when": "viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "group": "1_navigate@1"
         },
         {
           "command": "launch-composer.deleteConfigFile",
@@ -463,6 +473,10 @@
         },
         {
           "command": "launch-composer.deleteItem",
+          "when": "false"
+        },
+        {
+          "command": "launch-composer.goToProfile",
           "when": "false"
         },
         {

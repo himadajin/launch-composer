@@ -61,6 +61,7 @@ interface ConfigEditorProps {
   onChange: (change: EntryChange<ConfigData>) => void;
   onRename: (name: string) => Promise<void>;
   onOpenJson: () => void;
+  onOpenProfile: (profileName: string) => void;
   readOnlyIssue?: ComposerDataIssue | undefined;
 }
 
@@ -74,6 +75,7 @@ export function ConfigEditor({
   onChange,
   onRename,
   onOpenJson,
+  onOpenProfile,
   readOnlyIssue,
 }: ConfigEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
@@ -152,19 +154,36 @@ export function ConfigEditor({
           description="Profile used as the base for this config."
           helper={renderHelperMessages(profileHelperMessages)}
         >
-          <Select
-            disabled={readOnly || profileSelect.disabled}
-            enum={profileSelect.options}
-            enumItemLabels={profileSelect.optionLabels}
-            value={profileSelect.value}
-            onChange={(value) => {
-              if (readOnly || isInternalProfileSelectValue(value)) {
-                return;
-              }
+          <div className="composer-input-action-row">
+            <Select
+              disabled={readOnly || profileSelect.disabled}
+              enum={profileSelect.options}
+              enumItemLabels={profileSelect.optionLabels}
+              value={profileSelect.value}
+              onChange={(value) => {
+                if (readOnly || isInternalProfileSelectValue(value)) {
+                  return;
+                }
 
-              onChange(updateConfigProfile(data, value));
-            }}
-          />
+                onChange(updateConfigProfile(data, value));
+              }}
+            />
+            <Button
+              icon="go-to-file"
+              type="button"
+              variant="secondary"
+              disabled={readOnly || currentProfile === undefined}
+              onClick={() => {
+                if (readOnly || currentProfile === undefined) {
+                  return;
+                }
+
+                onOpenProfile(currentProfile.name);
+              }}
+            >
+              Go to Profile
+            </Button>
+          </div>
         </FormGroup>
 
         <FormGroup

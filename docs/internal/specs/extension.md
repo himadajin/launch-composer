@@ -356,6 +356,19 @@ profile の更新は、open config editor にも workspace update を送る。co
 
 いずれのフローも、途中の入力・選択がキャンセルされた場合は何も変更しない。
 
+### Go to Profile
+
+`launch-composer.goToProfile` は config entry の context menu から実行し、参照 profile の editor を開くコマンドである。Webview の `open-profile` request も同じ解決規則を使う。
+
+profile 名から editor target への解決規則:
+
+1. 参照 profile 名が未設定(string でない、または空白のみ)の場合、`This config does not reference a profile.` を information message で表示して終了する。
+2. profile file をファイル名昇順に走査し、各 file 内は配列順で、`name` が参照 profile 名と完全一致する最初の profile entry を対象にする(同名 profile が複数ある場合は最初の 1 件)。invalid file は走査対象に含めない。
+3. 一致する entry がない場合、`Profile "<name>" was not found.` を information message で表示して終了する。
+4. 一致した entry を通常の editor open 経路(editor panel の切り替え + TreeView reveal)で開く。
+
+未設定・missing は error ではなく information message として扱う。
+
 ### TreeView / Webview 用 command
 
 - command ID: `launch-composer.add`
@@ -400,6 +413,8 @@ profile の更新は、open config editor にも workspace update を送る。co
   - 主な用途: config file delete
 - command ID: `launch-composer.deleteItem`
   - 主な用途: entry delete
+- command ID: `launch-composer.goToProfile`
+  - 主な用途: config entry の参照 profile を開く
 - command ID: `launch-composer.includeConfig`
   - 主な用途: config entry を生成対象に戻す
 - command ID: `launch-composer.excludeConfig`

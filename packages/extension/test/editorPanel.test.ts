@@ -14,8 +14,14 @@ const testVscode = vscode as typeof vscode & {
     reset(): void;
     createExtensionContext(): unknown;
     getErrorMessages(): string[];
+    getInfoMessages(): string[];
     getLastCreatedWebviewPanel():
-      | { disposed: boolean; title: string; postedMessages: unknown[] }
+      | {
+          disposed: boolean;
+          title: string;
+          postedMessages: unknown[];
+          receiveMessage(message: unknown): Promise<void>;
+        }
       | undefined;
   };
 };
@@ -1046,4 +1052,221 @@ test('an opposite-kind workspace update does not close an editor whose cached ta
       generateReadiness: READY_TO_GENERATE,
     },
   });
+});
+
+test('open-profile message switches the editor to the referenced profile and responds with success', async () => {
+  const store = {
+    async readAll() {
+      return withReadiness({
+        profiles: [
+          {
+            file: 'profile.json',
+            profiles: [{ name: 'cpp' }],
+          },
+        ],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch', profile: 'cpp' }],
+          },
+        ],
+        issues: [],
+      });
+    },
+    async getDataFileRevision() {
+      return 'rev:open-profile';
+    },
+    async findProfileTarget(name: string) {
+      return name === 'cpp'
+        ? { kind: 'profile' as const, file: 'profile.json', index: 0 }
+        : undefined;
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'findProfileTarget'
+  > as WorkspaceStore;
+
+  const revealedTargets: unknown[] = [];
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal(target) {
+      revealedTargets.push(target);
+    },
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.equal(panel.title, 'Launch');
+
+  await panel.receiveMessage({
+    type: 'open-profile',
+    requestId: 'req-open-profile',
+    payload: { profileName: 'cpp' },
+  });
+
+  assert.equal(panel.title, 'cpp');
+  assert.deepEqual(revealedTargets.at(-1), {
+    kind: 'profile',
+    file: 'profile.json',
+    index: 0,
+  });
+  const response = panel.postedMessages.find(
+    (message) => (message as { type?: string }).type === 'open-profile-result',
+  );
+  assert.deepEqual(response, {
+    type: 'open-profile-result',
+    requestId: 'req-open-profile',
+    payload: { success: true },
+  });
+  const lastMessage = panel.postedMessages.at(-1) as {
+    type: string;
+    payload: { editor?: unknown };
+  };
+  assert.equal(lastMessage.type, 'open-profile-result');
+  const initialDataMessages = panel.postedMessages.filter(
+    (message) => (message as { type?: string }).type === 'initial-data',
+  ) as Array<{ payload: { editor: unknown } }>;
+  assert.deepEqual(initialDataMessages.at(-1)?.payload.editor, {
+    kind: 'profile',
+    file: 'profile.json',
+    index: 0,
+  });
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), []);
+});
+
+test('open-profile message reports missing profiles without switching the editor', async () => {
+  const store = {
+    async readAll() {
+      return withReadiness({
+        profiles: [],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch', profile: 'ghost' }],
+          },
+        ],
+        issues: [],
+      });
+    },
+    async getDataFileRevision() {
+      return 'rev:open-profile-missing';
+    },
+    async findProfileTarget() {
+      return undefined;
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'findProfileTarget'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+
+  await panel.receiveMessage({
+    type: 'open-profile',
+    requestId: 'req-open-missing',
+    payload: { profileName: 'ghost' },
+  });
+
+  assert.equal(panel.title, 'Launch');
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'open-profile-result',
+    requestId: 'req-open-missing',
+    payload: { success: false },
+  });
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Profile "ghost" was not found.',
+  ]);
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+});
+
+test('open-profile message responds with the error when resolution fails', async () => {
+  const store = {
+    async readAll() {
+      return withReadiness({
+        profiles: [],
+        configs: [
+          {
+            file: 'config.json',
+            configurations: [{ name: 'Launch', profile: 'cpp' }],
+          },
+        ],
+        issues: [],
+      });
+    },
+    async getDataFileRevision() {
+      return 'rev:open-profile-error';
+    },
+    async findProfileTarget(): Promise<never> {
+      throw new Error('Profile directory is unreadable.');
+    },
+  } as Pick<
+    WorkspaceStore,
+    'readAll' | 'getDataFileRevision' | 'findProfileTarget'
+  > as WorkspaceStore;
+
+  const controller = new EditorPanelController({
+    context:
+      testVscode.__testing.createExtensionContext() as vscode.ExtensionContext,
+    store,
+    onDidMutate() {},
+    async onDidReveal() {},
+    async onDidGenerate() {
+      return { success: true };
+    },
+  });
+
+  await controller.open({
+    kind: 'config',
+    file: 'config.json',
+    index: 0,
+  });
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+
+  await panel.receiveMessage({
+    type: 'open-profile',
+    requestId: 'req-open-error',
+    payload: { profileName: 'cpp' },
+  });
+
+  assert.deepEqual(panel.postedMessages.at(-1), {
+    type: 'open-profile-result',
+    requestId: 'req-open-error',
+    payload: { success: false, error: 'Profile directory is unreadable.' },
+  });
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), [
+    'Profile directory is unreadable.',
+  ]);
 });

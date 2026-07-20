@@ -717,3 +717,93 @@ test('generate tolerates FileSystemError-wrapped ENOENT when launch.json does no
       '}\n',
   );
 });
+
+test('goToProfile opens the referenced profile editor and reveals it', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspace = workspaceUri('go-to-profile-project');
+  testVscode.__testing.setWorkspaceFolders([workspace.fsPath]);
+
+  const store = new WorkspaceStore(workspace);
+  await store.addProfileEntry('profile.json', 'cpp');
+  await store.addConfigEntry('config.json', 'Launch', 'cpp');
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.goToProfile, {
+    type: 'entry',
+    target: { kind: 'config', file: 'config.json', index: 0 },
+    label: 'Launch',
+    included: true,
+    profileName: 'cpp',
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), []);
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.equal(panel.title, 'cpp');
+
+  const treeView = testVscode.__testing.getCreatedTreeView(
+    'launchComposer.explorer',
+  );
+  assert.ok(treeView);
+  const revealCalls = treeView.getRevealCalls() as Array<{
+    element: { type: string; target?: unknown };
+  }>;
+  const lastReveal = revealCalls.at(-1);
+  assert.ok(lastReveal);
+  assert.equal(lastReveal.element.type, 'entry');
+  assert.deepEqual(lastReveal.element.target, {
+    kind: 'profile',
+    file: 'profile.json',
+    index: 0,
+  });
+});
+
+test('goToProfile shows guidance when the config does not reference a profile', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/go-to-profile-unset-project',
+  ]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.goToProfile, {
+    type: 'entry',
+    target: { kind: 'config', file: 'config.json', index: 0 },
+    label: 'Launch',
+    included: true,
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'This config does not reference a profile.',
+  ]);
+  assert.equal(testVscode.__testing.getLastCreatedWebviewPanel(), undefined);
+});
+
+test('goToProfile shows guidance when the referenced profile is missing', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspace = workspaceUri('go-to-profile-missing-project');
+  testVscode.__testing.setWorkspaceFolders([workspace.fsPath]);
+
+  const store = new WorkspaceStore(workspace);
+  await store.addConfigEntry('config.json', 'Launch', 'ghost');
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.goToProfile, {
+    type: 'entry',
+    target: { kind: 'config', file: 'config.json', index: 0 },
+    label: 'Launch',
+    included: true,
+    profileName: 'ghost',
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Profile "ghost" was not found.',
+  ]);
+  assert.equal(testVscode.__testing.getLastCreatedWebviewPanel(), undefined);
+});

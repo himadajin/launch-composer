@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { COMMANDS } from '../commands.js';
+import { openReferencedProfile } from './goToProfile.js';
 import type { WorkspaceStore } from '../io/workspaceStore.js';
 import type { MutationResult } from '../io/workspaceMutations.js';
 import type { DataFileKind } from '../io/workspaceLayout.js';
@@ -413,6 +414,18 @@ export function registerWorkspaceCommands(
 
       await store.deleteEntry(entryNode.target);
       await sync();
+    }),
+    registerSafeCommand(COMMANDS.goToProfile, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined || entryNode.target.kind !== 'config') {
+        return;
+      }
+
+      await openReferencedProfile(
+        store,
+        (target) => editorPanel.open(target),
+        entryNode.profileName,
+      );
     }),
     registerSafeCommand(COMMANDS.includeConfig, (node?: TreeNode) =>
       setConfigIncluded(node, true, store, syncChangedConfigFile),

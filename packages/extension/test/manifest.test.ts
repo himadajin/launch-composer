@@ -166,6 +166,15 @@ test('package.json command contributions stay aligned with the extension impleme
   assert.ok(
     itemContextMenu.some(
       (item) =>
+        item.command === 'launch-composer.goToProfile' &&
+        item.when ===
+          'viewItem == configEntryEnabled || viewItem == configEntryDisabled' &&
+        item.group === '1_navigate@1',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.some(
+      (item) =>
         item.command === 'launch-composer.includeAllConfigs' &&
         item.when ===
           'view == launchComposer.explorer && viewItem == configFile' &&
@@ -219,6 +228,12 @@ test('package.json command contributions stay aligned with the extension impleme
   assert.ok(
     commandPalette.some(
       (item) => item.command === 'launch-composer.add' && item.when === 'false',
+    ),
+  );
+  assert.ok(
+    commandPalette.some(
+      (item) =>
+        item.command === 'launch-composer.goToProfile' && item.when === 'false',
     ),
   );
   assert.ok(

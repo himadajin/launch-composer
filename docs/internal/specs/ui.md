@@ -166,7 +166,7 @@ config file:
 - Rename
 - Delete
 
-profile/config entry:
+profile entry:
 
 - Open
 - Copy Path
@@ -174,7 +174,18 @@ profile/config entry:
 - Rename
 - Delete
 
-config entry では状態に応じて Include / Exclude を最上段に表示する。
+config entry:
+
+- Go to Profile
+- Open
+- Copy Path
+- Copy Relative Path
+- Rename
+- Delete
+
+config entry では状態に応じて Include / Exclude を最上段に表示し、Go to Profile はその下・Open の上に表示する。
+
+Go to Profile は参照 profile の未設定・missing に関わらず常に表示する。実行時の解決規則と未設定・missing 時の information message は [extension.md](./extension.md) の Go to Profile を参照する。
 
 inline actions:
 
@@ -329,8 +340,8 @@ config editor のフォーム項目:
   - 保存方法: blur / Enter で rename request
 - 表示ラベル: `Config: Profile`
   - JSON path: `profile`
-  - control: `Select`
-  - 保存方法: 即時 patch
+  - control: `Select` + `Go to Profile` button
+  - 保存方法: 即時 patch(Select のみ。button は保存しない)
 - 表示ラベル: `Config: Include`
   - UI state: included
   - JSON path: `excluded`（inverse persistence）
@@ -352,6 +363,14 @@ config editor のフォーム項目:
   - JSON path: `args`
   - control: `ListEditor`
   - 保存方法: 変更操作完了時に即時 patch
+
+`Go to Profile` button は Profile select と同じ行に表示する secondary button である。クリックすると `open-profile` request を送り、参照 profile の editor へ切り替える([communication.md](./communication.md) の `open-profile` を参照)。次の場合は disabled にする。
+
+- 対象 file が invalid で editor が read-only の場合
+- `profile` が未設定(string でない、または空文字)の場合
+- `profile` が profile 候補に存在しない(missing)場合
+
+button による editor の切り替えは editor identity の変更として扱い、前の entry のローカル入力と未発火の debounce 保存の破棄は「Webview Editor」の editor identity 仕様に従う。
 
 config editor は `configuration.type`、`configuration.request`、`configuration.program` をフォーム項目として表示しない。Generate 時、config の `configuration` にこれらの key がある場合は core validation error になるため、通常は profile 側で管理する。
 
