@@ -41,6 +41,15 @@ export const testVscode = vscode as typeof vscode & {
           fireCheckboxChange(event: {
             items: Array<[unknown, vscode.TreeItemCheckboxState]>;
           }): Promise<void>;
+          getRevealCalls(): Array<{ element: unknown; options: unknown }>;
+        }
+      | undefined;
+    getLastCreatedWebviewPanel():
+      | {
+          disposed: boolean;
+          title: string;
+          postedMessages: unknown[];
+          receiveMessage(message: unknown): Promise<void>;
         }
       | undefined;
   };

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { COMMANDS } from '../commands.js';
+import { openReferencedProfile } from './goToProfile.js';
 import type { WorkspaceStore } from '../io/workspaceStore.js';
 import type { MutationResult } from '../io/workspaceMutations.js';
 import type { DataFileKind } from '../io/workspaceLayout.js';
@@ -18,6 +19,9 @@ import type { EditorPanelController } from '../webview/editorPanel.js';
 
 type ProfileSelectionItem =
   { label: string; value: string; description?: string } | vscode.QuickPickItem;
+
+type AddQuickPickAction =
+  'addConfig' | 'addProfile' | 'addConfigFile' | 'addProfileFile';
 
 const DATA_FILE_COMMANDS = {
   profile: {
@@ -190,25 +194,68 @@ export function registerWorkspaceCommands(
     await editorPanel.open(target);
   };
 
+  const createDataFile = async (kind: DataFileKind): Promise<void> => {
+    const file = await promptForNonEmptyInput(
+      DATA_FILE_COMMANDS[kind].fileNamePlaceHolder,
+      'A file name is required.',
+    );
+    if (file === undefined) {
+      return;
+    }
+
+    const created = await store.createDataFile(kind, file);
+    await sync();
+    void vscode.window.showInformationMessage(`Created ${created}.`);
+  };
+
+  const handleAddConfig = async (): Promise<void> => {
+    const file = await selectOrCreateFile(store, 'config');
+    if (file === undefined) {
+      return;
+    }
+
+    await addDataEntry('config', file);
+  };
+
+  const handleAdd = async (): Promise<void> => {
+    const selection = await vscode.window.showQuickPick<
+      vscode.QuickPickItem & { value: AddQuickPickAction }
+    >(
+      [
+        { label: 'Add Config', value: 'addConfig' },
+        { label: 'Add Profile', value: 'addProfile' },
+        { label: 'Add Config File', value: 'addConfigFile' },
+        { label: 'Add Profile File', value: 'addProfileFile' },
+      ],
+      { placeHolder: 'Choose what to add' },
+    );
+    if (selection === undefined) {
+      return;
+    }
+
+    switch (selection.value) {
+      case 'addConfig':
+        await handleAddConfig();
+        return;
+      case 'addProfile':
+        await handleAddProfile();
+        return;
+      case 'addConfigFile':
+        await createDataFile('config');
+        return;
+      case 'addProfileFile':
+        await createDataFile('profile');
+        return;
+    }
+  };
+
   const registerDataFileCommands = (
     kind: DataFileKind,
   ): vscode.Disposable[] => {
     const commands = DATA_FILE_COMMANDS[kind];
 
     return [
-      registerSafeCommand(commands.addFile, async () => {
-        const file = await promptForNonEmptyInput(
-          commands.fileNamePlaceHolder,
-          'A file name is required.',
-        );
-        if (file === undefined) {
-          return;
-        }
-
-        const created = await store.createDataFile(kind, file);
-        await sync();
-        void vscode.window.showInformationMessage(`Created ${created}.`);
-      }),
+      registerSafeCommand(commands.addFile, () => createDataFile(kind)),
       registerSafeCommand(commands.openJson, async (node?: TreeNode) => {
         const fileNode = getFileNode(node, kind);
         if (fileNode === undefined) {
@@ -286,6 +333,7 @@ export function registerWorkspaceCommands(
     registerSafeCommand(COMMANDS.generate, handleGenerate),
     registerSafeCommand(COMMANDS.init, handleInitialize),
     registerSafeCommand(COMMANDS.addProfile, handleAddProfile),
+    registerSafeCommand(COMMANDS.add, handleAdd),
     ...registerDataFileCommands('profile'),
     ...registerDataFileCommands('config'),
     registerSafeCommand(COMMANDS.includeAllConfigs, (node?: TreeNode) =>
@@ -366,6 +414,18 @@ export function registerWorkspaceCommands(
 
       await store.deleteEntry(entryNode.target);
       await sync();
+    }),
+    registerSafeCommand(COMMANDS.goToProfile, async (node?: TreeNode) => {
+      const entryNode = getEntryNode(node);
+      if (entryNode === undefined || entryNode.target.kind !== 'config') {
+        return;
+      }
+
+      await openReferencedProfile(
+        store,
+        (target) => editorPanel.open(target),
+        entryNode.profileName,
+      );
     }),
     registerSafeCommand(COMMANDS.includeConfig, (node?: TreeNode) =>
       setConfigIncluded(node, true, store, syncChangedConfigFile),

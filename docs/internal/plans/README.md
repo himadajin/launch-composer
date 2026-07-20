@@ -25,26 +25,28 @@
 
 ## 台帳
 
-優先度は計画作成時点の暫定評価(実害の大きさ × 確信度)。001〜013 は 2026-07-19 時点(commit `22a58d5`)のコードベース全体調査に基づく。調査時、静的検証(lint / typecheck / 全テスト)はすべてパスしており、問題はコードレビューにより検出した。
+優先度は計画作成時点の暫定評価(実害の大きさ × 確信度)。001〜013 は 2026-07-19 時点(commit `22a58d5`)のコードベース全体調査に基づく。調査時、静的検証(lint / typecheck / 全テスト)はすべてパスしており、問題はコードレビューにより検出した。014 は 2026-07-20 時点(commit `ffd2b61`)の実機操作による UX 検討に基づく機能改修である。
 
-| 番号 | 計画                                                                               | 優先度 | 状態                   | 概要                                                                                                     |
-| ---- | ---------------------------------------------------------------------------------- | ------ | ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| 001  | [webview エディタ state のエントリ間分離](./001-webview-editor-state-isolation.md) | 高     | 完了(commit `ff28fa8`) | エントリ切替時に編集中テキストが別エントリに書き込まれる、rename 失敗時に表示が復元されない、ほか        |
-| 002  | [core 検証の入力ガード](./002-core-validation-input-guards.md)                     | 高     | 完了(commit `f6ded80`) | 手編集 JSON の `null` エントリ等で検証が未処理例外でクラッシュする                                       |
-| 003  | [TreeView reveal の修正](./003-treeview-reveal.md)                                 | 高     | 完了(commit `f6ded80`) | エディタを開いた際のツリー項目選択(`reveal`)が常に no-op、`getParent` も未実装                           |
-| 004  | [Watcher エコーフィルタの期待リーク](./004-watcher-echo-filter-leak.md)            | 高     | 完了(commit `f6ded80`) | 書き込みが発生しなかった操作でも「次のイベントを無視する」期待が登録され、本物の外部編集が飲み込まれる   |
-| 005  | [kind 横断の generate 診断更新](./005-sync-cross-kind-diagnostics.md)              | 高     | 完了(commit `f6ded80`) | profile 側の変更で config ツリーの参照切れ警告が更新されない                                             |
-| 006  | [Host/Webview のエラー応答契約](./006-host-webview-error-contract.md)              | 中     | 未着手                 | host 側エラー時に RPC 応答が返らず webview が 30 秒固まる、保存失敗の無言化と未保存 state の永続化、ほか |
-| 007  | [webview 保存キューの revision 整合](./007-webview-update-queue-revision.md)       | 中     | 未着手                 | エントリ切替・conflict 時に古い revision が使われ、不要な conflict の連鎖と表示巻き戻りが起きる          |
-| 008  | [webview の CSP 追加](./008-webview-csp.md)                                        | 中     | 未着手                 | webview HTML に Content-Security-Policy がない                                                           |
-| 009  | [データファイル名の検証](./009-data-file-name-validation.md)                       | 中     | 未着手                 | `file` パラメータとプロンプト入力がパス区切り・`../` を拒否しない                                        |
-| 010  | [extension mutation の整合性](./010-extension-mutation-integrity.md)               | 中     | 未着手                 | read-modify-write の非排他、invalid ファイルの参照無視、rename の部分失敗、ほか                          |
-| 011  | [core merge の参照共有と仕様乖離](./011-core-merge-aliasing.md)                    | 中     | 未着手                 | 生成結果が入力配列・ネストオブジェクトと参照を共有する                                                   |
-| 012  | [Command Palette 露出の仕様乖離](./012-command-palette-exposure.md)                | 低     | 未着手                 | `openActiveEditorJson` が仕様に反して Palette に露出している                                             |
-| 013  | [workspace folder 数の実行時変化への追従](./013-workspace-folder-tracking.md)      | 低     | 未着手                 | folder 数を activate 時にしか評価していない                                                              |
+| 番号 | 計画                                                                               | 優先度 | 状態                   | 概要                                                                                                            |
+| ---- | ---------------------------------------------------------------------------------- | ------ | ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 001  | [webview エディタ state のエントリ間分離](./001-webview-editor-state-isolation.md) | 高     | 完了(commit `ff28fa8`) | エントリ切替時に編集中テキストが別エントリに書き込まれる、rename 失敗時に表示が復元されない、ほか               |
+| 002  | [core 検証の入力ガード](./002-core-validation-input-guards.md)                     | 高     | 完了(commit `f6ded80`) | 手編集 JSON の `null` エントリ等で検証が未処理例外でクラッシュする                                              |
+| 003  | [TreeView reveal の修正](./003-treeview-reveal.md)                                 | 高     | 完了(commit `f6ded80`) | エディタを開いた際のツリー項目選択(`reveal`)が常に no-op、`getParent` も未実装                                  |
+| 004  | [Watcher エコーフィルタの期待リーク](./004-watcher-echo-filter-leak.md)            | 高     | 完了(commit `f6ded80`) | 書き込みが発生しなかった操作でも「次のイベントを無視する」期待が登録され、本物の外部編集が飲み込まれる          |
+| 005  | [kind 横断の generate 診断更新](./005-sync-cross-kind-diagnostics.md)              | 高     | 完了(commit `f6ded80`) | profile 側の変更で config ツリーの参照切れ警告が更新されない                                                    |
+| 006  | [Host/Webview のエラー応答契約](./006-host-webview-error-contract.md)              | 中     | 未着手                 | host 側エラー時に RPC 応答が返らず webview が 30 秒固まる、保存失敗の無言化と未保存 state の永続化、ほか        |
+| 007  | [webview 保存キューの revision 整合](./007-webview-update-queue-revision.md)       | 中     | 未着手                 | エントリ切替・conflict 時に古い revision が使われ、不要な conflict の連鎖と表示巻き戻りが起きる                 |
+| 008  | [webview の CSP 追加](./008-webview-csp.md)                                        | 中     | 未着手                 | webview HTML に Content-Security-Policy がない                                                                  |
+| 009  | [データファイル名の検証](./009-data-file-name-validation.md)                       | 中     | 未着手                 | `file` パラメータとプロンプト入力がパス区切り・`../` を拒否しない                                               |
+| 010  | [extension mutation の整合性](./010-extension-mutation-integrity.md)               | 中     | 未着手                 | read-modify-write の非排他、invalid ファイルの参照無視、rename の部分失敗、ほか                                 |
+| 011  | [core merge の参照共有と仕様乖離](./011-core-merge-aliasing.md)                    | 中     | 未着手                 | 生成結果が入力配列・ネストオブジェクトと参照を共有する                                                          |
+| 012  | [Command Palette 露出の仕様乖離](./012-command-palette-exposure.md)                | 低     | 未着手                 | `openActiveEditorJson` が仕様に反して Palette に露出している                                                    |
+| 013  | [workspace folder 数の実行時変化への追従](./013-workspace-folder-tracking.md)      | 低     | 未着手                 | folder 数を activate 時にしか評価していない                                                                     |
+| 014  | [CONFIGS/PROFILES の単一ビュー統合](./014-single-pane-treeview.md)                 | —      | 完了(commit `cd2f76e`) | 2 ペイン分離による参照関係の不可視・スペース分割・アクション重複を、単一ビューの 3 階層ツリーに統合して解消する |
 
 ## 計画間の関係
 
 - 各計画は独立に着手できるが、[001](./001-webview-editor-state-isolation.md)・[007](./007-webview-update-queue-revision.md)・[006](./006-host-webview-error-contract.md) は同じ保存パイプライン(`useEditableField` → `useEntryUpdateQueue` → RPC → host mutation)に触れるため、並行して進める場合は互いの変更を確認すること。
 - [004](./004-watcher-echo-filter-leak.md) は `docs/internal/pending.md` の「Align watcher patterns with the store's read scope」(E-3)と同じコンポーネントに触れる。
 - [006](./006-host-webview-error-contract.md) は `docs/internal/pending.md` の「Unify the editorPanel mutation error policy」(E-1)を包含する形で解決するのが自然である。
+- [014](./014-single-pane-treeview.md) は manifest(views / menus / commandPalette)・`treeview/provider.ts`・`extension.ts` の TreeView 初期化を広く書き換えるため、同じ箇所に触れる [012](./012-command-palette-exposure.md)・[013](./013-workspace-folder-tracking.md) と並行着手する場合は順序を調整すること。014 の Phase 3(webview からの profile ジャンプ)は [006](./006-host-webview-error-contract.md)・[007](./007-webview-update-queue-revision.md) と同じ Host/Webview 通信層に触れる。

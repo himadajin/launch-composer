@@ -75,6 +75,25 @@ export class WorkspaceReader {
     );
   }
 
+  /**
+   * Resolves a profile name to its editor target: files are scanned in
+   * ascending file-name order, entries in array order, and the first
+   * exact name match wins. Invalid files are not scanned.
+   */
+  async findProfileTarget(name: string): Promise<EditorTarget | undefined> {
+    const data = await this.readProfilesWithIssues();
+    for (const fileData of data.profiles) {
+      const index = fileData.profiles.findIndex(
+        (profile) => profile.name === name,
+      );
+      if (index >= 0) {
+        return { kind: 'profile', file: fileData.file, index };
+      }
+    }
+
+    return undefined;
+  }
+
   async listFiles(kind: DataFileKind): Promise<string[]> {
     const entries = await this.io.readDirectory(
       this.layout.getDataDirUri(kind),

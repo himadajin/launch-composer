@@ -226,6 +226,7 @@ let lastCreatedWebviewPanel:
       onDidDispose(listener: () => void): { dispose(): void };
       reveal(): void;
       dispose(): void;
+      receiveMessage(message: unknown): Promise<void>;
     }
   | undefined;
 const createdTreeViews = new Map<
@@ -606,14 +607,20 @@ export const window = {
 
   createWebviewPanel(_viewType: string, title: string) {
     const didDisposeEmitter = new EventEmitter<void>();
+    const messageListeners = new Set<(message: unknown) => unknown>();
     const panel = {
       disposed: false,
       title,
       postedMessages: [] as unknown[],
       webview: {
         html: '',
-        onDidReceiveMessage() {
-          return { dispose() {} };
+        onDidReceiveMessage(listener: (message: unknown) => unknown) {
+          messageListeners.add(listener);
+          return {
+            dispose() {
+              messageListeners.delete(listener);
+            },
+          };
         },
         async postMessage(message: unknown) {
           panel.postedMessages.push(message);
@@ -630,6 +637,22 @@ export const window = {
       dispose() {
         panel.disposed = true;
         didDisposeEmitter.fire(undefined);
+      },
+      /**
+       * Delivers a webview message to registered listeners and drains the
+       * event loop so fire-and-forget async handlers settle before the
+       * test asserts on posted responses.
+       */
+      async receiveMessage(message: unknown) {
+        for (const listener of [...messageListeners]) {
+          await listener(message);
+        }
+
+        for (let i = 0; i < 20; i += 1) {
+          await new Promise((resolve) => {
+            setImmediate(resolve);
+          });
+        }
       },
     };
 

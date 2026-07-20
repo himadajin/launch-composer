@@ -4,16 +4,13 @@
 
 ## UI 構成
 
-Launch Composer は Activity Bar に `Launch Composer` view container を追加し、その中に 2 つの TreeView を表示する。
+Launch Composer は Activity Bar に `Launch Composer` view container を追加し、その中に単一の TreeView を表示する。
 
-- view ID: `launchComposer.configs`
-  - 表示名: `CONFIGS`
-  - 役割: config file / entry
-- view ID: `launchComposer.profiles`
-  - 表示名: `PROFILES`
-  - 役割: profile file / entry
+- view ID: `launchComposer.explorer`
+  - 表示名: `Launch Composer`
+  - 役割: config / profile の file と entry を 1 本のツリーで表示する
 
-manifest 上の view 定義順は `CONFIGS`、`PROFILES` である。
+TreeView は section node → file node → entry node の 3 階層である。root 直下に 2 つの section node を置き、並び順は `Configs`、`Profiles` である。
 
 編集フォームは Webview Panel として editor area に開く。TreeView は VS Code TreeView API、編集フォームは React 19 + `@himadajin/vscode-components` で実装する。
 
@@ -21,14 +18,29 @@ manifest 上の view 定義順は `CONFIGS`、`PROFILES` である。
 
 ### 空状態
 
-対象 directory が未作成、または `.json` file がない場合、VS Code の `viewsWelcome` を表示する。
+空状態は 2 態を区別する。
 
-- view: PROFILES
-  - welcome content: `No profile files found. [Create Profile File]`
-- view: CONFIGS
-  - welcome content: `No config files found. [Create Config File]`
+profile と config の両方で、対象 directory が未作成または `.json` file(invalid file を含む)が 1 件もない場合、TreeView の root を空にして VS Code の `viewsWelcome` を表示する。
 
-リンクは対応する file 作成 command を実行する。
+- view: `launchComposer.explorer`
+  - welcome content: `No profile or config files found. [Initialize Launch Composer](command:launch-composer.init)`
+
+リンクは `launch-composer.init` を実行する。
+
+片方の kind にだけ file がない場合は welcome を表示せず、両方の section node を表示する。file のない section は子要素なしの空のままにし、プレースホルダ項目は追加しない。file 作成の導線は section node の inline action である。
+
+### section node
+
+section node は root 直下の仮想ノードであり、workspace 上の file には対応しない。
+
+- 並び順: `Configs`、`Profiles`
+- label: `Configs` / `Profiles`
+- context: `configSection` / `profileSection`
+- TreeItem の `id`: `section:config` / `section:profile` の固定値(refresh を跨いで折りたたみ状態を保持する)
+- collapsible: expanded
+- children: 対応する kind の file node
+- checkbox は表示しない
+- 既定 action はない(クリックは折りたたみ切り替えのみ)
 
 ### file node
 
@@ -74,11 +86,17 @@ profile entry:
 - context: `profileEntry`
 - command: `launch-composer.editItem`
 - icon は表示しない
+- description に被参照数を `N configs` 形式で常時表示する(1 件は `1 config`、0 件も `0 configs` と表示する)
+
+被参照数は、読み込めた全 config file の config entry のうち、`profile` がその profile の `name` と完全一致するものの数である。excluded の config entry も数える。invalid file 内の config は数えない。同名 profile が複数ある場合、各 entry に同じ数を表示する。
 
 config entry:
 
 - label は config `name`
 - command: `launch-composer.editItem`
+- description の先頭に参照 profile 名を常時表示する。`profile` が string でない場合、または空白のみの場合は表示しない
+
+参照先 profile が存在しない config entry でも、参照 profile 名はそのまま表示し、`(missing)` などの装飾は付けない。missing であることの明示は generate diagnostic(warning icon・issue count・tooltip)と Webview の表示に委ねる。
 
 config entry の状態:
 
@@ -90,29 +108,43 @@ config entry の状態:
   - context: `configEntryDisabled`
   - 表示:
     - checkbox: unchecked
-    - description: `excluded`
+    - description: `excluded` を併記
 
 config entry の `excluded` 省略時は Generate 上も TreeView 上も included として扱う。
 
 entry に generate diagnostic がある場合:
 
 - warning icon を表示する
-- description は `1 issue` または `N issues`
-- excluded config entry では `excluded, N issues` のように excluded state と issue count を併記する
+- description に `1 issue` または `N issues` を併記する
 - tooltip は 1 件なら diagnostic message、複数件なら issue count と最初の diagnostic message
 - command と checkbox は通常の entry と同じ
 - descendant entry diagnostic は file node に集約表示しない
 
+description の併記順:
+
+- config entry: `参照 profile 名` → `excluded` → `N issues` の順でカンマ併記する(例: `node-app, excluded, 2 issues`)。常時表示の profile 名を先頭の固定位置に置き、状態系の要素を後ろに揃える
+- profile entry: `N configs` → `N issues` の順でカンマ併記する(例: `2 configs, 1 issue`)
+- 表示しない要素(profile 名なし、included、issue 0 件)は詰める(例: excluded で profile 未設定なら `excluded`)
+
 ### view title actions
 
-- view: PROFILES
-  - action: `launch-composer.addProfileFile` (`$(add)`)
-- view: CONFIGS
-  - action: `launch-composer.addConfigFile` (`$(add)`)
-- view: CONFIGS
-  - action: `launch-composer.generate` (`$(play)`)
+- action: `launch-composer.add` (`$(add)`)
+- action: `launch-composer.generate` (`$(play)`)
+
+`launch-composer.add` は QuickPick を開き、選択された項目の操作へ振り分ける。
+
+- `Add Config`: config entry 追加
+- `Add Profile`: profile entry 追加
+- `Add Config File`: config file 作成
+- `Add Profile File`: profile file 作成
+
+QuickPick を選択せず閉じた場合は何もしない。振り分け先の各フローは [extension.md](./extension.md) を参照する。
 
 ### item context menu
+
+section node:
+
+- context menu は提供しない
 
 profile file:
 
@@ -134,7 +166,7 @@ config file:
 - Rename
 - Delete
 
-profile/config entry:
+profile entry:
 
 - Open
 - Copy Path
@@ -142,10 +174,22 @@ profile/config entry:
 - Rename
 - Delete
 
-config entry では状態に応じて Include / Exclude を最上段に表示する。
+config entry:
+
+- Go to Profile
+- Open
+- Copy Path
+- Copy Relative Path
+- Rename
+- Delete
+
+config entry では状態に応じて Include / Exclude を最上段に表示し、Go to Profile はその下・Open の上に表示する。
+
+Go to Profile は参照 profile の未設定・missing に関わらず常に表示する。実行時の解決規則と未設定・missing 時の information message は [extension.md](./extension.md) の Go to Profile を参照する。
 
 inline actions:
 
+- section node: 対応する kind の file 作成(`Configs`: `launch-composer.addConfigFile`、`Profiles`: `launch-composer.addProfileFile`。いずれも `$(add)`)
 - file node: Add Entry
 - entry node: Open JSON (`$(go-to-file)`)
 
@@ -153,7 +197,7 @@ inline actions:
 
 ### checkbox 操作
 
-CONFIGS TreeView は `manageCheckboxStateManually: true` で作成する。
+TreeView は `manageCheckboxStateManually: true` で作成する。checkbox を表示するのは config entry だけである。
 
 checkbox 操作は即座に JSONC file へ書き込む。
 
@@ -180,7 +224,7 @@ Webview 内 header:
 
 editor identity は `kind:file:index` である。同じ kind の別 entry を含め、identity が変わった場合はフォームを新しい editor として初期化し、前の entry のローカル入力と未発火の debounce 保存を破棄する。
 
-TreeView entry を開いたとき、対応する TreeView item を `TreeView.reveal()` で選択状態にし、祖先を展開する。editor から TreeView へ focus は移さない。panel を閉じた後の選択解除は実装対象外である。
+TreeView entry を開いたとき、対応する TreeView item を `TreeView.reveal()` で選択状態にし、祖先(section node と file node)を展開する。TreeView は単一のため、選択は profile / config を横断して常に高々 1 項目である。editor から TreeView へ focus は移さない。panel を閉じた後の選択解除は実装対象外である。
 
 ### JSON を開く導線
 
@@ -296,8 +340,8 @@ config editor のフォーム項目:
   - 保存方法: blur / Enter で rename request
 - 表示ラベル: `Config: Profile`
   - JSON path: `profile`
-  - control: `Select`
-  - 保存方法: 即時 patch
+  - control: `Select` + `Go to Profile` button
+  - 保存方法: 即時 patch(Select のみ。button は保存しない)
 - 表示ラベル: `Config: Include`
   - UI state: included
   - JSON path: `excluded`（inverse persistence）
@@ -319,6 +363,14 @@ config editor のフォーム項目:
   - JSON path: `args`
   - control: `ListEditor`
   - 保存方法: 変更操作完了時に即時 patch
+
+`Go to Profile` button は Profile select と同じ行に表示する secondary button である。クリックすると `open-profile` request を送り、参照 profile の editor へ切り替える([communication.md](./communication.md) の `open-profile` を参照)。次の場合は disabled にする。
+
+- 対象 file が invalid で editor が read-only の場合
+- `profile` が未設定(string でない、または空文字)の場合
+- `profile` が profile 候補に存在しない(missing)場合
+
+button による editor の切り替えは editor identity の変更として扱い、前の entry のローカル入力と未発火の debounce 保存の破棄は「Webview Editor」の editor identity 仕様に従う。
 
 config editor は `configuration.type`、`configuration.request`、`configuration.program` をフォーム項目として表示しない。Generate 時、config の `configuration` にこれらの key がある場合は core validation error になるため、通常は profile 側で管理する。
 

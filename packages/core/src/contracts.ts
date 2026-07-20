@@ -107,6 +107,11 @@ export type WebviewMessage =
   | { type: 'generate'; requestId: string }
   | { type: 'browse-file'; requestId: string }
   | {
+      type: 'open-profile';
+      requestId: string;
+      payload: { profileName: string };
+    }
+  | {
       type: 'open-file-json';
       payload: { kind: 'profile' | 'config'; file: string };
     };
@@ -160,4 +165,9 @@ export type HostMessage =
       type: 'file-selected';
       requestId: string;
       payload: { path: string | null };
+    }
+  | {
+      type: 'open-profile-result';
+      requestId: string;
+      payload: { success: boolean; error?: string };
     };

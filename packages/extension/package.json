@@ -51,12 +51,8 @@
     "views": {
       "launchComposer": [
         {
-          "id": "launchComposer.configs",
-          "name": "CONFIGS"
-        },
-        {
-          "id": "launchComposer.profiles",
-          "name": "PROFILES"
+          "id": "launchComposer.explorer",
+          "name": "Launch Composer"
         }
       ]
     },
@@ -79,6 +75,12 @@
         "title": "Add Profile",
         "category": "Launch Composer",
         "enablement": "workspaceFolderCount == 1"
+      },
+      {
+        "command": "launch-composer.add",
+        "title": "Add...",
+        "enablement": "workspaceFolderCount == 1",
+        "icon": "$(add)"
       },
       {
         "command": "launch-composer.addProfileFile",
@@ -203,6 +205,11 @@
         "enablement": "workspaceFolderCount == 1"
       },
       {
+        "command": "launch-composer.goToProfile",
+        "title": "Go to Profile",
+        "enablement": "workspaceFolderCount == 1"
+      },
+      {
         "command": "launch-composer.includeConfig",
         "title": "Include",
         "enablement": "workspaceFolderCount == 1"
@@ -228,85 +235,80 @@
       ],
       "view/title": [
         {
-          "command": "launch-composer.addProfileFile",
-          "when": "view == launchComposer.profiles",
-          "group": "navigation"
-        },
-        {
-          "command": "launch-composer.addConfigFile",
-          "when": "view == launchComposer.configs",
+          "command": "launch-composer.add",
+          "when": "view == launchComposer.explorer",
           "group": "navigation"
         },
         {
           "command": "launch-composer.generate",
-          "when": "view == launchComposer.configs",
+          "when": "view == launchComposer.explorer",
           "group": "navigation@1"
         }
       ],
       "view/item/context": [
         {
           "command": "launch-composer.addProfileEntry",
-          "when": "view == launchComposer.profiles && viewItem == profileFile",
+          "when": "view == launchComposer.explorer && viewItem == profileFile",
           "group": "1_new@1"
         },
         {
           "command": "launch-composer.addConfigEntry",
-          "when": "view == launchComposer.configs && viewItem == configFile",
+          "when": "view == launchComposer.explorer && viewItem == configFile",
           "group": "1_new@1"
         },
         {
           "command": "launch-composer.openProfileFileJson",
-          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "2_open@1"
         },
         {
           "command": "launch-composer.copyProfileFilePath",
-          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "3_copy@1"
         },
         {
           "command": "launch-composer.copyProfileFileRelativePath",
-          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "3_copy@2"
         },
         {
           "command": "launch-composer.renameProfileFile",
-          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "4_modify@1"
         },
         {
           "command": "launch-composer.deleteProfileFile",
-          "when": "view == launchComposer.profiles && (viewItem == profileFile || viewItem == profileFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == profileFile || viewItem == profileFileInvalid)",
           "group": "5_delete@1"
         },
         {
           "command": "launch-composer.openConfigFileJson",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == configFile || viewItem == configFileInvalid)",
           "group": "2_open@1"
         },
         {
           "command": "launch-composer.copyConfigFilePath",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == configFile || viewItem == configFileInvalid)",
           "group": "3_copy@1"
         },
         {
           "command": "launch-composer.copyConfigFileRelativePath",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == configFile || viewItem == configFileInvalid)",
           "group": "3_copy@2"
         },
         {
           "command": "launch-composer.renameConfigFile",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == configFile || viewItem == configFileInvalid)",
           "group": "4_modify@1"
         },
         {
           "command": "launch-composer.includeAllConfigs",
-          "when": "view == launchComposer.configs && viewItem == configFile",
+          "when": "view == launchComposer.explorer && viewItem == configFile",
           "group": "0_state@1"
         },
         {
           "command": "launch-composer.excludeAllConfigs",
-          "when": "view == launchComposer.configs && viewItem == configFile",
+          "when": "view == launchComposer.explorer && viewItem == configFile",
           "group": "0_state@2"
         },
         {
@@ -320,8 +322,13 @@
           "group": "0_state@1"
         },
         {
+          "command": "launch-composer.goToProfile",
+          "when": "viewItem == configEntryEnabled || viewItem == configEntryDisabled",
+          "group": "1_navigate@1"
+        },
+        {
           "command": "launch-composer.deleteConfigFile",
-          "when": "view == launchComposer.configs && (viewItem == configFile || viewItem == configFileInvalid)",
+          "when": "view == launchComposer.explorer && (viewItem == configFile || viewItem == configFileInvalid)",
           "group": "5_delete@1"
         },
         {
@@ -350,13 +357,23 @@
           "group": "5_delete@1"
         },
         {
+          "command": "launch-composer.addConfigFile",
+          "when": "view == launchComposer.explorer && viewItem == configSection",
+          "group": "inline"
+        },
+        {
+          "command": "launch-composer.addProfileFile",
+          "when": "view == launchComposer.explorer && viewItem == profileSection",
+          "group": "inline"
+        },
+        {
           "command": "launch-composer.addProfileEntry",
-          "when": "view == launchComposer.profiles && viewItem == profileFile",
+          "when": "view == launchComposer.explorer && viewItem == profileFile",
           "group": "inline"
         },
         {
           "command": "launch-composer.addConfigEntry",
-          "when": "view == launchComposer.configs && viewItem == configFile",
+          "when": "view == launchComposer.explorer && viewItem == configFile",
           "group": "inline"
         },
         {
@@ -366,6 +383,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "launch-composer.add",
+          "when": "false"
+        },
         {
           "command": "launch-composer.addProfileFile",
           "when": "false"
@@ -455,6 +476,10 @@
           "when": "false"
         },
         {
+          "command": "launch-composer.goToProfile",
+          "when": "false"
+        },
+        {
           "command": "launch-composer.includeConfig",
           "when": "false"
         },
@@ -470,12 +495,8 @@
     },
     "viewsWelcome": [
       {
-        "view": "launchComposer.profiles",
-        "contents": "No profile files found. [Create Profile File](command:launch-composer.addProfileFile)"
-      },
-      {
-        "view": "launchComposer.configs",
-        "contents": "No config files found. [Create Config File](command:launch-composer.addConfigFile)"
+        "view": "launchComposer.explorer",
+        "contents": "No profile or config files found. [Initialize Launch Composer](command:launch-composer.init)"
       }
     ],
     "configuration": {

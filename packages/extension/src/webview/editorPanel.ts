@@ -17,6 +17,7 @@ import type {
 } from '../io/workspaceStore.js';
 import type { MutationResult } from '../io/workspaceMutations.js';
 import type { RefreshRequest } from '../sync/workspaceSyncController.js';
+import { openReferencedProfile } from '../commands/goToProfile.js';
 import { rewriteWebviewHtml } from './webviewHtml.js';
 
 interface EditorPanelOptions {
@@ -193,6 +194,12 @@ export class EditorPanelController {
             index: message.payload.index,
           });
           return;
+        case 'open-profile':
+          await this.openProfile(
+            message.requestId,
+            message.payload.profileName,
+          );
+          return;
         case 'generate':
           await this.respond(message.requestId, {
             type: 'generate-result',
@@ -217,7 +224,11 @@ export class EditorPanelController {
    * behavior change, plan item E-1).
    */
   private async runMutation<
-    T extends 'delete-result' | 'rename-result' | 'update-result',
+    T extends
+      | 'delete-result'
+      | 'rename-result'
+      | 'update-result'
+      | 'open-profile-result',
   >(
     requestId: string,
     resultType: T,
@@ -266,6 +277,28 @@ export class EditorPanelController {
     }
     this.options.onDidMutate(mutation);
     await this.syncWithWorkspace();
+  }
+
+  private async openProfile(
+    requestId: string,
+    profileName: string,
+  ): Promise<void> {
+    await this.runMutation(
+      requestId,
+      'open-profile-result',
+      {
+        fallbackErrorMessage: 'Failed to open the profile.',
+        rethrowOnFailure: true,
+      },
+      async () => {
+        const result = await openReferencedProfile(
+          this.options.store,
+          (target) => this.open(target),
+          profileName,
+        );
+        return { payload: { success: result.opened } };
+      },
+    );
   }
 
   private async deleteEntry(

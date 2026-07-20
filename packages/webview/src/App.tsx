@@ -96,6 +96,14 @@ export function App() {
       },
     });
   };
+  const openProfile = (profileName: string) => {
+    // The editor switch arrives as a host-initiated initial-data message;
+    // the response only acknowledges the request, so failures (already
+    // surfaced by the host) and timeouts are intentionally swallowed.
+    rpc
+      .sendRequest({ type: 'open-profile', payload: { profileName } })
+      .catch(() => undefined);
+  };
 
   return (
     <main className="settings-editor composer-shell">
@@ -144,6 +152,7 @@ export function App() {
             onChange={handleChange}
             onRename={handleRename}
             onOpenJson={openFileJson}
+            onOpenProfile={openProfile}
           />
         )}
       </section>

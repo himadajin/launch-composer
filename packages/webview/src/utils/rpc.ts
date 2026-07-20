@@ -21,6 +21,7 @@ type ResponseTypeByRequest = {
   'request-initial-data': 'initial-data';
   generate: 'generate-result';
   'browse-file': 'file-selected';
+  'open-profile': 'open-profile-result';
 };
 
 type ResponsePayloadByRequest = {
@@ -54,6 +55,7 @@ const RESPONSE_TYPE_BY_REQUEST: ResponseTypeByRequest = {
   'request-initial-data': 'initial-data',
   generate: 'generate-result',
   'browse-file': 'file-selected',
+  'open-profile': 'open-profile-result',
 };
 
 export class RpcClient {

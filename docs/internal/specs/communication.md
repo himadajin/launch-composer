@@ -88,6 +88,7 @@ Host は受け取った patch path に対象 entry の document path を prefix 
 - `request-initial-data`
 - `generate`
 - `browse-file`
+- `open-profile`
 - `open-file-json`
 
 ### update-profile / update-config
@@ -116,6 +117,14 @@ Webview から Generate を要求する。Host は通常の Generate 処理を�
 
 Host に `showOpenDialog` を開かせる。Host は `file-selected` を返す。キャンセル時の `path` は `null` である。
 
+### open-profile
+
+Config editor から参照 profile の editor を開く request である。payload は `profileName: string` を持つ。Host は成功・失敗を問わず必ず `open-profile-result` を返す。
+
+Host は [extension.md](./extension.md) の Go to Profile と同じ規則で profile 名を editor target に解決する。解決に成功した場合、Host は editor target を profile に切り替え、通常の open 経路で TreeView reveal と `initial-data` 送信を行う。editor identity が変わるため、Webview 側のローカル入力破棄は [ui.md](./ui.md) の editor identity 仕様に従う。
+
+未設定・missing の場合、Host は Go to Profile と同じ information message を表示し、`success: false` を返す。Webview 側はこの failure に対して追加の表示を行わない。
+
 ### open-file-json
 
 Backing JSON file を開く fire-and-forget message である。response はない。
@@ -131,6 +140,7 @@ Backing JSON file を開く fire-and-forget message である。response はな�
 - `delete-result`
 - `generate-result`
 - `file-selected`
+- `open-profile-result`
 
 ### initial-data
 
@@ -169,3 +179,13 @@ Generate の操作結果である。payload は `{ success: boolean }` だけを
 ### file-selected
 
 `browse-file` の結果である。ファイル選択時は absolute path、キャンセル時は `null` を返す。
+
+### open-profile-result
+
+`open-profile` の結果である。payload は `{ success: boolean; error?: string }` を持つ。
+
+- `success: true`: profile editor への切り替えを開始した。editor の内容自体は後続の `initial-data` が運ぶ
+- `success: false`(`error` なし): profile が未設定または missing で解決できなかった。Host が information message を表示する
+- `success: false, error`: 処理の実行失敗。Host が error message を表示する
+
+Host は例外時も必ずこの response を返す。

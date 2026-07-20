@@ -92,6 +92,10 @@ export class WorkspaceStore {
     return this.reader.listProfileNames();
   }
 
+  async findProfileTarget(name: string): Promise<EditorTarget | undefined> {
+    return this.reader.findProfileTarget(name);
+  }
+
   async listFiles(kind: 'profile' | 'config'): Promise<string[]> {
     return this.reader.listFiles(kind);
   }

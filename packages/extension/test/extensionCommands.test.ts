@@ -337,7 +337,7 @@ test('config tree checkbox toggles the entry excluded flag', async () => {
   activate(context);
 
   const configTreeView = testVscode.__testing.getCreatedTreeView(
-    'launchComposer.configs',
+    'launchComposer.explorer',
   );
   assert.ok(configTreeView);
 
@@ -434,6 +434,154 @@ test('copyProfileFileRelativePath writes the workspace-relative JSON path to the
     testVscode.__testing.getClipboardText(),
     '.vscode/launch-composer/profiles/profile.json',
   );
+});
+
+test('add quick pick offers the four add actions and does nothing when dismissed', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders(['/workspace/add-dismiss-project']);
+  testVscode.__testing.setQuickPickResponses([undefined]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.add);
+
+  const quickPickCall = testVscode.__testing.getLastQuickPickCall();
+  assert.ok(quickPickCall !== undefined);
+  assert.deepEqual(quickPickCall.items, [
+    { label: 'Add Config', value: 'addConfig' },
+    { label: 'Add Profile', value: 'addProfile' },
+    { label: 'Add Config File', value: 'addConfigFile' },
+    { label: 'Add Profile File', value: 'addProfileFile' },
+  ]);
+  assert.deepEqual(quickPickCall.options, {
+    placeHolder: 'Choose what to add',
+  });
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), []);
+
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/add-dismiss-project'),
+  );
+  const data = await store.readAll();
+  assert.deepEqual(data, {
+    profiles: [],
+    configs: [],
+    issues: [],
+    generateReadiness: { diagnostics: [] },
+  });
+});
+
+test('add quick pick Add Profile File creates a profile file', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/add-profile-file-project',
+  ]);
+  testVscode.__testing.setQuickPickResponses([
+    { label: 'Add Profile File', value: 'addProfileFile' },
+  ]);
+  testVscode.__testing.setInputBoxResponses(['extra']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.add);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Created extra.json.',
+  ]);
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/add-profile-file-project/.vscode/launch-composer/profiles/extra.json',
+    ),
+  );
+  assert.equal(new TextDecoder().decode(bytes).trim(), '[]');
+});
+
+test('add quick pick Add Config File creates a config file', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/add-config-file-project',
+  ]);
+  testVscode.__testing.setQuickPickResponses([
+    { label: 'Add Config File', value: 'addConfigFile' },
+  ]);
+  testVscode.__testing.setInputBoxResponses(['extra']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.add);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Created extra.json.',
+  ]);
+
+  const bytes = await vscode.workspace.fs.readFile(
+    vscode.Uri.file(
+      '/workspace/add-config-file-project/.vscode/launch-composer/configs/extra.json',
+    ),
+  );
+  assert.match(new TextDecoder().decode(bytes), /"configurations": \[\]/);
+});
+
+test('add quick pick Add Config selects a file and adds the config entry', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspace = workspaceUri('add-config-flow-project');
+  testVscode.__testing.setWorkspaceFolders([workspace.fsPath]);
+
+  const store = new WorkspaceStore(workspace);
+  await store.addProfileEntry('profile.json', 'cpp');
+
+  testVscode.__testing.setQuickPickResponses([
+    { label: 'Add Config', value: 'addConfig' },
+    { label: '$(add) Create new file', value: '__create__' },
+    { label: 'cpp', value: 'cpp' },
+  ]);
+  testVscode.__testing.setInputBoxResponses(['config', 'Launch']);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.add);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+
+  const bytes = await vscode.workspace.fs.readFile(
+    configFileUri(workspace, 'config.json'),
+  );
+  assert.equal(
+    new TextDecoder().decode(bytes),
+    '{\n  "configurations": [\n    {\n      "name": "Launch",\n      "profile": "cpp"\n    }\n  ]\n}\n',
+  );
+});
+
+test('add quick pick Add Config aborts without changes when file selection is dismissed', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/add-config-abort-project',
+  ]);
+  testVscode.__testing.setQuickPickResponses([
+    { label: 'Add Config', value: 'addConfig' },
+    undefined,
+  ]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.add);
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), []);
+
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/add-config-abort-project'),
+  );
+  const data = await store.readAll();
+  assert.deepEqual(data, {
+    profiles: [],
+    configs: [],
+    issues: [],
+    generateReadiness: { diagnostics: [] },
+  });
 });
 
 test('addProfile initializes directories before listing files', async () => {
@@ -568,4 +716,94 @@ test('generate tolerates FileSystemError-wrapped ENOENT when launch.json does no
       '  "configurations": []\n' +
       '}\n',
   );
+});
+
+test('goToProfile opens the referenced profile editor and reveals it', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspace = workspaceUri('go-to-profile-project');
+  testVscode.__testing.setWorkspaceFolders([workspace.fsPath]);
+
+  const store = new WorkspaceStore(workspace);
+  await store.addProfileEntry('profile.json', 'cpp');
+  await store.addConfigEntry('config.json', 'Launch', 'cpp');
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.goToProfile, {
+    type: 'entry',
+    target: { kind: 'config', file: 'config.json', index: 0 },
+    label: 'Launch',
+    included: true,
+    profileName: 'cpp',
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), []);
+
+  const panel = testVscode.__testing.getLastCreatedWebviewPanel();
+  assert.ok(panel);
+  assert.equal(panel.title, 'cpp');
+
+  const treeView = testVscode.__testing.getCreatedTreeView(
+    'launchComposer.explorer',
+  );
+  assert.ok(treeView);
+  const revealCalls = treeView.getRevealCalls() as Array<{
+    element: { type: string; target?: unknown };
+  }>;
+  const lastReveal = revealCalls.at(-1);
+  assert.ok(lastReveal);
+  assert.equal(lastReveal.element.type, 'entry');
+  assert.deepEqual(lastReveal.element.target, {
+    kind: 'profile',
+    file: 'profile.json',
+    index: 0,
+  });
+});
+
+test('goToProfile shows guidance when the config does not reference a profile', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  testVscode.__testing.setWorkspaceFolders([
+    '/workspace/go-to-profile-unset-project',
+  ]);
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.goToProfile, {
+    type: 'entry',
+    target: { kind: 'config', file: 'config.json', index: 0 },
+    label: 'Launch',
+    included: true,
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'This config does not reference a profile.',
+  ]);
+  assert.equal(testVscode.__testing.getLastCreatedWebviewPanel(), undefined);
+});
+
+test('goToProfile shows guidance when the referenced profile is missing', async () => {
+  const context =
+    testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
+  const workspace = workspaceUri('go-to-profile-missing-project');
+  testVscode.__testing.setWorkspaceFolders([workspace.fsPath]);
+
+  const store = new WorkspaceStore(workspace);
+  await store.addConfigEntry('config.json', 'Launch', 'ghost');
+
+  activate(context);
+  await vscode.commands.executeCommand(COMMANDS.goToProfile, {
+    type: 'entry',
+    target: { kind: 'config', file: 'config.json', index: 0 },
+    label: 'Launch',
+    included: true,
+    profileName: 'ghost',
+  });
+
+  assert.deepEqual(testVscode.__testing.getErrorMessages(), []);
+  assert.deepEqual(testVscode.__testing.getInfoMessages(), [
+    'Profile "ghost" was not found.',
+  ]);
+  assert.equal(testVscode.__testing.getLastCreatedWebviewPanel(), undefined);
 });
