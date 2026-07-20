@@ -85,7 +85,7 @@ config ファイルの root は config file object であり、config entry の�
 - role: config entry ごとに profile を参照し、生成対象の `launch.json` configuration を作る
 - details: contract map は [JSON file data contract map](../contracts/json-files.md)、merge / validation は [core.md](./core.md)
 
-`configuration` は `launch.json` configuration に渡すパススルーオブジェクトである。ただし Generate 時、config の `configuration` に `program`、`type`、`request` がある場合はエラーにする。これらは profile 側で管理する。
+`configuration` は `launch.json` configuration に渡すパススルーオブジェクトである。ただし Generate 時、config の `configuration` に `program`、`type`、`request` がある場合はエラーにする。これらは profile が所有する(所有モデルは [core.md](./core.md) のマージルールを参照)。
 
 config entry の `excluded` は、その config を `launch.json` 生成から外すかどうかを表す。`excluded` の省略は Generate 上は生成対象として扱う。
 

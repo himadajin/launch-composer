@@ -55,7 +55,14 @@ shallow merge はキー単位の置換である。オブジェクト、配列、
 
 config に存在しないキーは profile から継承する。生成結果の `name` は常に config の `name` を使う。profile の `name` は `launch.json` に出力しない。
 
-config の `configuration` に `program`、`type`、`request` が存在する場合は Generate 時エラーにする。これらは profile 側で管理する。
+config の `configuration` に `program`、`type`、`request` が存在する場合は Generate 時エラーにする。
+
+これは次の所有モデルに基づく正式決定である(2026-07-20)。
+
+- profile は実行物の同一性(`type` / `request` / `program`)を所有する。
+- config は同一実行物の実行パラメータ(`args`、`argsFile`、`cwd`、`env` など)だけを変えられる。
+
+profile の `args`、`cwd`、`env` はその profile の `program` を前提に書かれるため、config 側で `program` だけを差し替える継承は成立しない。実行するプログラムを変えたい場合は、config で上書きするのではなく profile を分ける。この境界を再検討するのは、単一のアダプタ設定で多数の単発スクリプトを扱う使い方が支配的になった場合である。
 
 ### excluded
 

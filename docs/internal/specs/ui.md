@@ -372,7 +372,7 @@ config editor のフォーム項目:
 
 button による editor の切り替えは editor identity の変更として扱い、前の entry のローカル入力と未発火の debounce 保存の破棄は「Webview Editor」の editor identity 仕様に従う。
 
-config editor は `configuration.type`、`configuration.request`、`configuration.program` をフォーム項目として表示しない。Generate 時、config の `configuration` にこれらの key がある場合は core validation error になるため、通常は profile 側で管理する。
+config editor は `configuration.type`、`configuration.request`、`configuration.program` をフォーム項目として表示しない。Generate 時、config の `configuration` にこれらの key がある場合は core validation error になる。これらは profile が所有する([core.md](./core.md) のマージルールを参照)。
 
 保存挙動:
 
