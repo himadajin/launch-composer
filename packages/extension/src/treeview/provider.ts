@@ -37,6 +37,10 @@ type EntryNode = {
   target: EditorTarget;
   label: string;
   included?: boolean;
+  /** Referenced profile name shown on config entries (undefined when unset). */
+  profileName?: string;
+  /** Number of config entries referencing this profile entry by name. */
+  referencedConfigCount?: number;
   diagnostics?: GenerateDiagnostic[];
 };
 
@@ -92,45 +96,54 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       return [];
     }
 
-    const entries =
-      element.kind === 'profile'
-        ? (element.profiles ?? [])
-        : (element.configurations ?? []);
+    if (element.kind === 'profile') {
+      const referenceCounts = countProfileReferences(await this.loadData());
 
-    return entries.map((entry, index) => {
-      const node: EntryNode =
-        element.kind === 'profile'
-          ? {
-              type: 'entry',
-              parent: element,
-              target: {
-                kind: 'profile',
-                file: element.file,
-                index,
-              },
-              label: (entry as ProfileData).name,
-              diagnostics: getEntryDiagnostics(element.diagnostics, {
-                kind: 'profile',
-                file: element.file,
-                index,
-              }),
-            }
-          : {
-              type: 'entry',
-              parent: element,
-              target: {
-                kind: 'config',
-                file: element.file,
-                index,
-              },
-              label: (entry as ConfigData).name,
-              included: (entry as ConfigData).excluded !== true,
-              diagnostics: getEntryDiagnostics(element.diagnostics, {
-                kind: 'config',
-                file: element.file,
-                index,
-              }),
-            };
+      return (element.profiles ?? []).map((entry, index) => {
+        const node: EntryNode = {
+          type: 'entry',
+          parent: element,
+          target: {
+            kind: 'profile',
+            file: element.file,
+            index,
+          },
+          label: entry.name,
+          referencedConfigCount: referenceCounts.get(entry.name) ?? 0,
+          diagnostics: getEntryDiagnostics(element.diagnostics, {
+            kind: 'profile',
+            file: element.file,
+            index,
+          }),
+        };
+
+        this.entryNodes.set(getEntryKey(node.target), node);
+        return node;
+      });
+    }
+
+    return (element.configurations ?? []).map((entry, index) => {
+      const node: EntryNode = {
+        type: 'entry',
+        parent: element,
+        target: {
+          kind: 'config',
+          file: element.file,
+          index,
+        },
+        label: entry.name,
+        included: entry.excluded !== true,
+        diagnostics: getEntryDiagnostics(element.diagnostics, {
+          kind: 'config',
+          file: element.file,
+          index,
+        }),
+      };
+
+      const profileName = getReferencedProfileName(entry.profile);
+      if (profileName !== undefined) {
+        node.profileName = profileName;
+      }
 
       this.entryNodes.set(getEntryKey(node.target), node);
       return node;
@@ -221,13 +234,18 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     };
 
     if (element.target.kind === 'config') {
+      if (element.profileName !== undefined) {
+        item.description = element.profileName;
+      }
       item.checkboxState = {
         state: toCheckboxState(element.included === true),
         tooltip: 'Include this config when generating launch.json.',
       };
       if (!element.included) {
-        item.description = 'excluded';
+        item.description = appendDescription(item.description, 'excluded');
       }
+    } else if (element.referencedConfigCount !== undefined) {
+      item.description = formatConfigCount(element.referencedConfigCount);
     }
 
     applyDiagnosticDecoration(item, element.diagnostics);
@@ -347,6 +365,33 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
 function getEntryKey(target: EditorTarget): string {
   return `${target.kind}:${target.file}:${target.index}`;
+}
+
+function getReferencedProfileName(profile: unknown): string | undefined {
+  return typeof profile === 'string' && profile.trim() !== ''
+    ? profile
+    : undefined;
+}
+
+function countProfileReferences(
+  data: WorkspaceDataSnapshot,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const configFile of data.configs) {
+    for (const config of configFile.configurations) {
+      if (typeof config.profile !== 'string') {
+        continue;
+      }
+
+      counts.set(config.profile, (counts.get(config.profile) ?? 0) + 1);
+    }
+  }
+
+  return counts;
+}
+
+function formatConfigCount(count: number): string {
+  return `${count} config${count === 1 ? '' : 's'}`;
 }
 
 function getTreeFileDiagnostics(

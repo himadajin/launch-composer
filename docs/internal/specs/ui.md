@@ -86,11 +86,17 @@ profile entry:
 - context: `profileEntry`
 - command: `launch-composer.editItem`
 - icon は表示しない
+- description に被参照数を `N configs` 形式で常時表示する(1 件は `1 config`、0 件も `0 configs` と表示する)
+
+被参照数は、読み込めた全 config file の config entry のうち、`profile` がその profile の `name` と完全一致するものの数である。excluded の config entry も数える。invalid file 内の config は数えない。同名 profile が複数ある場合、各 entry に同じ数を表示する。
 
 config entry:
 
 - label は config `name`
 - command: `launch-composer.editItem`
+- description の先頭に参照 profile 名を常時表示する。`profile` が string でない場合、または空白のみの場合は表示しない
+
+参照先 profile が存在しない config entry でも、参照 profile 名はそのまま表示し、`(missing)` などの装飾は付けない。missing であることの明示は generate diagnostic(warning icon・issue count・tooltip)と Webview の表示に委ねる。
 
 config entry の状態:
 
@@ -102,18 +108,23 @@ config entry の状態:
   - context: `configEntryDisabled`
   - 表示:
     - checkbox: unchecked
-    - description: `excluded`
+    - description: `excluded` を併記
 
 config entry の `excluded` 省略時は Generate 上も TreeView 上も included として扱う。
 
 entry に generate diagnostic がある場合:
 
 - warning icon を表示する
-- description は `1 issue` または `N issues`
-- excluded config entry では `excluded, N issues` のように excluded state と issue count を併記する
+- description に `1 issue` または `N issues` を併記する
 - tooltip は 1 件なら diagnostic message、複数件なら issue count と最初の diagnostic message
 - command と checkbox は通常の entry と同じ
 - descendant entry diagnostic は file node に集約表示しない
+
+description の併記順:
+
+- config entry: `参照 profile 名` → `excluded` → `N issues` の順でカンマ併記する(例: `node-app, excluded, 2 issues`)。常時表示の profile 名を先頭の固定位置に置き、状態系の要素を後ろに揃える
+- profile entry: `N configs` → `N issues` の順でカンマ併記する(例: `2 configs, 1 issue`)
+- 表示しない要素(profile 名なし、included、issue 0 件)は詰める(例: excluded で profile 未設定なら `excluded`)
 
 ### view title actions
 

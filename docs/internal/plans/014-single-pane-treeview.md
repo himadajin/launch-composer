@@ -24,7 +24,7 @@ LAUNCH COMPOSER                          [+ ▷]   ← view title: Add(QuickPick
 ├─ ▼ Configs                              [+]    ← セクション(仮想ノード): Add Config File
 │   └─ ▼ config.json                      [+]    ← file node(現行仕様を踏襲): Add Config
 │       ├─ ☑ run: dev        node-app
-│       └─ ☐ run: prod       excluded, node-app
+│       └─ ☐ run: prod       node-app, excluded
 └─ ▼ Profiles                             [+]    ← セクション: Add Profile File
     └─ ▼ profile.json                     [+]
         └─ node-app          2 configs
@@ -82,6 +82,7 @@ LAUNCH COMPOSER                          [+ ▷]   ← view title: Add(QuickPick
 
 ### 進捗記録
 
+- 2026-07-20: Phase 3 前半完了。`ui.md` に description 仕様(config entry: `profile 名 → excluded → N issues` の併記順、profile entry: `N configs → N issues`、0 件も `0 configs` を常時表示、missing 参照は装飾なしで diagnostic に委譲、profile が非 string / 空白のみなら非表示)を明文化し、provider に実装。被参照数は snapshot からの一括集計で追加 read なし。本計画の冒頭スケッチも採用した併記順に更新した。
 - 2026-07-20: Phase 2 完了。単一ビュー統合を実装(manifest / commands.ts / provider.ts / extension.ts / handlers.ts、テスト 3 ファイル改修・新規 8 テスト)。検証ゲート全パス(148 テスト)。レビュー時の採用判断: QuickPick placeholder `Choose what to add`、file 作成フローの `createDataFile(kind)` 共通化(仕様の「同じ file 作成フロー」を関数共有で保証)。実機確認済み: 3 階層表示・タイトル QuickPick(4 項目・キャンセル無変更)・kind 横断の単一選択・checkbox 書き込み・セクション折りたたみの refresh 跨ぎ保持・welcome 2 態と Initialize リンク・セクション inline「+」。未検証: 折りたたまれた祖先を跨ぐ reveal の自動展開(Add フローの名前入力を要するため。provider の親チェーンはテストで検証済み。Phase 3 の実機確認で再チェックする)。
 
 - 2026-07-20: 計画作成。決定事項 3 点(セクション順・profile 名常時表示・Phase 3 継続実施)を確定。

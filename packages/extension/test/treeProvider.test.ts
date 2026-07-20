@@ -298,7 +298,7 @@ test('tree provider shows included config entries as checked checkboxes', async 
     state: vscode.TreeItemCheckboxState.Checked,
     tooltip: 'Include this config when generating launch.json.',
   });
-  assert.equal(item.description, undefined);
+  assert.equal(item.description, 'node');
   assert.equal(item.iconPath, undefined);
   assert.equal(item.label, 'Launch');
   assert.deepEqual(item.command, {
@@ -341,7 +341,7 @@ test('tree provider keeps excluded config entries as unchecked checkboxes', asyn
 
   const item = provider.getTreeItem(entryNode);
   assert.equal(item.contextValue, 'configEntryDisabled');
-  assert.equal(item.description, 'excluded');
+  assert.equal(item.description, 'node, excluded');
   assert.deepEqual(item.checkboxState, {
     state: vscode.TreeItemCheckboxState.Unchecked,
     tooltip: 'Include this config when generating launch.json.',
@@ -393,7 +393,7 @@ test('tree provider decorates profile entries with diagnostics', async () => {
   assert.ok(entryNode);
   assert.equal(entryNode.type, 'entry');
   const item = provider.getTreeItem(entryNode);
-  assert.equal(item.description, '1 issue');
+  assert.equal(item.description, '0 configs, 1 issue');
   assert.equal(item.tooltip, 'Profile type is required.');
   assert.notEqual(item.iconPath, undefined);
 });
@@ -504,4 +504,119 @@ test('tree provider decorates config files with file-level diagnostics', async (
     'Config file must contain a configurations array.',
   );
   assert.notEqual(item.iconPath, undefined);
+});
+
+test('tree provider shows referenced config counts and profile names across files', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/profile-reference-counts'),
+  );
+  const provider = new LaunchComposerTreeProvider(store);
+  provider.refresh({
+    profiles: [
+      {
+        file: 'profile.json',
+        profiles: [{ name: 'node-a' }, { name: 'node-b' }, { name: 'unused' }],
+      },
+    ],
+    configs: [
+      {
+        file: 'config.json',
+        configurations: [
+          { name: 'One', profile: 'node-a' },
+          { name: 'Two', profile: 'node-a', excluded: true },
+          { name: 'Empty', profile: '' },
+        ],
+      },
+      {
+        file: 'other.json',
+        configurations: [{ name: 'Three', profile: 'node-b' }],
+      },
+    ],
+    issues: [],
+    generateReadiness: { diagnostics: [] },
+  });
+
+  const { configSection, profileSection } = await getSectionNodes(provider);
+
+  const [profileFileNode] = await provider.getChildren(profileSection);
+  assert.ok(profileFileNode);
+  assert.equal(profileFileNode.type, 'file');
+  const profileEntries = await provider.getChildren(profileFileNode);
+  assert.deepEqual(
+    profileEntries.map((node) => provider.getTreeItem(node).description),
+    ['2 configs', '1 config', '0 configs'],
+  );
+
+  const configFileNodes = await provider.getChildren(configSection);
+  const configFileNode = configFileNodes.find(
+    (node) => node.type === 'file' && node.file === 'config.json',
+  );
+  assert.ok(configFileNode);
+  const configEntries = await provider.getChildren(configFileNode);
+  assert.deepEqual(
+    configEntries.map((node) => provider.getTreeItem(node).description),
+    ['node-a', 'node-a, excluded', undefined],
+  );
+});
+
+test('tree provider keeps the plain profile name on missing references', async () => {
+  const store = new WorkspaceStore(
+    vscode.Uri.file('/workspace/config-missing-reference'),
+  );
+  const provider = new LaunchComposerTreeProvider(store);
+  provider.refresh({
+    profiles: [],
+    configs: [
+      {
+        file: 'config.json',
+        configurations: [
+          { name: 'Launch', profile: 'ghost' },
+          { name: 'Old', profile: 'ghost', excluded: true },
+        ],
+      },
+    ],
+    issues: [],
+    generateReadiness: {
+      diagnostics: [
+        {
+          source: 'core-validation',
+          file: 'config.json',
+          message: 'Config profile "ghost" was not found.',
+          target: {
+            kind: 'config',
+            index: 0,
+            name: 'Launch',
+            field: 'profile',
+          },
+        },
+        {
+          source: 'core-validation',
+          file: 'config.json',
+          message: 'Config profile "ghost" was not found.',
+          target: {
+            kind: 'config',
+            index: 1,
+            name: 'Old',
+            field: 'profile',
+          },
+        },
+      ],
+    },
+  });
+
+  const { configSection } = await getSectionNodes(provider);
+  const [fileNode] = await provider.getChildren(configSection);
+  assert.ok(fileNode);
+  assert.equal(fileNode.type, 'file');
+  const entryNodes = await provider.getChildren(fileNode);
+
+  const [includedItem, excludedItem] = entryNodes.map((node) =>
+    provider.getTreeItem(node),
+  );
+  assert.ok(includedItem);
+  assert.ok(excludedItem);
+  assert.equal(includedItem.description, 'ghost, 1 issue');
+  assert.equal(excludedItem.description, 'ghost, excluded, 1 issue');
+  assert.notEqual(includedItem.iconPath, undefined);
+  assert.notEqual(excludedItem.iconPath, undefined);
 });
