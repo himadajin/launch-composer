@@ -82,6 +82,8 @@ LAUNCH COMPOSER                          [+ ▷]   ← view title: Add(QuickPick
 
 ### 進捗記録
 
+- 2026-07-20: Phase 2 完了。単一ビュー統合を実装(manifest / commands.ts / provider.ts / extension.ts / handlers.ts、テスト 3 ファイル改修・新規 8 テスト)。検証ゲート全パス(148 テスト)。レビュー時の採用判断: QuickPick placeholder `Choose what to add`、file 作成フローの `createDataFile(kind)` 共通化(仕様の「同じ file 作成フロー」を関数共有で保証)。実機確認済み: 3 階層表示・タイトル QuickPick(4 項目・キャンセル無変更)・kind 横断の単一選択・checkbox 書き込み・セクション折りたたみの refresh 跨ぎ保持・welcome 2 態と Initialize リンク・セクション inline「+」。未検証: 折りたたまれた祖先を跨ぐ reveal の自動展開(Add フローの名前入力を要するため。provider の親チェーンはテストで検証済み。Phase 3 の実機確認で再チェックする)。
+
 - 2026-07-20: 計画作成。決定事項 3 点(セクション順・profile 名常時表示・Phase 3 継続実施)を確定。
 - 2026-07-20: Phase 1 完了。`ui.md`(UI 構成 / 空状態 2 態 / section node 新設 / view title の Add QuickPick / inline actions / checkbox / reveal)と `extension.md`(単一 TreeView / Add QuickPick フロー / コマンド一覧)を改訂。起草時の判断: welcome 文言は `No profile or config files found. [Initialize Launch Composer](command:launch-composer.init)`、section node は context menu を提供せず inline「+」のみ、invalid file だけが存在する場合は welcome を出さない、Add Config の profile 0 件チェックは file 選択後(既存実装順)。
 - 2026-07-20: Phase 0 完了(実装者による調査をレビュー・裏取りの上で採用)。命名・空状態・Add Config フロー・012 との進め方を確定し、影響範囲とテスト改修対象を Phase 1・2 に注記。実装者の主要な発見: `manifest.test.ts` が commands 配列順と `COMMANDS` 定義順の deepEqual を要求、テスト stub の `reveal` は `getParent` 実装が必須、`workspaceSyncController` は変更不要、既存 id 体系は kind 修飾済みで統合しても衝突なし。

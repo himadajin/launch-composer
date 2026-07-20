@@ -2,6 +2,7 @@ export const COMMANDS = {
   generate: 'launch-composer.generate',
   init: 'launch-composer.init',
   addProfile: 'launch-composer.addProfile',
+  add: 'launch-composer.add',
   addProfileFile: 'launch-composer.addProfileFile',
   openProfileFileJson: 'launch-composer.openProfileFileJson',
   copyProfileFilePath: 'launch-composer.copyProfileFilePath',

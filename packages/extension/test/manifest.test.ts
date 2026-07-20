@@ -42,6 +42,11 @@ test('package.json command contributions stay aligned with the extension impleme
         enablement?: string;
       }>;
       menus?: {
+        'view/title'?: Array<{
+          command: string;
+          when?: string;
+          group?: string;
+        }>;
         'view/item/context'?: Array<{
           command: string;
           when?: string;
@@ -52,6 +57,10 @@ test('package.json command contributions stay aligned with the extension impleme
           when?: string;
         }>;
       };
+      viewsWelcome?: Array<{
+        view: string;
+        contents: string;
+      }>;
     };
   };
 
@@ -70,15 +79,20 @@ test('package.json command contributions stay aligned with the extension impleme
   ]);
   assert.deepEqual(packageJson.contributes.views.launchComposer, [
     {
-      id: 'launchComposer.configs',
-      name: 'CONFIGS',
-    },
-    {
-      id: 'launchComposer.profiles',
-      name: 'PROFILES',
+      id: 'launchComposer.explorer',
+      name: 'Launch Composer',
     },
   ]);
-  assert.equal(packageJson.contributes.views.explorer, undefined);
+  assert.deepEqual(Object.keys(packageJson.contributes.views), [
+    'launchComposer',
+  ]);
+  assert.deepEqual(packageJson.contributes.viewsWelcome, [
+    {
+      view: 'launchComposer.explorer',
+      contents:
+        'No profile or config files found. [Initialize Launch Composer](command:launch-composer.init)',
+    },
+  ]);
   assert.equal(packageJson.publisher, 'himadajin');
   assert.equal(packageJson.license, 'MIT');
   assert.equal(
@@ -93,8 +107,46 @@ test('package.json command contributions stay aligned with the extension impleme
     url: 'https://github.com/himadajin/launch-composer/issues',
   });
 
+  const viewTitleMenu = packageJson.contributes.menus?.['view/title'];
+  assert.deepEqual(viewTitleMenu, [
+    {
+      command: 'launch-composer.add',
+      when: 'view == launchComposer.explorer',
+      group: 'navigation',
+    },
+    {
+      command: 'launch-composer.generate',
+      when: 'view == launchComposer.explorer',
+      group: 'navigation@1',
+    },
+  ]);
+
   const itemContextMenu = packageJson.contributes.menus?.['view/item/context'];
   assert.ok(itemContextMenu);
+  assert.ok(
+    itemContextMenu.some(
+      (item) =>
+        item.command === 'launch-composer.addConfigFile' &&
+        item.when ===
+          'view == launchComposer.explorer && viewItem == configSection' &&
+        item.group === 'inline',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.some(
+      (item) =>
+        item.command === 'launch-composer.addProfileFile' &&
+        item.when ===
+          'view == launchComposer.explorer && viewItem == profileSection' &&
+        item.group === 'inline',
+    ),
+  );
+  assert.ok(
+    itemContextMenu.every(
+      (item) =>
+        item.group === 'inline' || !(item.when ?? '').includes('Section'),
+    ),
+  );
   assert.ok(
     itemContextMenu.some(
       (item) =>
@@ -116,7 +168,7 @@ test('package.json command contributions stay aligned with the extension impleme
       (item) =>
         item.command === 'launch-composer.includeAllConfigs' &&
         item.when ===
-          'view == launchComposer.configs && viewItem == configFile' &&
+          'view == launchComposer.explorer && viewItem == configFile' &&
         item.group === '0_state@1',
     ),
   );
@@ -125,7 +177,7 @@ test('package.json command contributions stay aligned with the extension impleme
       (item) =>
         item.command === 'launch-composer.excludeAllConfigs' &&
         item.when ===
-          'view == launchComposer.configs && viewItem == configFile' &&
+          'view == launchComposer.explorer && viewItem == configFile' &&
         item.group === '0_state@2',
     ),
   );
@@ -156,12 +208,19 @@ test('package.json command contributions stay aligned with the extension impleme
   const inlineMenu = itemContextMenu.filter((item) => item.group === 'inline');
   assert.deepEqual(inlineMenu.map((item) => item.command).sort(), [
     'launch-composer.addConfigEntry',
+    'launch-composer.addConfigFile',
     'launch-composer.addProfileEntry',
+    'launch-composer.addProfileFile',
     'launch-composer.openItemJson',
   ]);
 
   const commandPalette = packageJson.contributes.menus?.commandPalette;
   assert.ok(commandPalette);
+  assert.ok(
+    commandPalette.some(
+      (item) => item.command === 'launch-composer.add' && item.when === 'false',
+    ),
+  );
   assert.ok(
     commandPalette.some(
       (item) =>

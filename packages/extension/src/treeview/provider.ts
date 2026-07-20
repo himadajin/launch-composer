@@ -14,9 +14,16 @@ import type {
 } from '../io/workspaceStore.js';
 import { COMMANDS } from '../commands.js';
 
+type DataKind = 'profile' | 'config';
+
+type SectionNode = {
+  type: 'section';
+  kind: DataKind;
+};
+
 type FileNode = {
   type: 'file';
-  kind: 'profile' | 'config';
+  kind: DataKind;
   file: string;
   issue?: ComposerDataIssue;
   diagnostics?: GenerateDiagnostic[];
@@ -33,7 +40,7 @@ type EntryNode = {
   diagnostics?: GenerateDiagnostic[];
 };
 
-export type TreeNode = FileNode | EntryNode;
+export type TreeNode = SectionNode | FileNode | EntryNode;
 
 function toCheckboxState(
   checked: boolean,
@@ -51,13 +58,20 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
   >();
   readonly onDidChangeTreeData = this.didChangeTreeDataEmitter.event;
 
+  /**
+   * Section nodes are singletons held for the provider's lifetime so that
+   * `getParent` returns the same instances `getChildren` produced, which
+   * `TreeView.reveal` requires to resolve the ancestor chain.
+   */
+  private readonly sectionNodes: Record<DataKind, SectionNode> = {
+    config: { type: 'section', kind: 'config' },
+    profile: { type: 'section', kind: 'profile' },
+  };
+
   private entryNodes = new Map<string, EntryNode>();
   private snapshot: WorkspaceDataSnapshot | undefined;
 
-  constructor(
-    private readonly kind: 'profile' | 'config',
-    private readonly store: WorkspaceStore,
-  ) {}
+  constructor(private readonly store: WorkspaceStore) {}
 
   refresh(snapshot?: WorkspaceDataSnapshot): void {
     this.snapshot = snapshot;
@@ -67,7 +81,11 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
 
   async getChildren(element?: TreeNode): Promise<TreeNode[]> {
     if (element === undefined) {
-      return this.loadRootNodes();
+      return this.loadSectionNodes();
+    }
+
+    if (element.type === 'section') {
+      return this.loadFileNodes(element.kind);
     }
 
     if (element.type === 'entry' || element.issue !== undefined) {
@@ -120,10 +138,27 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
   }
 
   getParent(element: TreeNode): TreeNode | undefined {
-    return element.type === 'entry' ? element.parent : undefined;
+    if (element.type === 'entry') {
+      return element.parent;
+    }
+    if (element.type === 'file') {
+      return this.sectionNodes[element.kind];
+    }
+    return undefined;
   }
 
   getTreeItem(element: TreeNode): vscode.TreeItem {
+    if (element.type === 'section') {
+      const item = new vscode.TreeItem(
+        element.kind === 'config' ? 'Configs' : 'Profiles',
+        vscode.TreeItemCollapsibleState.Expanded,
+      );
+      item.id = `section:${element.kind}`;
+      item.contextValue =
+        element.kind === 'config' ? 'configSection' : 'profileSection';
+      return item;
+    }
+
     if (element.type === 'file') {
       const item = new vscode.TreeItem(
         element.file,
@@ -204,12 +239,17 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     view: vscode.TreeView<TreeNode>,
     target: EditorTarget,
   ): Promise<void> {
-    if (target.kind !== this.kind) {
+    const sectionNodes = await this.loadSectionNodes();
+    const sectionNode = sectionNodes.find(
+      (node): node is SectionNode =>
+        node.type === 'section' && node.kind === target.kind,
+    );
+    if (sectionNode === undefined) {
       return;
     }
 
-    const rootNodes = await this.loadRootNodes();
-    const fileNode = rootNodes.find(
+    const fileNodes = await this.loadFileNodes(sectionNode.kind);
+    const fileNode = fileNodes.find(
       (node): node is FileNode =>
         node.type === 'file' && node.file === target.file,
     );
@@ -230,35 +270,46 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
     });
   }
 
-  private async loadRootNodes(): Promise<TreeNode[]> {
-    const data = this.snapshot ?? (await this.store.readAll());
-    const files = this.kind === 'profile' ? data.profiles : data.configs;
+  private async loadSectionNodes(): Promise<TreeNode[]> {
+    const data = await this.loadData();
+    if (
+      data.profiles.length === 0 &&
+      data.configs.length === 0 &&
+      data.issues.length === 0
+    ) {
+      return [];
+    }
+
+    return [this.sectionNodes.config, this.sectionNodes.profile];
+  }
+
+  private async loadFileNodes(kind: DataKind): Promise<TreeNode[]> {
+    const data = await this.loadData();
+    const files = kind === 'profile' ? data.profiles : data.configs;
     const fileNames = [
       ...files.map((f) => f.file),
-      ...data.issues.filter((i) => i.kind === this.kind).map((i) => i.file),
+      ...data.issues.filter((i) => i.kind === kind).map((i) => i.file),
     ].sort((a, b) => a.localeCompare(b));
-
-    this.entryNodes.clear();
 
     return fileNames.map((file) => {
       const issue = data.issues.find(
-        (candidate) => candidate.kind === this.kind && candidate.file === file,
+        (candidate) => candidate.kind === kind && candidate.file === file,
       );
       const fileData = files.find((candidate) => candidate.file === file);
       const diagnostics = getTreeFileDiagnostics(
         data.generateReadiness.diagnostics,
-        this.kind,
+        kind,
         file,
       );
       const node: FileNode = issue
         ? {
             type: 'file',
-            kind: this.kind,
+            kind,
             file,
             issue,
             diagnostics,
           }
-        : this.kind === 'profile'
+        : kind === 'profile'
           ? {
               type: 'file',
               kind: 'profile',
@@ -279,6 +330,19 @@ export class LaunchComposerTreeProvider implements vscode.TreeDataProvider<TreeN
       return node;
     });
   }
+
+  /**
+   * Reads the workspace once and keeps the result until the next refresh,
+   * so expanding both sections does not trigger a second read when no
+   * snapshot was pushed by the sync controller.
+   */
+  private async loadData(): Promise<WorkspaceDataSnapshot> {
+    if (this.snapshot === undefined) {
+      this.snapshot = await this.store.readAll();
+    }
+
+    return this.snapshot;
+  }
 }
 
 function getEntryKey(target: EditorTarget): string {
@@ -287,7 +351,7 @@ function getEntryKey(target: EditorTarget): string {
 
 function getTreeFileDiagnostics(
   diagnostics: readonly GenerateDiagnostic[],
-  kind: 'profile' | 'config',
+  kind: DataKind,
   file: string,
 ): GenerateDiagnostic[] {
   return diagnostics.filter((diagnostic) => {

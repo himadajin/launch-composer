@@ -21,10 +21,7 @@ import {
   registerDataWatcher,
   WatcherEchoFilter,
 } from './sync/watcherEchoFilter.js';
-import {
-  WorkspaceSyncController,
-  type SnapshotKind,
-} from './sync/workspaceSyncController.js';
+import { WorkspaceSyncController } from './sync/workspaceSyncController.js';
 import {
   LaunchComposerTreeProvider,
   type TreeNode,
@@ -43,20 +40,12 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   const store = new WorkspaceStore(workspaceRoot.uri);
-  const profileProvider = new LaunchComposerTreeProvider('profile', store);
-  const configProvider = new LaunchComposerTreeProvider('config', store);
+  const provider = new LaunchComposerTreeProvider(store);
 
-  const profileView = vscode.window.createTreeView<TreeNode>(
-    'launchComposer.profiles',
+  const view = vscode.window.createTreeView<TreeNode>(
+    'launchComposer.explorer',
     {
-      treeDataProvider: profileProvider,
-      showCollapseAll: false,
-    },
-  );
-  const configView = vscode.window.createTreeView<TreeNode>(
-    'launchComposer.configs',
-    {
-      treeDataProvider: configProvider,
+      treeDataProvider: provider,
       manageCheckboxStateManually: true,
       showCollapseAll: false,
     },
@@ -65,16 +54,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const issueReporter = new IssueReporter();
   const echoFilter = new WatcherEchoFilter();
 
-  const applySnapshot = (
-    snapshot: WorkspaceDataSnapshot,
-    kind: SnapshotKind = 'both',
-  ): void => {
-    if (kind === 'both' || kind === 'profile') {
-      profileProvider.refresh(snapshot);
-    }
-    if (kind === 'both' || kind === 'config') {
-      configProvider.refresh(snapshot);
-    }
+  const applySnapshot = (snapshot: WorkspaceDataSnapshot): void => {
+    provider.refresh(snapshot);
   };
 
   const syncController = new WorkspaceSyncController({
@@ -89,10 +70,7 @@ export function activate(context: vscode.ExtensionContext): void {
   ): Promise<void> => syncController.sync(options);
 
   const revealTarget = async (target: EditorTarget): Promise<void> => {
-    await Promise.all([
-      profileProvider.reveal(profileView, target),
-      configProvider.reveal(configView, target),
-    ]);
+    await provider.reveal(view, target);
   };
 
   const handleGenerate = createGenerateHandler(store, sync);
@@ -128,13 +106,12 @@ export function activate(context: vscode.ExtensionContext): void {
     echoFilter,
     sync,
   });
-  const checkboxSubscription = configView.onDidChangeCheckboxState((event) =>
+  const checkboxSubscription = view.onDidChangeCheckboxState((event) =>
     handleConfigCheckboxChange(event),
   );
 
   context.subscriptions.push(
-    profileView,
-    configView,
+    view,
     profileWatcher,
     configWatcher,
     checkboxSubscription,
