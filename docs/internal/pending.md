@@ -99,7 +99,8 @@ adapter-specific fixed fields: (1) whether pass-through keys are shown
 read-only, editable via a generic key-value editor, or stay invisible;
 (2) which keys deserve fixed form fields, and whether adapter-specific ones
 such as `stopAtEntry` keep that status. Then update `ui.md`, the editors, and
-tests together.
+tests together. If a generic key-value editor is adopted, reuse the per-field
+Override toggle pattern decided in plan 015 for its override semantics.
 
 ## Decide whether excluded configs should still block Generate
 
@@ -113,23 +114,6 @@ To change: decide between keeping strict validation and demoting excluded
 entries' errors to non-blocking diagnostics (still shown in the TreeView and
 editor). If demoted, update `core.md`, validation, generate filtering, and
 tests together.
-
-## Show inherited values and support returning overrides to unset
-
-Origin: 2026-07-20 UI boundary investigation (depends on the profile-owned
-program decision: a config's role is now explicitly "override run
-parameters", so override-vs-inherit state is core form information).
-
-Current state: the config editor shows only the config's own values. The
-effective value inherited from the profile is invisible. `cwd` can be
-returned to inherited by clearing the text, but Stop At Entry is a checkbox:
-unset and explicit `false` render identically, and once toggled it always
-writes `true` / `false`, so the GUI cannot return the key to unset.
-
-To change: pick an override UI (for example a per-field override toggle that
-deletes the key when off and shows the inherited value as a placeholder),
-then update `ui.md`, the editors, save patch semantics, and tests together.
-Candidate for promotion to a plan once the UI pattern is decided.
 
 ## Unify the profile and config file root shapes
 

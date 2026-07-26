@@ -308,8 +308,8 @@ profile editor のフォーム項目:
   - 保存方法: debounce 後 patch
 - 表示ラベル: `Profile: Stop At Entry`
   - JSON path: `configuration.stopAtEntry`
-  - control: `Checkbox`
-  - 保存方法: 即時 patch
+  - control: `Set` checkbox + `Checkbox`
+  - 保存方法: 即時 patch(「[Stop At Entry の Set](#stop-at-entry-の-set)」を参照)
 - 表示ラベル: `Profile: Args`
   - JSON path: `args`
   - control: `ListEditor`
@@ -324,11 +324,21 @@ profile editor は `configuration.type` と `configuration.request` をフォー
 - Type は空文字でも leaf key を削除せず `configuration.type` に保存する
 - Request は `launch` / `attach` の選択値だけを保存する。不正な既存値や placeholder 値は保存しない
 - Program / Working Directory は空白だけになった場合、対応する leaf key を削除する patch を送る
-- Stop At Entry は checked 値を `true` / `false` として書く
+- Stop At Entry の保存は「[Stop At Entry の Set](#stop-at-entry-の-set)」に従う
 - Args は空配列になった場合、top-level `args` を削除する
 - TextInput の debounce はユーザー入力に対してだけ意味を持つ。props からの同期だけで実質的な保存 patch は発生しない
 
 `configuration` 内の最後の GUI-managed field を削除した場合でも、Host は受け取った leaf patch だけを適用する。親の `configuration` オブジェクトを自動的に削除することは仕様にしない。
+
+### Stop At Entry の Set
+
+profile の Stop At Entry は値 control の上に `Set` checkbox を表示する。`configuration.stopAtEntry` key が JSON に存在するときだけ `Set` は checked であり、`FormGroup` の modified indicator も key が存在する間だけ表示する。UI 独自の Set フラグは永続化しない。
+
+- `Set` が unchecked の間、値 checkbox は disabled・unchecked で表示する。key は `launch.json` に出力されず、デバッグアダプタの既定値に任せる状態を表す
+- `Set` が unchecked の間、field diagnostic がなければ helper に `Not set. The debug adapter default applies.` を表示する。field diagnostic があれば diagnostic を優先する
+- `Set` を checked にすると、`configuration.stopAtEntry` へ `false` を即時 patch で書く
+- `Set` を unchecked にすると、key を削除する patch を送る(key がなければ patch は送らない)
+- 値 checkbox は checked 値を `true` / `false` として即時 patch で書く
 
 ## Config Editor
 
@@ -349,12 +359,12 @@ config editor のフォーム項目:
   - 保存方法: 即時 patch
 - 表示ラベル: `Config: Working Directory`
   - JSON path: `configuration.cwd`
-  - control: `TextInput`
-  - 保存方法: debounce 後 patch
+  - control: `Override` checkbox + `TextInput`
+  - 保存方法: override 中のみ debounce 後 patch(「[Override と継承値](#override-と継承値)」を参照)
 - 表示ラベル: `Config: Stop At Entry`
   - JSON path: `configuration.stopAtEntry`
-  - control: `Checkbox`
-  - 保存方法: 即時 patch
+  - control: `Override` checkbox + `Checkbox`
+  - 保存方法: 即時 patch(「[Override と継承値](#override-と継承値)」を参照)
 - 表示ラベル: `Config: Args File`
   - JSON path: `argsFile`
   - control: `TextInput` + Browse
@@ -380,11 +390,34 @@ config editor は `configuration.type`、`configuration.request`、`configuratio
 - Profile select は internal placeholder 値を選んだ場合は保存しない
 - Config: Include は checked のとき included として扱い、`excluded` key を削除する。unchecked のとき excluded として扱い、`excluded: true` を書く
 - Working Directory は空白だけになった場合、対応する leaf key を削除する patch を送る
+- Working Directory / Stop At Entry の `Override` 操作の保存は「[Override と継承値](#override-と継承値)」に従う
 - Args File は trim して保存する。空白だけになった場合は top-level `argsFile` を削除する
 - Args は空配列になった場合、top-level `args` を削除する
 - Browse は `showOpenDialog` を開き、ファイルが選ばれたら選択 path を `argsFile` として即時保存する
 
 選択中 profile に `args` が定義されている場合、Args File control は disabled になり、`The selected profile already defines args.` を表示する。
+
+### Override と継承値
+
+Working Directory と Stop At Entry は、profile の `configuration` を config が shallow merge で上書きする override field である([core.md](./core.md) のマージルールを参照)。両 field は値 control の上に `Override` checkbox を表示する。
+
+- override 状態は JSON から導出する。config entry の `configuration` に該当 key が存在するとき `Override` は checked である。UI 独自の override フラグは永続化しない(例外は下記 Working Directory の編集開始状態)
+- `FormGroup` の modified indicator は override 中にだけ表示する
+- 継承値は `Config: Profile` で選択中の profile の `configuration` の同名 key から取る。profile が未選択・missing の場合、継承値は未設定として扱う
+
+`Override` が unchecked の間:
+
+- 値 control は disabled にする
+- Working Directory は継承値を placeholder として表示する。継承値が未設定なら placeholder は表示しない
+- Stop At Entry は継承値の実効値(継承値が `true` のときだけ checked)を表示する
+- field diagnostic がなければ、helper に継承元を表示する。参照 profile が解決できる場合は `Inherited from profile "<name>".`、それ以外は `No profile to inherit from.`。field diagnostic があれば diagnostic を優先する
+
+`Override` の操作:
+
+- Stop At Entry の `Override` を checked にすると、表示中の実効値(継承値が `true` なら `true`、それ以外は `false`)を `configuration.stopAtEntry` へ即時 patch で書く
+- Working Directory の `Override` を checked にした時点では patch を送らない。`TextInput` は継承値を初期テキストとして編集可能になり、ユーザー編集の debounce commit で初めて `configuration.cwd` を書く。key を書かないまま別 entry へ切り替えた場合、この編集開始状態は破棄される
+- `Override` を unchecked にすると、該当 key を削除する patch を送る(key がなければ patch は送らない)。pending のローカル入力と未発火の debounce 保存は破棄する
+- Working Directory を override 中に空白だけにして commit した場合は、保存挙動のとおり key を削除する patch を送り、結果として `Override` は unchecked に戻る
 
 ## Profile Select
 
