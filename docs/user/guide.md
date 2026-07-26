@@ -65,7 +65,9 @@ Copy this as `.vscode/launch-composer/profiles/profile.json`:
 ```
 
 `configuration` is passed through to the generated VS Code launch configuration.
-`program`, `type`, and `request` belong in the profile.
+`program`, `type`, and `request` belong in the profile: a profile defines what
+to run, and configs vary how the same program runs (arguments, environment,
+working directory). To debug a different program, create another profile.
 
 ## Configs
 

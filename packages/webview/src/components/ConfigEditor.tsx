@@ -286,7 +286,7 @@ export function ConfigEditor({
 
         <EditInJsonHint
           fileLabel={sourceFile}
-          description='Edit the source file to change JSON-only fields such as "type", "request", and "program", or to add unsupported properties.'
+          description='Edit the source file to add unsupported properties. "type", "request", and "program" are managed by the referenced profile and cannot be set on a config.'
           onOpenFileJson={onOpenJson}
         />
       </FormContainer>

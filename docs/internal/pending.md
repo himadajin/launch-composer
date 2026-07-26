@@ -3,19 +3,6 @@
 This file records internal product-design questions that are intentionally not
 being changed yet, but should not be forgotten.
 
-## Should configs be allowed to define `configuration.program`?
-
-Current state: `config.configuration.program` is intentionally invalid.
-`program`, `type`, and `request` are managed by profiles under the current
-specs, implementation, UI, and tests.
-
-Reason to revisit: users may naturally expect config entries to own the
-executable or script target, while profiles may feel more like shared debug
-adapter defaults.
-
-If this changes later, update the internal specs, core validation and merge
-behavior, UI editor fields, tests, README examples, and user guide together.
-
 ## Unify the editorPanel mutation error policy
 
 Origin: 2026-07 refactoring investigation, item E-1 (behavior change,
@@ -93,3 +80,65 @@ an input contains multiple invalid or unresolved variables.
 
 To change: decide whether variable resolution should aggregate all errors or
 remain fail-fast, then update `core.md`, the resolver contract, and tests.
+
+## Decide the GUI field set and pass-through key visibility
+
+Origin: 2026-07-20 UI boundary investigation (follows the profile-owned
+program decision recorded in `specs/core.md`).
+
+Current state: the editors expose a fixed field set (profile: type / request /
+program / cwd / stopAtEntry / args; config: cwd / stopAtEntry / argsFile /
+args). Every other `configuration` key (`env`, `console`, `skipFiles`, ...) is
+a silent JSON pass-through: it is merged into the output but never shown in
+the editor, so the form does not reveal the whole entry. The fixed set also
+bakes in adapter-specific assumptions: `stopAtEntry` is a cppdbg/coreclr-style
+key, while js-debug uses `stopOnEntry`.
+
+To change: decide these together, since a generic key editor would subsume the
+adapter-specific fixed fields: (1) whether pass-through keys are shown
+read-only, editable via a generic key-value editor, or stay invisible;
+(2) which keys deserve fixed form fields, and whether adapter-specific ones
+such as `stopAtEntry` keep that status. Then update `ui.md`, the editors, and
+tests together.
+
+## Decide whether excluded configs should still block Generate
+
+Origin: 2026-07-20 UI boundary investigation.
+
+Current state: per `core.md`, excluded configs are still validated and their
+errors block Generate. Excluding a broken config via the TreeView checkbox
+therefore does not unblock Generate; the JSON must be fixed first.
+
+To change: decide between keeping strict validation and demoting excluded
+entries' errors to non-blocking diagnostics (still shown in the TreeView and
+editor). If demoted, update `core.md`, validation, generate filtering, and
+tests together.
+
+## Show inherited values and support returning overrides to unset
+
+Origin: 2026-07-20 UI boundary investigation (depends on the profile-owned
+program decision: a config's role is now explicitly "override run
+parameters", so override-vs-inherit state is core form information).
+
+Current state: the config editor shows only the config's own values. The
+effective value inherited from the profile is invisible. `cwd` can be
+returned to inherited by clearing the text, but Stop At Entry is a checkbox:
+unset and explicit `false` render identically, and once toggled it always
+writes `true` / `false`, so the GUI cannot return the key to unset.
+
+To change: pick an override UI (for example a per-field override toggle that
+deletes the key when off and shows the inherited value as a placeholder),
+then update `ui.md`, the editors, save patch semantics, and tests together.
+Candidate for promotion to a plan once the UI pattern is decided.
+
+## Unify the profile and config file root shapes
+
+Origin: 2026-07-20 UI boundary investigation.
+
+Current state: a profile file's root is a JSON array of profile entries,
+while a config file's root is an object with a `configurations` array. The
+asymmetry invites hand-editing mistakes and doubles the shape documentation.
+
+To change: decide whether to unify the root shapes (requires a migration
+story for existing files) or keep the asymmetry. One consideration: an object
+root leaves room for future file-level metadata, an array root does not.
