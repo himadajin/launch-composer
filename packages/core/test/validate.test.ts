@@ -340,6 +340,65 @@ test('validateGenerateInput reports profile-only duplicate names', async () => {
   assert.deepEqual(errors[0]?.target, { kind: 'profile', index: 0 });
 });
 
+test('validateGenerateInput suppresses profile-dependent secondary diagnostics for ambiguous references', async () => {
+  let readArgsFileCalls = 0;
+  const errors = await validateGenerateInput({
+    profiles: [
+      {
+        file: 'profiles.json',
+        profiles: [
+          { ...validProfile('dup'), args: ['--from-profile'] },
+          validProfile('dup'),
+        ],
+      },
+    ],
+    configs: [
+      {
+        file: 'configs.json',
+        configurations: [validConfig('Launch', 'dup', '/tmp/args.json')],
+      },
+    ],
+    readArgsFile: async (): Promise<ArgsFileLoadResult> => {
+      readArgsFileCalls += 1;
+      return { kind: 'not-found' };
+    },
+  });
+
+  assert.equal(errors.length, 1);
+  assert.equal(
+    errors[0]?.message,
+    'Profile name "dup" is defined in multiple entries: profiles.json#1, profiles.json#2',
+  );
+  assert.equal(readArgsFileCalls, 0);
+});
+
+test('validateGenerateInput keeps profile-independent diagnostics for ambiguous references', async () => {
+  const errors = await validateGenerateInput({
+    profiles: [
+      {
+        file: 'profiles.json',
+        profiles: [validProfile('dup'), validProfile('dup')],
+      },
+    ],
+    configs: [
+      {
+        file: 'configs.json',
+        configurations: [
+          {
+            ...validConfig('Launch', 'dup'),
+            configuration: { program: 'app.js' },
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.deepEqual(errors.map((error) => error.message).sort(), [
+    'Config with a profile cannot override "program".',
+    'Profile name "dup" is defined in multiple entries: profiles.json#1, profiles.json#2',
+  ]);
+});
+
 test('validateGenerateInput reports config-only duplicate names', async () => {
   const errors = await validateGenerateInput({
     profiles: [
