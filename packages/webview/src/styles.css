@@ -195,6 +195,14 @@ textarea {
   width: 100%;
 }
 
+.composer-override-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
 .empty-state {
   display: grid;
   place-items: center;

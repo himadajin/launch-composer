@@ -51,6 +51,12 @@ export function updateProfileStopAtEntry(
   return updateBooleanConfigurationField(data, 'stopAtEntry', checked);
 }
 
+export function clearProfileStopAtEntry(
+  data: ProfileData,
+): EntryChange<ProfileData> {
+  return deleteConfigurationField(data, 'stopAtEntry');
+}
+
 export function updateProfileArgs(
   data: ProfileData,
   args: string[],
@@ -108,6 +114,16 @@ export function updateConfigStopAtEntry(
   return updateBooleanConfigurationField(data, 'stopAtEntry', checked);
 }
 
+export function clearConfigCwd(data: ConfigData): EntryChange<ConfigData> {
+  return deleteConfigurationField(data, 'cwd');
+}
+
+export function clearConfigStopAtEntry(
+  data: ConfigData,
+): EntryChange<ConfigData> {
+  return deleteConfigurationField(data, 'stopAtEntry');
+}
+
 export function updateConfigArgsFile(
   data: ConfigData,
   value: string,
@@ -161,6 +177,27 @@ function updateOptionalStringField<T extends object>(
   return {
     data: next as T,
     patches,
+  };
+}
+
+function deleteConfigurationField<T extends EntryWithConfiguration>(
+  data: T,
+  key: string,
+): EntryChange<T> {
+  const nextConfiguration = { ...data.configuration };
+  const hadKey = Object.hasOwn(nextConfiguration, key);
+  delete nextConfiguration[key];
+
+  return {
+    data: withConfiguration(data, nextConfiguration),
+    patches: hadKey
+      ? [
+          {
+            type: 'delete',
+            path: ['configuration', key],
+          },
+        ]
+      : [],
   };
 }
 
