@@ -55,7 +55,7 @@
   folder 数を activate 時にしか評価していない
 - **014** [CONFIGS/PROFILES の単一ビュー統合](./014-single-pane-treeview.md) — 優先度: — / 状態: 完了(commit `cd2f76e`)
   2 ペイン分離による参照関係の不可視・スペース分割・アクション重複を、単一ビューの 3 階層ツリーに統合して解消する
-- **015** [継承値の表示と override の unset 復帰](./015-override-inherited-values.md) — 優先度: 中 / 状態: 進行中
+- **015** [継承値の表示と override の unset 復帰](./015-override-inherited-values.md) — 優先度: 中 / 状態: 完了(commit `7ce09bb`)
   config editor が profile からの継承値を表示せず、Stop At Entry を GUI から unset(=継承)に戻せない。フィールド毎の Override / Set トグルで解消する
 
 ## 計画間の関係

@@ -1,6 +1,6 @@
 # 改修計画: 継承値の表示と override の unset 復帰
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-26、commit `84dc330`(branch `feat-override-ui`)。状態: 進行中。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-26、commit `84dc330`(branch `feat-override-ui`)。状態: 完了(仕様 commit `8ded949`、実装 commit `7ce09bb`)。
 
 `docs/internal/pending.md` の「Show inherited values and support returning overrides to unset」(2026-07-20 UI boundary 調査)を昇格した UX 改修である。
 
