@@ -11,18 +11,14 @@ export type TextFileReadResult =
   { status: 'ok'; text: string } | { status: 'missing' };
 
 export function isMissingFileSystemError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
+  if (error instanceof vscode.FileSystemError) {
+    return error.code === 'FileNotFound';
   }
 
-  const errorWithCode = error as Error & { code?: unknown; name?: unknown };
+  // Raw Node.js errors surfaced by file system providers.
   return (
-    (error instanceof vscode.FileSystemError &&
-      /ENOENT|FileNotFound/i.test(error.message)) ||
-    errorWithCode.code === 'ENOENT' ||
-    (typeof errorWithCode.name === 'string' &&
-      /FileNotFound/i.test(errorWithCode.name)) ||
-    /ENOENT|FileNotFound/i.test(error.message)
+    error instanceof Error &&
+    (error as Error & { code?: unknown }).code === 'ENOENT'
   );
 }
 

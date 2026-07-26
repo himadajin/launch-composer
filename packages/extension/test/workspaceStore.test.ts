@@ -51,7 +51,6 @@ test('readAll tolerates ENOENT-style missing directories', async () => {
 });
 
 test('readAll skips files that disappear before they can be read', async () => {
-  testVscode.__testing.setMissingPathErrorStyle('vscode-enoent');
   testVscode.__testing.createGhostFile(
     '/workspace/racy-project/.vscode/launch-composer/profiles/racy.json',
   );

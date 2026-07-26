@@ -17,9 +17,7 @@ export const testVscode = vscode as typeof vscode & {
     reset(): void;
     createExtensionContext(): unknown;
     setWorkspaceFolders(paths: string[]): void;
-    setMissingPathErrorStyle(
-      style: 'vscode' | 'enoent' | 'vscode-enoent',
-    ): void;
+    setMissingPathErrorStyle(style: 'vscode' | 'enoent'): void;
     createGhostFile(filePath: string): void;
     setQuickPickResponses(responses: unknown[]): void;
     setInputBoxResponses(responses: unknown[]): void;
