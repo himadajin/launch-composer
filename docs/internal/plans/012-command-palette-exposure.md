@@ -1,6 +1,8 @@
 # 修正計画: Command Palette 露出の仕様乖離
 
-進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 未着手。
+進め方・ライフサイクルは [plans/README.md](./README.md) に従う。調査時点: 2026-07-19、commit `22a58d5`。状態: 完了(commit `d84663e`)。
+
+Phase 0 の結果(2026-07-26): 全コマンドを突き合わせ、乖離は `openActiveEditorJson` の 1 件のみだった。露出を意図した変更履歴もないため、仕様どおり隠した。manifest テストは「仕様の 3 コマンド以外はすべて hidden」の網羅検査に置き換えた。
 
 ## 問題
 
