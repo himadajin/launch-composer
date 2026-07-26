@@ -25,7 +25,7 @@
 
 ## 台帳
 
-優先度は計画作成時点の暫定評価(実害の大きさ × 確信度)。001〜013 は 2026-07-19 時点(commit `22a58d5`)のコードベース全体調査に基づく。調査時、静的検証(lint / typecheck / 全テスト)はすべてパスしており、問題はコードレビューにより検出した。014 は 2026-07-20 時点(commit `ffd2b61`)の実機操作による UX 検討に基づく機能改修である。
+優先度は計画作成時点の暫定評価(実害の大きさ × 確信度)。001〜013 は 2026-07-19 時点(commit `22a58d5`)のコードベース全体調査に基づく。調査時、静的検証(lint / typecheck / 全テスト)はすべてパスしており、問題はコードレビューにより検出した。014 は 2026-07-20 時点(commit `ffd2b61`)の実機操作による UX 検討に基づく機能改修である。015 は 2026-07-20 の UI boundary 調査で `docs/internal/pending.md` に記録した課題から昇格した UX 改修である。
 
 - **001** [webview エディタ state のエントリ間分離](./001-webview-editor-state-isolation.md) — 優先度: 高 / 状態: 完了(commit `ff28fa8`)
   エントリ切替時に編集中テキストが別エントリに書き込まれる、rename 失敗時に表示が復元されない、ほか
@@ -55,6 +55,8 @@
   folder 数を activate 時にしか評価していない
 - **014** [CONFIGS/PROFILES の単一ビュー統合](./014-single-pane-treeview.md) — 優先度: — / 状態: 完了(commit `cd2f76e`)
   2 ペイン分離による参照関係の不可視・スペース分割・アクション重複を、単一ビューの 3 階層ツリーに統合して解消する
+- **015** [継承値の表示と override の unset 復帰](./015-override-inherited-values.md) — 優先度: 中 / 状態: 完了(commit `7ce09bb`)
+  config editor が profile からの継承値を表示せず、Stop At Entry を GUI から unset(=継承)に戻せない。フィールド毎の Override / Set トグルで解消する
 
 ## 計画間の関係
 
@@ -62,3 +64,4 @@
 - [004](./004-watcher-echo-filter-leak.md) は `docs/internal/pending.md` の「Align watcher patterns with the store's read scope」(E-3)と同じコンポーネントに触れる。
 - [006](./006-host-webview-error-contract.md) は `docs/internal/pending.md` の「Unify the editorPanel mutation error policy」(E-1)を包含する形で解決するのが自然である。
 - [014](./014-single-pane-treeview.md) は manifest(views / menus / commandPalette)・`treeview/provider.ts`・`extension.ts` の TreeView 初期化を広く書き換えるため、同じ箇所に触れる [012](./012-command-palette-exposure.md)・[013](./013-workspace-folder-tracking.md) と並行着手する場合は順序を調整すること。014 の Phase 3(webview からの profile ジャンプ)は [006](./006-host-webview-error-contract.md)・[007](./007-webview-update-queue-revision.md) と同じ Host/Webview 通信層に触れる。
+- [015](./015-override-inherited-values.md) は webview editor の保存パイプライン(`useEditableField` → patch)に触れるため、[001](./001-webview-editor-state-isolation.md)・[007](./007-webview-update-queue-revision.md) と同じ注意が要る。また `docs/internal/pending.md` の「Decide the GUI field set and pass-through key visibility」で汎用 key-value エディタを採る場合、015 の Override トグルをフィールド単位パターンとして踏襲すること。

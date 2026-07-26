@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  clearConfigCwd,
+  clearConfigStopAtEntry,
+  clearProfileStopAtEntry,
   updateConfigArgs,
   updateConfigArgsFile,
   updateConfigCwd,
@@ -355,6 +358,95 @@ test('configuration boolean updaters emit matching stopAtEntry changes', () => {
       value: false,
     },
   ]);
+});
+
+test('configuration clear helpers delete the leaf key when present', () => {
+  const profileChange = clearProfileStopAtEntry({
+    name: 'node',
+    configuration: {
+      type: 'node',
+      request: 'launch',
+      stopAtEntry: false,
+    },
+  });
+  const configStopChange = clearConfigStopAtEntry({
+    name: 'Launch',
+    profile: 'cpp',
+    configuration: {
+      stopAtEntry: true,
+    },
+  });
+  const configCwdChange = clearConfigCwd({
+    name: 'Launch',
+    profile: 'cpp',
+    configuration: {
+      cwd: '${workspaceFolder}/app',
+      stopAtEntry: true,
+    },
+  });
+
+  assert.deepEqual(profileChange.data, {
+    name: 'node',
+    configuration: {
+      type: 'node',
+      request: 'launch',
+    },
+  });
+  assert.deepEqual(profileChange.patches, [
+    {
+      type: 'delete',
+      path: ['configuration', 'stopAtEntry'],
+    },
+  ]);
+  assert.deepEqual(configStopChange.data, {
+    name: 'Launch',
+    profile: 'cpp',
+  });
+  assert.deepEqual(configStopChange.patches, [
+    {
+      type: 'delete',
+      path: ['configuration', 'stopAtEntry'],
+    },
+  ]);
+  assert.deepEqual(configCwdChange.data, {
+    name: 'Launch',
+    profile: 'cpp',
+    configuration: {
+      stopAtEntry: true,
+    },
+  });
+  assert.deepEqual(configCwdChange.patches, [
+    {
+      type: 'delete',
+      path: ['configuration', 'cwd'],
+    },
+  ]);
+});
+
+test('configuration clear helpers are no-ops when the key is absent', () => {
+  const profileChange = clearProfileStopAtEntry({
+    name: 'node',
+  });
+  const configChange = clearConfigStopAtEntry({
+    name: 'Launch',
+    profile: 'cpp',
+    configuration: {
+      cwd: '${workspaceFolder}/app',
+    },
+  });
+
+  assert.deepEqual(profileChange.data, {
+    name: 'node',
+  });
+  assert.deepEqual(profileChange.patches, []);
+  assert.deepEqual(configChange.data, {
+    name: 'Launch',
+    profile: 'cpp',
+    configuration: {
+      cwd: '${workspaceFolder}/app',
+    },
+  });
+  assert.deepEqual(configChange.patches, []);
 });
 
 test('optional args updaters delete empty arrays and preserve non-empty arrays', () => {

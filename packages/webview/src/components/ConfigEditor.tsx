@@ -16,8 +16,12 @@ import type {
 } from '../types.js';
 import { ArgsField } from './ArgsField.js';
 import { EntryIssuesRow, renderHelperMessages } from './DiagnosticMessages.js';
+import { useState } from 'react';
+
 import type { EntryChange } from './entryChanges.js';
 import {
+  clearConfigCwd,
+  clearConfigStopAtEntry,
   updateConfigArgs,
   updateConfigArgsFile,
   updateConfigCwd,
@@ -84,11 +88,40 @@ export function ConfigEditor({
   );
   const argsFileDisabled = currentProfile?.args !== undefined;
 
+  const hasCwdKey =
+    data.configuration !== undefined &&
+    Object.hasOwn(data.configuration, 'cwd');
+  const stopAtEntryOverridden =
+    data.configuration !== undefined &&
+    Object.hasOwn(data.configuration, 'stopAtEntry');
+  const inheritedCwd = stringOrEmpty(currentProfile?.configuration?.cwd);
+  const inheritedStopAtEntry =
+    currentProfile?.configuration?.stopAtEntry === true;
+  const inheritedHelperMessage =
+    currentProfile === undefined
+      ? 'No profile to inherit from.'
+      : `Inherited from profile "${currentProfile.name}".`;
+
+  // Editing-started state for Working Directory: Override is on but the
+  // key is not written until the user commits a non-blank value.
+  const [cwdOverridePending, setCwdOverridePending] = useState(false);
+  const cwdOverridden = hasCwdKey || cwdOverridePending;
+
   const cwdField = useEditableField(
-    stringOrEmpty(data.configuration?.cwd),
+    hasCwdKey
+      ? stringOrEmpty(data.configuration?.cwd)
+      : cwdOverridden
+        ? inheritedCwd
+        : '',
     autoSaveDelay,
-    (value) => onChange(updateConfigCwd(data, value)),
-    { disabled: readOnly },
+    (value) => {
+      if (value.trim() === '') {
+        setCwdOverridePending(false);
+      }
+
+      onChange(updateConfigCwd(data, value));
+    },
+    { disabled: readOnly || !cwdOverridden },
   );
   const argsFileField = useEditableField(
     stringOrEmpty(data.argsFile),
@@ -210,20 +243,71 @@ export function ConfigEditor({
         <FormGroup
           label="Config: Working Directory"
           description="Working directory passed to the debug adapter."
-          helper={renderHelperMessages(cwdHelperMessages)}
+          modified={cwdOverridden}
+          helper={
+            cwdHelperMessages.length > 0 ? (
+              renderHelperMessages(cwdHelperMessages)
+            ) : cwdOverridden ? undefined : (
+              <FormHelper tone="info">{inheritedHelperMessage}</FormHelper>
+            )
+          }
         >
-          <TextInput
-            disabled={readOnly}
-            value={cwdField.value}
-            onChange={cwdField.onChange}
-          />
+          <div className="composer-override-field">
+            <Checkbox
+              checked={cwdOverridden}
+              disabled={readOnly}
+              label="Override"
+              onChange={(next) => {
+                if (readOnly) {
+                  return;
+                }
+
+                if (next) {
+                  setCwdOverridePending(true);
+                  return;
+                }
+
+                setCwdOverridePending(false);
+                onChange(clearConfigCwd(data));
+              }}
+            />
+            <TextInput
+              disabled={readOnly || !cwdOverridden}
+              {...(!cwdOverridden && inheritedCwd !== ''
+                ? { placeholder: inheritedCwd }
+                : {})}
+              value={cwdField.value}
+              onChange={cwdField.onChange}
+            />
+          </div>
         </FormGroup>
 
         <StopAtEntryField
           label="Config: Stop At Entry"
-          checked={data.configuration?.stopAtEntry === true}
+          checked={
+            stopAtEntryOverridden
+              ? data.configuration?.stopAtEntry === true
+              : inheritedStopAtEntry
+          }
           readOnly={readOnly}
-          helper={renderHelperMessages(stopAtEntryHelperMessages)}
+          helper={
+            stopAtEntryHelperMessages.length > 0 ? (
+              renderHelperMessages(stopAtEntryHelperMessages)
+            ) : stopAtEntryOverridden ? undefined : (
+              <FormHelper tone="info">{inheritedHelperMessage}</FormHelper>
+            )
+          }
+          override={{
+            label: 'Override',
+            overridden: stopAtEntryOverridden,
+            onToggle: (next) => {
+              onChange(
+                next
+                  ? updateConfigStopAtEntry(data, inheritedStopAtEntry)
+                  : clearConfigStopAtEntry(data),
+              );
+            },
+          }}
           onChange={(checked) => {
             onChange(updateConfigStopAtEntry(data, checked));
           }}

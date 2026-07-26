@@ -1,6 +1,7 @@
 import {
   FormContainer,
   FormGroup,
+  FormHelper,
   Select,
   TextInput,
 } from '@himadajin/vscode-components';
@@ -14,6 +15,7 @@ import { ArgsField } from './ArgsField.js';
 import { EntryIssuesRow, renderHelperMessages } from './DiagnosticMessages.js';
 import type { EntryChange } from './entryChanges.js';
 import {
+  clearProfileStopAtEntry,
   updateProfileArgs,
   updateProfileCwd,
   updateProfileProgram,
@@ -70,6 +72,9 @@ export function ProfileEditor({
   readOnlyIssue,
 }: ProfileEditorProps) {
   const readOnly = readOnlyIssue !== undefined;
+  const stopAtEntrySet =
+    data.configuration !== undefined &&
+    Object.hasOwn(data.configuration, 'stopAtEntry');
 
   const typeField = useEditableField(
     stringOrEmpty(data.configuration?.type),
@@ -212,7 +217,26 @@ export function ProfileEditor({
           label="Profile: Stop At Entry"
           checked={data.configuration?.stopAtEntry === true}
           readOnly={readOnly}
-          helper={renderHelperMessages(stopAtEntryHelperMessages)}
+          helper={
+            stopAtEntryHelperMessages.length > 0 ? (
+              renderHelperMessages(stopAtEntryHelperMessages)
+            ) : stopAtEntrySet ? undefined : (
+              <FormHelper tone="info">
+                Not set. The debug adapter default applies.
+              </FormHelper>
+            )
+          }
+          override={{
+            label: 'Set',
+            overridden: stopAtEntrySet,
+            onToggle: (next) => {
+              onChange(
+                next
+                  ? updateProfileStopAtEntry(data, false)
+                  : clearProfileStopAtEntry(data),
+              );
+            },
+          }}
           onChange={(checked) => {
             onChange(updateProfileStopAtEntry(data, checked));
           }}
