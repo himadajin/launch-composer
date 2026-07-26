@@ -45,7 +45,18 @@ export enum FileType {
   Directory = 2,
 }
 
-export class FileSystemError extends Error {}
+export class FileSystemError extends Error {
+  constructor(
+    message?: string,
+    readonly code: string = 'Unknown',
+  ) {
+    super(message);
+  }
+
+  static FileNotFound(path?: string): FileSystemError {
+    return new FileSystemError(`FileNotFound: ${path ?? ''}`, 'FileNotFound');
+  }
+}
 
 type DeleteFileOperation = {
   type: 'deleteFile';
@@ -209,7 +220,7 @@ const didChangeTextDocumentEmitter = new EventEmitter<{
   document: { uri: Uri };
 }>();
 const didSaveTextDocumentEmitter = new EventEmitter<{ uri: Uri }>();
-let missingPathErrorStyle: 'vscode' | 'enoent' | 'vscode-enoent' = 'vscode';
+let missingPathErrorStyle: 'vscode' | 'enoent' = 'vscode';
 let lastCreatedWebviewPanel:
   | {
       disposed: boolean;
@@ -317,13 +328,7 @@ function createMissingPathError(targetPath: string, action: string): Error {
     );
   }
 
-  if (missingPathErrorStyle === 'vscode-enoent') {
-    return new FileSystemError(
-      `ENOENT: no such file or directory, ${action} '${targetPath}'`,
-    );
-  }
-
-  return new FileSystemError(`FileNotFound: ${targetPath}`);
+  return FileSystemError.FileNotFound(targetPath);
 }
 
 export const commands = {
@@ -720,7 +725,7 @@ export const __testing = {
     }));
   },
 
-  setMissingPathErrorStyle(style: 'vscode' | 'enoent' | 'vscode-enoent'): void {
+  setMissingPathErrorStyle(style: 'vscode' | 'enoent'): void {
     missingPathErrorStyle = style;
   },
 

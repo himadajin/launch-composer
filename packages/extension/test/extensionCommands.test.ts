@@ -685,13 +685,13 @@ test('generate validation failure shows a short warning without detailed error n
   assert.equal(await store.launchJsonExists(), false);
 });
 
-test('generate tolerates FileSystemError-wrapped ENOENT when launch.json does not exist', async () => {
+test('generate tolerates raw ENOENT errors when launch.json does not exist', async () => {
   const context =
     testVscode.__testing.createExtensionContext() as vscode.ExtensionContext;
   testVscode.__testing.setWorkspaceFolders([
     '/workspace/generate-empty-vscode-enoent-project',
   ]);
-  testVscode.__testing.setMissingPathErrorStyle('vscode-enoent');
+  testVscode.__testing.setMissingPathErrorStyle('enoent');
 
   activate(context);
   await vscode.commands.executeCommand(COMMANDS.generate);

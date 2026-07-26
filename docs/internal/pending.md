@@ -19,21 +19,6 @@ To change: pick one policy (e.g. "the webview owns failure display; the host
 never toasts"), document it in `docs/internal/specs/communication.md`, and
 update `editorPanel.test.ts` expectations together with the implementation.
 
-## Replace regex-based missing-file detection with FileSystemError.code
-
-Origin: 2026-07 refactoring investigation, item E-2 (behavior-adjacent).
-
-Current state: `isMissingFileSystemError` in
-`packages/extension/src/io/dataFileIo.ts` matches `error.message` /
-`error.name` with regexes. The test stub even has a three-mode error-style
-switch (`setMissingPathErrorStyle`) to exercise it.
-
-To change: use `error instanceof vscode.FileSystemError && error.code ===
-'FileNotFound'` plus a raw `code === 'ENOENT'` fallback, and simplify the stub
-at the same time (the stub's `FileSystemError` currently lacks `.code`).
-Treated as behavior-adjacent because remote FS providers may surface different
-error shapes.
-
 ## Align watcher patterns with the store's read scope
 
 Origin: 2026-07 refactoring investigation, item E-3 (behavior change).
