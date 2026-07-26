@@ -278,8 +278,10 @@ Extension Host は profile と config の JSON ファイルを `FileSystemWatche
 
 登録する pattern:
 
-- `.vscode/launch-composer/profiles/**/*.json`
-- `.vscode/launch-composer/configs/**/*.json`
+- `.vscode/launch-composer/profiles/*.json`
+- `.vscode/launch-composer/configs/*.json`
+
+data directory 直下だけを監視する。ネストしたサブディレクトリ内のファイル(例: `profiles/sub/x.json`)は読み込み対象外であり、監視もしない。data directory の読み込みスコープはトップレベルの `.json` ファイルのみである。
 
 watcher event の扱い:
 
