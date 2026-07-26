@@ -117,18 +117,42 @@ export async function collectValidationState(
   validateConfigEntries(configRefs, errors);
   validateNameUniqueness(profileRefs, configRefs, errors);
 
+  const duplicateProfileNames = new Set<string>();
   for (const profileRef of profileRefs) {
     if (
       typeof profileRef.data.name === 'string' &&
       profileRef.data.name !== ''
     ) {
+      if (profileMap.has(profileRef.data.name)) {
+        duplicateProfileNames.add(profileRef.data.name);
+      }
       profileMap.set(profileRef.data.name, profileRef);
     }
   }
 
   for (const configRef of configRefs) {
-    validateConfigSemantics(configRef, profileMap, errors);
-    await validateArgsFile(configRef, profileMap, input, argsFileCache, errors);
+    // A duplicated profile name makes the reference ambiguous, so
+    // profile-dependent secondary diagnostics would depend on which
+    // duplicate happens to win the lookup. Suppress them; the duplicate
+    // name error already blocks Generate.
+    const ambiguousProfileReference =
+      isNonEmptyString(configRef.data.profile) &&
+      duplicateProfileNames.has(configRef.data.profile);
+    validateConfigSemantics(
+      configRef,
+      profileMap,
+      ambiguousProfileReference,
+      errors,
+    );
+    if (!ambiguousProfileReference) {
+      await validateArgsFile(
+        configRef,
+        profileMap,
+        input,
+        argsFileCache,
+        errors,
+      );
+    }
   }
 
   return {
@@ -381,6 +405,7 @@ function validateNameUniqueness(
 function validateConfigSemantics(
   configRef: ConfigRef,
   profileMap: Map<string, ProfileRef>,
+  ambiguousProfileReference: boolean,
   errors: ValidationError[],
 ): void {
   const hasProfileName = isNonEmptyString(configRef.data.profile);
@@ -416,7 +441,7 @@ function validateConfigSemantics(
     }
   }
 
-  if (!hasProfileName) {
+  if (!hasProfileName || ambiguousProfileReference) {
     return;
   }
 

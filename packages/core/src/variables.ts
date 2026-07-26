@@ -18,15 +18,17 @@ export function resolveArgsFilePath(
 ): ResolvePathResult {
   let hadError: string | null = null;
 
+  // Fail fast: only the first failing variable is reported, even when the
+  // input contains multiple invalid or unresolved variables.
   const resolved = rawPath.replace(VARIABLE_PATTERN, (match, variableName) => {
     if (variableName !== 'workspaceFolder') {
-      hadError = `Unsupported variable "${variableName}" in argsFile path.`;
+      hadError ??= `Unsupported variable "${variableName}" in argsFile path.`;
       return match;
     }
 
     const replacement = variables.workspaceFolder;
     if (replacement === undefined) {
-      hadError =
+      hadError ??=
         'Failed to resolve "${workspaceFolder}" in argsFile path because the variable was not provided.';
       return match;
     }

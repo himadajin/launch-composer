@@ -137,6 +137,8 @@ argsFile のパスは、絶対パスか `${workspaceFolder}` を含むパスで�
 
 対応する変数は `${workspaceFolder}` のみである。core は `variables.workspaceFolder` の値で文字列置換する。未対応の変数、または `${workspaceFolder}` が指定されたのに `variables.workspaceFolder` が渡されていない場合はエラーにする。
 
+変数解決のエラーは fail-fast である(2026-07-26 決定)。1 つの入力に複数の不正・未解決変数が含まれる場合でも、最初に失敗した変数のエラー 1 件だけを報告する。エラーの集約はしない。対応変数が `${workspaceFolder}` 1 つである現状では、集約しても得られる情報がほぼ増えないためである。
+
 置換後のパスが絶対パスでない場合もエラーにする。
 
 ### 読み取り
@@ -241,6 +243,8 @@ profile と config entry の `name` は、全 profile と全 config entry を通
 重複エラーの message には重複した名前と `file#index` 形式の発生位置を含める。
 
 重複エラーの target は、重複 group の先頭 entry を指す。
+
+config の `profile` が重複した profile 名を参照している場合、その config の profile 依存の二次診断(参照先 profile の `args` と config の `argsFile` の競合、および argsFile の検証)は抑制する(2026-07-26 決定)。どの profile 定義が参照されるかが曖昧なままでは診断内容が定義順に依存して非決定的になるためである。重複エラー自体が Generate を block するので、重複を解消すれば二次診断は再評価される。profile に依存しない診断(blocked override、entry 形状など)は抑制しない。
 
 ## 出力
 

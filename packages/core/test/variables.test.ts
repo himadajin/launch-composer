@@ -10,6 +10,16 @@ test('resolveArgsFilePath rejects unsupported variables', () => {
   });
 });
 
+test('resolveArgsFilePath reports only the first failing variable', () => {
+  assert.deepEqual(
+    resolveArgsFilePath('${env:HOME}/${userHome}/args.json', {}),
+    {
+      ok: false,
+      message: 'Unsupported variable "env:HOME" in argsFile path.',
+    },
+  );
+});
+
 test('resolveArgsFilePath rejects missing workspaceFolder variable', () => {
   assert.deepEqual(resolveArgsFilePath('${workspaceFolder}/args.json', {}), {
     ok: false,

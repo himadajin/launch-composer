@@ -19,18 +19,6 @@ To change: pick one policy (e.g. "the webview owns failure display; the host
 never toasts"), document it in `docs/internal/specs/communication.md`, and
 update `editorPanel.test.ts` expectations together with the implementation.
 
-## Decide secondary diagnostics for duplicate profiles
-
-Origin: plan 002, item P4 (left out of commit `f6ded80`).
-
-Current state: duplicate profile names are rejected, but the profile lookup is
-last-wins while collecting secondary diagnostics. An args/argsFile conflict can
-therefore depend on which duplicate profile definition was encountered last.
-
-To change: decide whether secondary diagnostics should be suppressed for an
-ambiguous profile reference or reported against every matching profile, then
-update `core.md`, validation, and tests together.
-
 ## Decide whether whitespace-only names are valid
 
 Origin: plan 002, item P5 (left out of commit `f6ded80`).
@@ -40,16 +28,6 @@ whitespace.
 
 To change: define trimming and persistence semantics for profile and config
 names before tightening validation and editor behavior.
-
-## Decide whether variable resolution aggregates errors
-
-Origin: plan 002, item P6 (left out of commit `f6ded80`).
-
-Current state: `resolveArgsFilePath` reports one variable-resolution error when
-an input contains multiple invalid or unresolved variables.
-
-To change: decide whether variable resolution should aggregate all errors or
-remain fail-fast, then update `core.md`, the resolver contract, and tests.
 
 ## Decide the GUI field set and pass-through key visibility
 
