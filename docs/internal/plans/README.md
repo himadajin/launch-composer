@@ -49,7 +49,7 @@
   read-modify-write の非排他、invalid ファイルの参照無視、rename の部分失敗、ほか
 - **011** [core merge の参照共有と仕様乖離](./011-core-merge-aliasing.md) — 優先度: 中 / 状態: 未着手
   生成結果が入力配列・ネストオブジェクトと参照を共有する
-- **012** [Command Palette 露出の仕様乖離](./012-command-palette-exposure.md) — 優先度: 低 / 状態: 未着手
+- **012** [Command Palette 露出の仕様乖離](./012-command-palette-exposure.md) — 優先度: 低 / 状態: 完了(commit `d84663e`)
   `openActiveEditorJson` が仕様に反して Palette に露出している
 - **013** [workspace folder 数の実行時変化への追従](./013-workspace-folder-tracking.md) — 優先度: 低 / 状態: 未着手
   folder 数を activate 時にしか評価していない

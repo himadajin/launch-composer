@@ -225,29 +225,23 @@ test('package.json command contributions stay aligned with the extension impleme
 
   const commandPalette = packageJson.contributes.menus?.commandPalette;
   assert.ok(commandPalette);
+  const paletteVisibleCommands = [
+    'launch-composer.generate',
+    'launch-composer.init',
+    'launch-composer.addProfile',
+  ];
+  const hiddenPaletteCommands = commandPalette
+    .filter((item) => item.when === 'false')
+    .map((item) => item.command)
+    .sort();
+  const expectedHiddenCommands = packageJson.contributes.commands
+    .map((command) => command.command)
+    .filter((command) => !paletteVisibleCommands.includes(command))
+    .sort();
+  assert.deepEqual(hiddenPaletteCommands, expectedHiddenCommands);
   assert.ok(
-    commandPalette.some(
-      (item) => item.command === 'launch-composer.add' && item.when === 'false',
-    ),
-  );
-  assert.ok(
-    commandPalette.some(
-      (item) =>
-        item.command === 'launch-composer.goToProfile' && item.when === 'false',
-    ),
-  );
-  assert.ok(
-    commandPalette.some(
-      (item) =>
-        item.command === 'launch-composer.includeAllConfigs' &&
-        item.when === 'false',
-    ),
-  );
-  assert.ok(
-    commandPalette.some(
-      (item) =>
-        item.command === 'launch-composer.excludeAllConfigs' &&
-        item.when === 'false',
+    commandPalette.every(
+      (item) => !paletteVisibleCommands.includes(item.command),
     ),
   );
 

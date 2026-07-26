@@ -456,6 +456,10 @@
           "when": "false"
         },
         {
+          "command": "launch-composer.openActiveEditorJson",
+          "when": "false"
+        },
+        {
           "command": "launch-composer.openItemJson",
           "when": "false"
         },
