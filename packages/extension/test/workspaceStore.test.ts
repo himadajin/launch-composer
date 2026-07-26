@@ -21,6 +21,19 @@ const READY_TO_GENERATE = {
   diagnostics: [],
 };
 
+test('watcher patterns cover only the data directory top level', () => {
+  const store = new WorkspaceStore(vscode.Uri.file('/workspace/sample'));
+
+  assert.equal(
+    store.getRelativeProfilePattern().pattern,
+    '.vscode/launch-composer/profiles/*.json',
+  );
+  assert.equal(
+    store.getRelativeConfigPattern().pattern,
+    '.vscode/launch-composer/configs/*.json',
+  );
+});
+
 test('readAll returns empty data when Launch Composer directories do not exist', async () => {
   const store = new WorkspaceStore(vscode.Uri.file('/workspace/empty-project'));
 

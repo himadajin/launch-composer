@@ -23,17 +23,20 @@ export class WorkspaceLayout {
     return this.workspaceRoot.fsPath;
   }
 
+  // Watch only the directory top level: the store reads no deeper, so a
+  // recursive pattern would watch files that are never read and let their
+  // basename-keyed echo suppression collide with top-level files.
   getRelativeProfilePattern(): vscode.RelativePattern {
     return new vscode.RelativePattern(
       this.workspaceRoot,
-      `${PROFILES_DIR}/**/*.json`,
+      `${PROFILES_DIR}/*.json`,
     );
   }
 
   getRelativeConfigPattern(): vscode.RelativePattern {
     return new vscode.RelativePattern(
       this.workspaceRoot,
-      `${CONFIGS_DIR}/**/*.json`,
+      `${CONFIGS_DIR}/*.json`,
     );
   }
 

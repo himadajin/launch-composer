@@ -19,21 +19,6 @@ To change: pick one policy (e.g. "the webview owns failure display; the host
 never toasts"), document it in `docs/internal/specs/communication.md`, and
 update `editorPanel.test.ts` expectations together with the implementation.
 
-## Align watcher patterns with the store's read scope
-
-Origin: 2026-07 refactoring investigation, item E-3 (behavior change).
-
-Current state: watchers use `profiles/**/*.json` (recursive) via
-`WorkspaceLayout.getRelativeProfilePattern` / `getRelativeConfigPattern`, but
-`WorkspaceReader.listFiles` only reads the directory top level, and the echo
-filter keys on basename only. A nested file like `profiles/sub/x.json` is
-watched but never read, and its echo-suppression key collides with a same-name
-top-level file.
-
-To change: narrow the watcher patterns to `profiles/*.json` /
-`configs/*.json`, and document the (currently unspecified) treatment of nested
-files in `docs/internal/specs/extension.md` as part of the same change.
-
 ## Decide secondary diagnostics for duplicate profiles
 
 Origin: plan 002, item P4 (left out of commit `f6ded80`).
